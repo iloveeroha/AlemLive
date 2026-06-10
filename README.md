@@ -1,5 +1,55 @@
 # React + Vite
 
+## Backend
+
+This project now includes a Go backend in `backend/`. It creates short-lived LiveKit tokens so the browser does not need access to `LIVEKIT_API_SECRET`.
+
+## Docker
+
+Run the frontend and backend together:
+
+```powershell
+Copy-Item backend/.env.example backend/.env
+# Fill backend/.env with your LiveKit Cloud values.
+docker compose up -d --build
+```
+
+The app will be available at `http://localhost:5173`, and nginx proxies `/api` to the backend container. The backend reads LiveKit settings from `backend/.env`.
+
+Stop the stack:
+
+```powershell
+docker compose down
+```
+
+## Local Development
+
+Run the backend:
+
+```powershell
+cd backend
+Copy-Item .env.example .env
+go run ./cmd/server
+```
+
+In another terminal, run the React app:
+
+```powershell
+npm run dev
+```
+
+Vite proxies `/api` to `http://localhost:8080`, and the join form can request a token from `POST /api/livekit/token`.
+
+## Optional Local LiveKit
+
+The project can also run a local LiveKit server for development:
+
+```powershell
+docker compose -f docker-compose.livekit.yml up -d
+```
+
+The local LiveKit server uses `ws://localhost:7880` with dev credentials `devkey` / `devsecret-local-change-me-32-chars`.
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
 Currently, two official plugins are available:

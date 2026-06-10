@@ -1,0 +1,11 @@
+.git
+.gitignore
+backend
+dist
+node_modules
+logs
+*.log
+*.local
+.env
+docker-compose*.yml
+livekit

@@ -251,6 +251,17 @@ button {
   transform: none;
 }
 
+.form-error {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #ffd4d7;
+  border-radius: 16px;
+  color: #b4232f;
+  background: #fff7f7;
+  font-size: 14px;
+  font-weight: 750;
+}
+
 .soft-action {
   border: 1px solid #dfe7f2;
   color: #24324a;

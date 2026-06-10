@@ -33,6 +33,8 @@ const agenda = [
   { time: '16:15', title: 'LiveKit test call', tone: 'violet' },
 ]
 
+const tokenEndpoint = import.meta.env.VITE_TOKEN_ENDPOINT ?? '/api/livekit/token'
+
 function App() {
   const [form, setForm] = useState({
     serverUrl: import.meta.env.VITE_LIVEKIT_URL ?? '',
@@ -41,8 +43,10 @@ function App() {
     userName: import.meta.env.VITE_LIVEKIT_NAME ?? 'Мади Орысбек',
   })
   const [meeting, setMeeting] = useState(null)
+  const [isJoining, setIsJoining] = useState(false)
+  const [joinError, setJoinError] = useState('')
 
-  const canJoin = form.serverUrl.trim() && form.token.trim()
+  const canJoin = form.roomName.trim() && form.userName.trim() && (form.token.trim() ? form.serverUrl.trim() : true)
   const isConnected = Boolean(meeting)
 
   const meetingMeta = useMemo(() => {
@@ -61,18 +65,68 @@ function App() {
     setForm((current) => ({ ...current, [name]: value }))
   }
 
-  function joinMeeting(event) {
+  async function joinMeeting(event) {
     event.preventDefault()
+    setJoinError('')
 
     if (!canJoin) {
       return
     }
 
+    let serverUrl = form.serverUrl.trim()
+    let token = form.token.trim()
+    const roomName = form.roomName.trim()
+    const userName = form.userName.trim()
+
+    if (!token) {
+      setIsJoining(true)
+
+      try {
+        const response = await fetch(tokenEndpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ roomName, userName }),
+        })
+
+        const data = await response.json().catch(() => ({}))
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Backend could not create a LiveKit token')
+        }
+
+        token = data.token || ''
+        serverUrl = data.serverUrl || serverUrl
+
+        if (!token || !serverUrl) {
+          throw new Error('Backend response is missing token or LiveKit URL')
+        }
+
+        setForm((current) => ({
+          ...current,
+          serverUrl,
+          token,
+        }))
+      } catch (error) {
+        setJoinError(error instanceof Error ? error.message : 'Could not join the room')
+        setIsJoining(false)
+        return
+      }
+
+      setIsJoining(false)
+    }
+
+    if (!serverUrl || !token) {
+      setJoinError('Enter LiveKit URL and token, or run the Go backend')
+      return
+    }
+
     setMeeting({
-      serverUrl: form.serverUrl.trim(),
-      token: form.token.trim(),
-      roomName: form.roomName.trim(),
-      userName: form.userName.trim(),
+      serverUrl,
+      token,
+      roomName,
+      userName,
     })
   }
 
@@ -189,10 +243,11 @@ function App() {
                 </label>
               </div>
 
-              <button className="join-button" type="submit" disabled={!canJoin}>
+              <button className="join-button" type="submit" disabled={!canJoin || isJoining}>
                 <Play size={18} fill="currentColor" />
-                {isConnected ? 'Переподключиться' : 'Войти в комнату'}
+                {isJoining ? 'Connecting...' : isConnected ? 'Переподключиться' : 'Войти в комнату'}
               </button>
+              {joinError && <p className="form-error">{joinError}</p>}
             </form>
           </section>
 
