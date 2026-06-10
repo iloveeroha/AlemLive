@@ -53,3 +53,30 @@ func TestCreateLiveKitTokenRequiresConfig(t *testing.T) {
 		t.Fatalf("expected status 503, got %d", response.Code)
 	}
 }
+
+func TestMeetingAnalysis(t *testing.T) {
+	handler := NewServer(config.Config{TokenTTL: time.Hour})
+	request := httptest.NewRequest(http.MethodGet, "/api/meetings/analysis?roomName=alem-meeting", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload meetingAnalysis
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+
+	if payload.RoomName != "alem-meeting" {
+		t.Fatalf("unexpected room name: %s", payload.RoomName)
+	}
+	if len(payload.Summary) == 0 || len(payload.ActionItems) == 0 || len(payload.Transcript) == 0 {
+		t.Fatalf("analysis payload is incomplete: %#v", payload)
+	}
+	if len(payload.Chapters) == 0 || len(payload.Highlights) == 0 {
+		t.Fatalf("timeline payload is incomplete: %#v", payload)
+	}
+}
