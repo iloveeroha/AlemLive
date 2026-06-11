@@ -116,6 +116,12 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/config", s.config)
 	s.mux.HandleFunc("/api/livekit/token", s.createLiveKitToken)
 	s.mux.HandleFunc("/api/meetings/analysis", s.meetingAnalysis)
+	s.mux.HandleFunc("/api/meetings/events", s.meetingEvent)
+	s.mux.HandleFunc("/api/rooms/", s.roomAction)
+	s.mux.HandleFunc("/api/devices", s.devicePreference)
+	s.mux.HandleFunc("/api/notifications", s.notifications)
+	s.mux.HandleFunc("/api/profile", s.profile)
+	s.mux.HandleFunc("/api/locales", s.locales)
 	s.mux.HandleFunc("/api/reports", s.reports)
 	s.mux.HandleFunc("/api/reports/filters", s.reportFilters)
 	s.mux.HandleFunc("/api/reports/upload", s.reportUpload)
@@ -146,6 +152,12 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 		"aiChatEndpoint":        "/api/ai/chat",
 		"aiStatusEndpoint":      "/api/ai/status",
 		"analysisEndpoint":      "/api/meetings/analysis",
+		"meetingEventsEndpoint": "/api/meetings/events",
+		"roomsEndpoint":         "/api/rooms",
+		"devicesEndpoint":       "/api/devices",
+		"notificationsEndpoint": "/api/notifications",
+		"profileEndpoint":       "/api/profile",
+		"localesEndpoint":       "/api/locales",
 		"reportsEndpoint":       "/api/reports",
 		"reportFiltersEndpoint": "/api/reports/filters",
 	})

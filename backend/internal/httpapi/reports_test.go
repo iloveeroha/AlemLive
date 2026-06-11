@@ -233,6 +233,31 @@ func TestReportUtilityEndpoints(t *testing.T) {
 	}
 }
 
+func TestReportActionsTabsAndSubresources(t *testing.T) {
+	handler := NewServer(config.Config{TokenTTL: time.Hour})
+
+	for _, path := range []string{
+		"/api/reports/read-intro/actions",
+		"/api/reports/read-intro/recording",
+		"/api/reports/read-intro/tabs",
+		"/api/reports/read-intro/notes",
+		"/api/reports/read-intro/action-items",
+		"/api/reports/read-intro/transcript",
+		"/api/reports/read-intro/deep-dive",
+		"/api/reports/read-intro/highlights",
+		"/api/reports/read-intro/chapters",
+	} {
+		request := httptest.NewRequest(http.MethodGet, path, nil)
+		response := httptest.NewRecorder()
+
+		handler.ServeHTTP(response, request)
+
+		if response.Code != http.StatusOK {
+			t.Fatalf("%s expected status 200, got %d: %s", path, response.Code, response.Body.String())
+		}
+	}
+}
+
 func TestReportChatFallback(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
 	request := httptest.NewRequest(http.MethodPost, "/api/reports/read-intro/chat", bytes.NewBufferString(`{"message":"Какие задачи?"}`))

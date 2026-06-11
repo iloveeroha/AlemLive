@@ -242,6 +242,65 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusOK, reportDetailToMeetingAnalysis(detail, s.clock()))
+	case "actions":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, reportActions(detail.Report.ID))
+	case "recording":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"reportId": detail.Report.ID,
+			"duration": detail.Report.Duration,
+			"url":      "/api/reports/" + detail.Report.ID + "/recording/stream",
+			"markers":  []string{"00:42", "04:18", "12:05"},
+		})
+	case "tabs":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, reportTabsPayload())
+	case "notes":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "summary": detail.Summary, "actionItems": detail.ActionItems})
+	case "action-items":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "items": detail.ActionItems})
+	case "transcript":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "lines": detail.TranscriptLines})
+	case "deep-dive":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "speakerStats": detail.SpeakerStats})
+	case "highlights":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "items": detail.Highlights})
+	case "chapters":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "items": detail.Chapters})
 	case "download":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -436,6 +495,27 @@ func searchReportDetail(detail reportDetailResponse, query string) []reportSearc
 	}
 
 	return results
+}
+
+func reportActions(reportID string) []map[string]any {
+	return []map[string]any{
+		{"id": "share", "label": "Поделиться", "method": http.MethodPost, "endpoint": "/api/reports/" + reportID + "/share", "enabled": true},
+		{"id": "download", "label": "Скачать", "method": http.MethodGet, "endpoint": "/api/reports/" + reportID + "/download", "enabled": true},
+		{"id": "rename", "label": "Переименовать отчёт", "method": http.MethodPatch, "endpoint": "/api/reports/" + reportID, "enabled": true},
+		{"id": "delete", "label": "Удалить отчёт", "method": http.MethodDelete, "endpoint": "/api/reports/" + reportID, "enabled": true, "danger": true},
+		{"id": "send", "label": "Отправить в...", "method": http.MethodPost, "endpoint": "/api/reports/" + reportID + "/send", "enabled": true},
+		{"id": "copy", "label": "Копировать отчёт", "method": http.MethodGet, "endpoint": "/api/reports/" + reportID + "/copy", "enabled": true},
+	}
+}
+
+func reportTabsPayload() []map[string]string {
+	return []map[string]string{
+		{"id": "notes", "label": "Заметки", "endpoint": "notes"},
+		{"id": "transcript", "label": "Транскрипт", "endpoint": "transcript"},
+		{"id": "deepDive", "label": "Глубокое погружение", "endpoint": "deep-dive"},
+		{"id": "highlights", "label": "Основные моменты", "endpoint": "highlights"},
+		{"id": "chapters", "label": "Главы", "endpoint": "chapters"},
+	}
 }
 
 func filterReports(rows []reportRow, r *http.Request, now time.Time) ([]reportRow, int, int, int) {
