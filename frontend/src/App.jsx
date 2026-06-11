@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowLeft,
@@ -48,7 +48,7 @@ import {
   Volume2,
   Zap,
 } from 'lucide-react'
-import { LiveKitRoom, VideoConference, useParticipants } from '@livekit/components-react'
+import { Chat, LiveKitRoom, VideoConference, useLocalParticipant, useParticipants } from '@livekit/components-react'
 import '@livekit/components-styles'
 import './App.css'
 
@@ -452,8 +452,131 @@ function ParticipantsPanel() {
   return <ParticipantsList participants={participants} />
 }
 
+function getMediaErrorMessage(error) {
+  const name = error?.name || ''
+  const message = error?.message || ''
+
+  if (name === 'NotAllowedError' || /permission|denied|not allowed/i.test(message)) {
+    return 'Разрешите доступ к камере и микрофону в браузере'
+  }
+
+  if (name === 'NotFoundError' || /not found|device not found/i.test(message)) {
+    return 'Камера или микрофон не найдены'
+  }
+
+  if (name === 'NotReadableError' || /busy|in use|could not start/i.test(message)) {
+    return 'Камера или микрофон заняты другим приложением'
+  }
+
+  if (shouldWarnAboutMediaSecurity()) {
+    return 'Откройте встречу через HTTPS или localhost, иначе браузер может блокировать камеру и микрофон'
+  }
+
+  return message || 'Не удалось включить камеру или микрофон'
+}
+
+function shouldWarnAboutMediaSecurity() {
+  if (typeof window === 'undefined') {
+    return false
+  }
+
+  return window.location.protocol !== 'https:' && !['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+}
+
+function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, onDeviceError }) {
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, lastMicrophoneError, lastCameraError } = useLocalParticipant()
+  const [pendingDevice, setPendingDevice] = useState('')
+
+  useEffect(() => {
+    onDeviceStateChange('mic', isMicrophoneEnabled)
+  }, [isMicrophoneEnabled, onDeviceStateChange])
+
+  useEffect(() => {
+    onDeviceStateChange('camera', isCameraEnabled)
+  }, [isCameraEnabled, onDeviceStateChange])
+
+  useEffect(() => {
+    if (lastMicrophoneError) {
+      onDeviceError('mic', lastMicrophoneError)
+    }
+  }, [lastMicrophoneError, onDeviceError])
+
+  useEffect(() => {
+    if (lastCameraError) {
+      onDeviceError('camera', lastCameraError)
+    }
+  }, [lastCameraError, onDeviceError])
+
+  async function toggleLiveKitDevice(name) {
+    if (!localParticipant || pendingDevice) {
+      return
+    }
+
+    const nextEnabled = name === 'mic' ? !isMicrophoneEnabled : !isCameraEnabled
+
+    try {
+      setPendingDevice(name)
+      if (name === 'mic') {
+        await localParticipant.setMicrophoneEnabled(nextEnabled)
+      } else {
+        await localParticipant.setCameraEnabled(nextEnabled)
+      }
+
+      onDevicePreferenceChange(name, nextEnabled)
+    } catch (error) {
+      onDeviceError(name, error)
+    } finally {
+      setPendingDevice('')
+    }
+  }
+
+  return (
+    <>
+      <button
+        className={isMicrophoneEnabled ? 'icon-button active' : 'icon-button'}
+        type="button"
+        onClick={() => toggleLiveKitDevice('mic')}
+        disabled={pendingDevice === 'mic'}
+        aria-label={isMicrophoneEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
+        aria-pressed={isMicrophoneEnabled}
+      >
+        {isMicrophoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+      </button>
+      <button
+        className={isCameraEnabled ? 'icon-button active' : 'icon-button'}
+        type="button"
+        onClick={() => toggleLiveKitDevice('camera')}
+        disabled={pendingDevice === 'camera'}
+        aria-label={isCameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
+        aria-pressed={isCameraEnabled}
+      >
+        {isCameraEnabled ? <Video size={18} /> : <CameraOff size={18} />}
+      </button>
+    </>
+  )
+}
+
+function ConferenceChatPanel() {
+  return (
+    <section className="panel conference-chat-panel">
+      <div className="panel-heading">
+        <span className="panel-icon">
+          <MessageSquareText size={21} />
+        </span>
+        <div>
+          <h2>Чат встречи</h2>
+          <p>Сообщения LiveKit</p>
+        </div>
+      </div>
+
+      <Chat className="conference-chat" />
+    </section>
+  )
+}
+
 function App() {
   const initialReportId = getInitialReportId()
+  const manualDisconnectRef = useRef(false)
   const [activeView, setActiveView] = useState(initialReportId ? 'reportDetail' : 'reports')
   const [selectedReportId, setSelectedReportId] = useState(initialReportId || reportRows[0].id)
   const [activeReportTab, setActiveReportTab] = useState('notes')
@@ -500,6 +623,7 @@ function App() {
   const [activeReportMode, setActiveReportMode] = useState('reports')
   const [reportSearchText, setReportSearchText] = useState('')
   const [workspaceNotice, setWorkspaceNotice] = useState('')
+  const [meetingNotice, setMeetingNotice] = useState('')
   const [reportActionMessage, setReportActionMessage] = useState('')
   const [copilotInput, setCopilotInput] = useState('')
   const [copilotMessages, setCopilotMessages] = useState([])
@@ -661,23 +785,58 @@ function App() {
     setJoinError('')
   }
 
-  function toggleDevice(name) {
-    setDevices((current) => {
-      const next = { ...current, [name]: !current[name] }
-      window.localStorage.setItem('alemlive-devices', JSON.stringify(next))
+  function updateDevicePreference(name, enabled, options = {}) {
+    const { notifyBackend = true } = options
 
+    setDevices((current) => {
+      if (current[name] === enabled) {
+        return current
+      }
+
+      const next = { ...current, [name]: enabled }
+      window.localStorage.setItem('alemlive-devices', JSON.stringify(next))
+      return next
+    })
+
+    if (notifyBackend) {
       apiRequest('/api/devices', {
         method: 'POST',
         body: JSON.stringify({
           roomName: form.roomName || meetingMeta.room,
           userName: form.userName || meetingMeta.name,
           device: name,
-          enabled: next[name],
+          enabled,
         }),
       }).catch(() => {})
+    }
+  }
 
-      return next
-    })
+  function toggleDevice(name) {
+    updateDevicePreference(name, !devices[name])
+  }
+
+  function handleLiveKitDeviceStateChange(name, enabled) {
+    updateDevicePreference(name, enabled, { notifyBackend: false })
+  }
+
+  function handleLiveKitDeviceError(_name, error) {
+    setMeetingNotice(getMediaErrorMessage(error))
+    updateDevicePreference(_name, false, { notifyBackend: false })
+  }
+
+  function handleLiveKitError(error) {
+    setMeetingNotice(getMediaErrorMessage(error))
+  }
+
+  function handleLiveKitDisconnected() {
+    setMeeting(null)
+    if (manualDisconnectRef.current) {
+      manualDisconnectRef.current = false
+      setMeetingNotice('')
+      return
+    }
+
+    setMeetingNotice('Соединение с комнатой разорвано')
   }
 
   function recordMeetingEvent(event) {
@@ -717,6 +876,9 @@ function App() {
     if (isStarting) {
       return
     }
+
+    manualDisconnectRef.current = false
+    setMeetingNotice('')
 
     const nextRoomName = form.roomName.trim()
     const nextUserName = form.userName.trim()
@@ -762,9 +924,11 @@ function App() {
   }
 
   async function leaveMeeting() {
+    manualDisconnectRef.current = true
     await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, { method: 'POST' }).catch(() => null)
     await recordMeetingEvent('left')
     setMeeting(null)
+    setMeetingNotice('')
   }
 
   async function copyRoom() {
@@ -1310,6 +1474,13 @@ function App() {
             <Settings size={18} />
           </button>
           {isConnected && (
+            <LiveKitDeviceButtons
+              onDeviceStateChange={handleLiveKitDeviceStateChange}
+              onDevicePreferenceChange={updateDevicePreference}
+              onDeviceError={handleLiveKitDeviceError}
+            />
+          )}
+          {isConnected && (
             <button className="danger-action" type="button" onClick={leaveMeeting}>
               Завершить
             </button>
@@ -1397,6 +1568,12 @@ function App() {
                 </label>
 
                 {joinError && <p className="form-error">{joinError}</p>}
+                {shouldWarnAboutMediaSecurity() && (
+                  <p className="form-warning">
+                    Для камеры и микрофона откройте встречу через HTTPS или localhost.
+                  </p>
+                )}
+                {meetingNotice && <p className="form-error">{meetingNotice}</p>}
 
                 <button className="join-button" type="submit" disabled={!canStart || isStarting}>
                   {isStarting ? <Loader2 className="spin-icon" size={18} /> : <Play size={18} fill="currentColor" />}
@@ -1454,7 +1631,8 @@ function App() {
               connect
               audio={meeting.audio}
               video={meeting.video}
-              onDisconnected={leaveMeeting}
+              onError={handleLiveKitError}
+              onDisconnected={handleLiveKitDisconnected}
               data-lk-theme="default"
               className="livekit-context"
             >
@@ -1468,6 +1646,7 @@ function App() {
 
               <aside className="side-column">
                 <ParticipantsPanel />
+                <ConferenceChatPanel />
               </aside>
             </LiveKitRoom>
           ) : (
