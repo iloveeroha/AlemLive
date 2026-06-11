@@ -41,6 +41,7 @@ import {
   Share2,
   ShieldCheck,
   Sparkles,
+  Trash2,
   TrendingUp,
   Users,
   Video,
@@ -392,6 +393,7 @@ function App() {
   const [timeFilterRange, setTimeFilterRange] = useState({ from: null, to: null })
   const [draftTimeFilterRange, setDraftTimeFilterRange] = useState({ from: null, to: null })
   const [calendarMonth, setCalendarMonth] = useState(new Date(reportCalendarToday.getFullYear(), reportCalendarToday.getMonth(), 1))
+  const [openReportActionsId, setOpenReportActionsId] = useState('')
 
   const canStart = form.userName.trim() && form.roomName.trim()
   const isConnected = Boolean(meeting)
@@ -512,10 +514,27 @@ function App() {
   }
 
   function openReport(reportId) {
+    setOpenReportActionsId('')
     setSelectedReportId(reportId)
     setActiveReportTab('notes')
     setActiveView('reportDetail')
     window.history.replaceState(null, '', `#report/${reportId}`)
+  }
+
+  function handleReportRowKeyDown(event, reportId) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      openReport(reportId)
+    }
+  }
+
+  function toggleReportActions(event, reportId) {
+    event.stopPropagation()
+    setOpenReportActionsId((current) => (current === reportId ? '' : reportId))
+  }
+
+  function keepReportActionsOpen(event) {
+    event.stopPropagation()
   }
 
   function switchView(view) {
@@ -975,11 +994,13 @@ function App() {
           <div className="reports-week">{reportRows[0].week}</div>
 
           {reportRows.map((report, index) => (
-            <button
+            <article
               className={index === 0 ? 'report-row selected' : 'report-row'}
-              type="button"
               key={report.id}
+              role="button"
+              tabIndex={0}
               onClick={() => openReport(report.id)}
+              onKeyDown={(event) => handleReportRowKeyDown(event, report.id)}
             >
               <span className={`report-thumb ${report.thumbnailTone}`}>
                 <Video size={17} />
@@ -1012,9 +1033,39 @@ function App() {
 
               <span className="owner-cell">
                 <b>{report.ownerInitial}</b>
-                <MoreHorizontal size={22} />
+                <span className="report-actions-wrap">
+                  <button
+                    className={openReportActionsId === report.id ? 'report-actions-button active' : 'report-actions-button'}
+                    type="button"
+                    onClick={(event) => toggleReportActions(event, report.id)}
+                    aria-label={`Действия для отчёта ${report.title}`}
+                    aria-expanded={openReportActionsId === report.id}
+                  >
+                    <MoreHorizontal size={22} />
+                  </button>
+                  {openReportActionsId === report.id && (
+                    <span className="report-actions-menu" onClick={keepReportActionsOpen}>
+                      <button className="report-action-item disabled" type="button" disabled>
+                        <Share2 size={19} />
+                        Поделиться
+                      </button>
+                      <button className="report-action-item disabled" type="button" disabled>
+                        <Download size={19} />
+                        Скачать
+                      </button>
+                      <button className="report-action-item disabled" type="button" disabled>
+                        <Edit3 size={19} />
+                        Переименовать отчет
+                      </button>
+                      <button className="report-action-item danger" type="button">
+                        <Trash2 size={19} />
+                        Удалить отчет
+                      </button>
+                    </span>
+                  )}
+                </span>
               </span>
-            </button>
+            </article>
           ))}
         </div>
       </section>
