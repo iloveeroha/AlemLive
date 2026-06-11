@@ -10,11 +10,13 @@ import (
 
 	"github.com/iloveeroha/AlemLive/backend/internal/config"
 	"github.com/iloveeroha/AlemLive/backend/internal/livekit"
+	"github.com/iloveeroha/AlemLive/backend/internal/llm"
 )
 
 type Server struct {
 	cfg   config.Config
 	clock func() time.Time
+	ai    *llm.Client
 	mux   *http.ServeMux
 }
 
@@ -95,6 +97,7 @@ func NewServer(cfg config.Config) http.Handler {
 	server := &Server{
 		cfg:   cfg,
 		clock: time.Now,
+		ai:    llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, cfg.LLMTimeout),
 		mux:   http.NewServeMux(),
 	}
 
@@ -110,6 +113,8 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/config", s.config)
 	s.mux.HandleFunc("/api/livekit/token", s.createLiveKitToken)
 	s.mux.HandleFunc("/api/meetings/analysis", s.meetingAnalysis)
+	s.mux.HandleFunc("/api/ai/chat", s.aiChat)
+	s.mux.HandleFunc("/api/ai/status", s.aiStatus)
 	s.mux.HandleFunc("/api/ask-ai", s.askAI)
 }
 
@@ -129,8 +134,11 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"livekitUrl":    s.cfg.LiveKitURL,
-		"tokenEndpoint": "/api/livekit/token",
+		"livekitUrl":       s.cfg.LiveKitURL,
+		"tokenEndpoint":    "/api/livekit/token",
+		"aiChatEndpoint":   "/api/ai/chat",
+		"aiStatusEndpoint": "/api/ai/status",
+		"analysisEndpoint": "/api/meetings/analysis",
 	})
 }
 
@@ -224,6 +232,13 @@ func (s *Server) meetingAnalysis(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+
+	if s.ai != nil && s.ai.Configured() {
+		if analysis, err := s.generateMeetingAnalysis(r.Context(), room, s.clock); err == nil {
+			writeJSON(w, http.StatusOK, analysis)
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, demoMeetingAnalysis(room, s.clock()))

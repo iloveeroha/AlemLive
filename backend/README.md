@@ -1,8 +1,8 @@
 # AlemLive Backend
 
-Go API for issuing short-lived LiveKit access tokens for the AlemLive React app.
+Go API for issuing short-lived LiveKit access tokens and AI-backed meeting assistance for the AlemLive React app.
 
-## Start local LiveKit
+## Start Local LiveKit
 
 From the repository root:
 
@@ -12,7 +12,7 @@ docker compose -f docker-compose.livekit.yml up -d
 
 The local dev LiveKit server listens at `ws://localhost:7880` and uses `devkey` / `devsecret-local-change-me-32-chars`.
 
-## Run locally
+## Run Locally
 
 ```powershell
 cd backend
@@ -26,21 +26,40 @@ PowerShell can also pass variables for one session:
 $env:LIVEKIT_URL="wss://your-project.livekit.cloud"
 $env:LIVEKIT_API_KEY="your_key"
 $env:LIVEKIT_API_SECRET="your_secret"
+$env:LLM_API_KEY="your_llm_key"
 go run ./cmd/server
 ```
 
 The backend listens on `http://localhost:8080` by default. Vite proxies `/api` to this backend during development.
 
+## Configuration
+
+- `PORT` defaults to `8080`.
+- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` configure LiveKit token issuing.
+- `TOKEN_TTL_MINUTES` defaults to `120`.
+- `ALLOWED_ORIGINS` is a comma-separated CORS allowlist.
+- `LLM_BASE_URL` defaults to `https://llm.nitec.kz`.
+- `LLM_API_KEY` enables AI chat and AI meeting analysis.
+- `LLM_MODEL` defaults to `openai/gpt-oss-120b`.
+- `LLM_TIMEOUT_SECONDS` defaults to `60`.
+
+Keep `LIVEKIT_API_SECRET` and `LLM_API_KEY` only on the backend. Never expose them through Vite environment variables or browser code.
+
 ## Endpoints
 
 - `GET /healthz` returns backend health.
-- `GET /api/config` returns the configured LiveKit URL and token endpoint.
+- `GET /api/config` returns public frontend configuration.
+- `GET /api/ai/status` returns whether AI is configured plus the active public model metadata.
+- `POST /api/ai/chat` sends a report-aware chat prompt to the configured LLM provider.
+- `GET /api/meetings/analysis?roomName=...` returns AI-generated meeting analysis when AI is configured, otherwise falls back to a demo report.
+- `GET /api/ask-ai` returns `{"url": "https://alem-workspace.gov.kz/web/alem-rag"}` for the external Alem Workspace RAG assistant.
 - `POST /api/livekit/token` accepts:
 
 ```json
 {
   "roomName": "alem-meeting",
-  "userName": "Madi"
+  "userName": "Madi",
+  "isHost": true
 }
 ```
 
@@ -55,8 +74,3 @@ Response:
   "expiresAt": "2026-06-10T12:00:00Z"
 }
 ```
-
-Keep `LIVEKIT_API_SECRET` only on the backend. Never expose it through Vite environment variables or browser code.
-
-- `GET /api/meetings/analysis?roomName=...` returns a demo post-meeting report (summary, action items, transcript, insights, highlights, chapters).
-- `GET /api/ask-ai` returns `{"url": "https://alem-workspace.gov.kz/web/alem-rag"}` — used by the "Спросить AI" button to open the Alem Workspace RAG assistant.

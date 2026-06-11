@@ -11,6 +11,9 @@ import (
 const (
 	defaultPort            = "8080"
 	defaultTokenTTLMinutes = 120
+	defaultLLMBaseURL      = "https://llm.nitec.kz"
+	defaultLLMModel        = "openai/gpt-oss-120b"
+	defaultLLMTimeout      = 60
 )
 
 type Config struct {
@@ -20,6 +23,10 @@ type Config struct {
 	LiveKitSecret  string
 	TokenTTL       time.Duration
 	AllowedOrigins []string
+	LLMBaseURL     string
+	LLMAPIKey      string
+	LLMModel       string
+	LLMTimeout     time.Duration
 }
 
 func Load() Config {
@@ -34,6 +41,10 @@ func Load() Config {
 		LiveKitSecret:  strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
 		TokenTTL:       time.Duration(ttlMinutes) * time.Minute,
 		AllowedOrigins: splitCSV(env("ALLOWED_ORIGINS", "http://localhost:5173")),
+		LLMBaseURL:     strings.TrimRight(env("LLM_BASE_URL", defaultLLMBaseURL), "/"),
+		LLMAPIKey:      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
+		LLMModel:       env("LLM_MODEL", defaultLLMModel),
+		LLMTimeout:     time.Duration(envInt("LLM_TIMEOUT_SECONDS", defaultLLMTimeout)) * time.Second,
 	}
 }
 
