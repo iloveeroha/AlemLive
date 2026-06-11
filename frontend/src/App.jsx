@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowDown,
   ArrowLeft,
@@ -304,6 +304,57 @@ function getCalendarDays(monthDate) {
   })
 }
 
+function formatAPIDate(date) {
+  if (!date) {
+    return ''
+  }
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+async function apiRequest(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...options.headers,
+    },
+  })
+
+  const contentType = response.headers.get('content-type') || ''
+  const payload = contentType.includes('application/json') ? await response.json().catch(() => ({})) : await response.text()
+
+  if (!response.ok) {
+    throw new Error(payload?.error || payload?.message || 'Backend request failed')
+  }
+
+  return payload
+}
+
+function buildReportsQuery({ search, mode, timeFilterMode, timeFilterRange }) {
+  const params = new URLSearchParams()
+
+  if (search.trim()) {
+    params.set('q', search.trim())
+  }
+
+  if (mode === 'incomplete') {
+    params.set('mode', 'incomplete')
+  }
+
+  if (timeFilterMode === 'custom' && timeFilterRange.from) {
+    params.set('from', formatAPIDate(timeFilterRange.from))
+    params.set('to', formatAPIDate(timeFilterRange.to || timeFilterRange.from))
+  } else if (timeFilterMode && timeFilterMode !== 'all') {
+    params.set('datePreset', timeFilterMode)
+  }
+
+  return params.toString()
+}
+
 function getInitialReportId() {
   if (typeof window === 'undefined') {
     return ''
@@ -402,25 +453,161 @@ function App() {
   const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false)
   const [selectedTypeFilterIds, setSelectedTypeFilterIds] = useState(typeFilterOptions.map((option) => option.id))
   const [openReportActionsId, setOpenReportActionsId] = useState('')
+  const [profile, setProfile] = useState(null)
+  const [notifications, setNotifications] = useState({ unread: 0, items: [] })
+  const [locales, setLocales] = useState({ current: 'ru', items: [] })
+  const [reports, setReports] = useState(reportRows)
+  const [reportFilters, setReportFilters] = useState(null)
+  const [reportDetails, setReportDetails] = useState({})
+  const [reportActions, setReportActions] = useState({})
+  const [reportsError, setReportsError] = useState('')
+  const [reportsLoading, setReportsLoading] = useState(false)
+  const [activeReportMode, setActiveReportMode] = useState('reports')
+  const [reportSearchText, setReportSearchText] = useState('')
+  const [workspaceNotice, setWorkspaceNotice] = useState('')
+  const [reportActionMessage, setReportActionMessage] = useState('')
+  const [copilotInput, setCopilotInput] = useState('')
+  const [copilotMessages, setCopilotMessages] = useState([])
+  const [isCopilotSending, setIsCopilotSending] = useState(false)
+  const [isDetailActionsOpen, setIsDetailActionsOpen] = useState(false)
 
   const canStart = form.userName.trim() && form.roomName.trim()
   const isConnected = Boolean(meeting)
-  const selectedReport = reportRows.find((report) => report.id === selectedReportId) || reportRows[0]
-  const activeQuickDateOption = quickDateOptions.find((option) => option.id === timeFilterMode)
+  const selectedReportDetail = reportDetails[selectedReportId]
+  const selectedReport = selectedReportDetail?.report || reports.find((report) => report.id === selectedReportId) || reports[0] || reportRows[0]
+  const dateFilterOptions = quickDateOptions.map((option) => ({
+    ...option,
+    label: reportFilters?.quickDateOptions?.find((backendOption) => backendOption.id === option.id)?.label || option.label,
+  }))
+  const activeQuickDateOption = dateFilterOptions.find((option) => option.id === timeFilterMode)
   const timeFilterLabel = timeFilterMode === 'custom' ? formatDateRange(timeFilterRange) : activeQuickDateOption?.label || quickDateOptions[0].label
   const calendarDays = getCalendarDays(calendarMonth)
   const areAllTypeFiltersSelected = selectedTypeFilterIds.length === typeFilterOptions.length
+  const visibleReports = reports.length ? reports : reportRows
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
-    const name = meeting?.userName || form.userName || 'Guest'
+    const name = meeting?.userName || form.userName || profile?.name || 'Guest'
 
     return {
       room,
       name,
-      initial: name.trim().slice(0, 1).toUpperCase() || 'M',
+      initial: profile?.initial || name.trim().slice(0, 1).toUpperCase() || 'M',
     }
-  }, [form.roomName, form.userName, meeting])
+  }, [form.roomName, form.userName, meeting, profile])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadWorkspace() {
+      const [profilePayload, notificationsPayload, localesPayload] = await Promise.allSettled([
+        apiRequest('/api/profile'),
+        apiRequest('/api/notifications'),
+        apiRequest('/api/locales'),
+      ])
+
+      if (!isMounted) {
+        return
+      }
+
+      if (profilePayload.status === 'fulfilled') {
+        setProfile(profilePayload.value)
+        setForm((current) => ({
+          ...current,
+          userName: current.userName || profilePayload.value.name || current.userName,
+        }))
+      }
+
+      if (notificationsPayload.status === 'fulfilled') {
+        setNotifications(notificationsPayload.value)
+      }
+
+      if (localesPayload.status === 'fulfilled') {
+        setLocales(localesPayload.value)
+      }
+    }
+
+    loadWorkspace().catch(() => {
+      if (isMounted) {
+        setWorkspaceNotice('Backend workspace недоступен, показаны локальные данные')
+      }
+    })
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let isMounted = true
+    const query = buildReportsQuery({ search: reportSearchText, mode: activeReportMode, timeFilterMode, timeFilterRange })
+
+    async function loadReports() {
+      setReportsLoading(true)
+      setReportsError('')
+
+      try {
+        const payload = await apiRequest(`/api/reports${query ? `?${query}` : ''}`)
+        if (!isMounted) {
+          return
+        }
+
+        const nextReports = payload.reports || payload.items || []
+        setReports(nextReports.length ? nextReports : [])
+        setReportFilters(payload.filters || null)
+        if (nextReports.length && !nextReports.some((report) => report.id === selectedReportId)) {
+          setSelectedReportId(nextReports[0].id)
+        }
+      } catch (error) {
+        if (isMounted) {
+          setReports(reportRows)
+          setReportsError(error.message || 'Не удалось загрузить отчёты из backend')
+        }
+      } finally {
+        if (isMounted) {
+          setReportsLoading(false)
+        }
+      }
+    }
+
+    loadReports()
+
+    return () => {
+      isMounted = false
+    }
+  }, [activeReportMode, reportSearchText, selectedReportId, timeFilterMode, timeFilterRange])
+
+  useEffect(() => {
+    if (!selectedReportId) {
+      return undefined
+    }
+
+    let isMounted = true
+
+    async function loadReportDetail() {
+      try {
+        const [detailPayload, actionsPayload] = await Promise.all([
+          apiRequest(`/api/reports/${selectedReportId}`),
+          apiRequest(`/api/reports/${selectedReportId}/actions`),
+        ])
+
+        if (!isMounted) {
+          return
+        }
+
+        setReportDetails((current) => ({ ...current, [selectedReportId]: detailPayload }))
+        setReportActions((current) => ({ ...current, [selectedReportId]: actionsPayload }))
+      } catch {
+        // Keep fallback report detail content when backend detail is unavailable.
+      }
+    }
+
+    loadReportDetail()
+
+    return () => {
+      isMounted = false
+    }
+  }, [selectedReportId])
 
   function updateField(event) {
     const { name, value } = event.target
@@ -437,8 +624,30 @@ function App() {
     setDevices((current) => {
       const next = { ...current, [name]: !current[name] }
       window.localStorage.setItem('alemlive-devices', JSON.stringify(next))
+
+      apiRequest('/api/devices', {
+        method: 'POST',
+        body: JSON.stringify({
+          roomName: form.roomName || meetingMeta.room,
+          userName: form.userName || meetingMeta.name,
+          device: name,
+          enabled: next[name],
+        }),
+      }).catch(() => {})
+
       return next
     })
+  }
+
+  function recordMeetingEvent(event) {
+    return apiRequest('/api/meetings/events', {
+      method: 'POST',
+      body: JSON.stringify({
+        roomName: meetingMeta.room,
+        userName: meetingMeta.name,
+        event,
+      }),
+    }).catch(() => null)
   }
 
   async function requestToken(roomName, userName, isHost) {
@@ -498,6 +707,7 @@ function App() {
         audio: devices.mic,
         video: devices.camera,
       })
+      recordMeetingEvent(mode === 'create' ? 'created' : 'joined')
     } catch (error) {
       setJoinError(error.message)
     } finally {
@@ -510,7 +720,9 @@ function App() {
     startMeeting(entryMode)
   }
 
-  function leaveMeeting() {
+  async function leaveMeeting() {
+    await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, { method: 'POST' }).catch(() => null)
+    await recordMeetingEvent('left')
     setMeeting(null)
   }
 
@@ -519,7 +731,76 @@ function App() {
       return
     }
 
-    await navigator.clipboard.writeText(meetingMeta.room)
+    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/link`).catch(() => null)
+    await navigator.clipboard.writeText(payload?.joinUrl || payload?.url || meetingMeta.room)
+    setWorkspaceNotice('Ссылка комнаты скопирована')
+  }
+
+  async function showRoomSettings() {
+    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/settings`).catch(() => null)
+    if (payload) {
+      setWorkspaceNotice(`Запись ${payload.recording ? 'включена' : 'выключена'}, автоотчёт ${payload.autoReport ? 'включен' : 'выключен'}`)
+    }
+  }
+
+  async function openAskAI() {
+    const payload = await apiRequest('/api/ask-ai').catch(() => null)
+    if (payload?.url) {
+      window.open(payload.url, '_blank', 'noopener,noreferrer')
+    }
+  }
+
+  async function refreshNotifications() {
+    const payload = await apiRequest('/api/notifications').catch(() => null)
+    if (payload) {
+      setNotifications(payload)
+      setWorkspaceNotice(payload.items?.[0]?.body || 'Уведомления обновлены')
+    }
+  }
+
+  async function refreshProfile() {
+    const payload = await apiRequest('/api/profile').catch(() => null)
+    if (payload) {
+      setProfile(payload)
+      setWorkspaceNotice(`${payload.name} · ${payload.role || 'profile'}`)
+    }
+  }
+
+  async function refreshLocales() {
+    const payload = await apiRequest('/api/locales').catch(() => null)
+    if (payload) {
+      setLocales(payload)
+      setWorkspaceNotice(`Язык: ${payload.items?.find((item) => item.id === payload.current)?.label || payload.current}`)
+    }
+  }
+
+  function resetReportFilters() {
+    setReportSearchText('')
+    setActiveReportMode('reports')
+    setTimeFilterMode('all')
+    setTimeFilterRange({ from: null, to: null })
+    setDraftTimeFilterRange({ from: null, to: null })
+    setSelectedTypeFilterIds(typeFilterOptions.map((option) => option.id))
+    setWorkspaceNotice('Фильтры сброшены')
+  }
+
+  async function openReportRecording() {
+    if (!selectedReport?.id) {
+      return
+    }
+
+    const payload = await apiRequest(`/api/reports/${selectedReport.id}/recording`).catch(() => null)
+    if (payload) {
+      setReportActionMessage(`Запись: ${payload.duration}, маркеры ${payload.markers?.join(', ') || 'нет'}`)
+    }
+  }
+
+  function focusCopilotPanel() {
+    setReportActionMessage('Copilot открыт и готов отвечать по отчёту')
+  }
+
+  function collapseCopilotPanel() {
+    setReportActionMessage('Copilot можно свернуть на следующем шаге UI')
   }
 
   function openReport(reportId) {
@@ -540,10 +821,221 @@ function App() {
   function toggleReportActions(event, reportId) {
     event.stopPropagation()
     setOpenReportActionsId((current) => (current === reportId ? '' : reportId))
+    if (!reportActions[reportId]) {
+      apiRequest(`/api/reports/${reportId}/actions`)
+        .then((payload) => setReportActions((current) => ({ ...current, [reportId]: payload })))
+        .catch(() => {})
+    }
   }
 
   function keepReportActionsOpen(event) {
     event.stopPropagation()
+  }
+
+  async function uploadReport() {
+    setReportActionMessage('')
+
+    try {
+      const payload = await apiRequest('/api/reports/upload', {
+        method: 'POST',
+        body: JSON.stringify({
+          title: 'Новая встреча',
+          source: 'Upload',
+          owner: meetingMeta.name,
+          folder: 'Обработка',
+        }),
+      })
+      const nextReport = payload.report
+      if (nextReport) {
+        setReports((current) => [nextReport, ...current])
+        setSelectedReportId(nextReport.id)
+      }
+      setReportActionMessage(payload.message || 'Отчёт отправлен на обработку')
+    } catch (error) {
+      setReportActionMessage(error.message)
+    }
+  }
+
+  async function downloadReport(reportId) {
+    const response = await fetch(`/api/reports/${reportId}/download`)
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}))
+      throw new Error(payload.error || 'Не удалось скачать отчёт')
+    }
+
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${reportId}.txt`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  }
+
+  async function handleReportAction(reportId, actionId) {
+    setReportActionMessage('')
+
+    try {
+      if (actionId === 'download') {
+        await downloadReport(reportId)
+        setReportActionMessage('Скачивание отчёта началось')
+      } else if (actionId === 'share') {
+        const payload = await apiRequest(`/api/reports/${reportId}/share`, { method: 'POST' })
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(payload.url || `/report/${reportId}`)
+        }
+        setReportActionMessage('Ссылка на отчёт скопирована')
+      } else if (actionId === 'rename') {
+        const currentTitle = (reportDetails[reportId]?.report || reports.find((report) => report.id === reportId))?.title || ''
+        const title = window.prompt('Новое название отчёта', currentTitle)
+        if (!title) {
+          return
+        }
+        const payload = await apiRequest(`/api/reports/${reportId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ title }),
+        })
+        if (payload.report) {
+          setReports((current) => current.map((report) => (report.id === reportId ? payload.report : report)))
+          setReportDetails((current) => ({
+            ...current,
+            [reportId]: {
+              ...(current[reportId] || {}),
+              report: payload.report,
+            },
+          }))
+        }
+        setReportActionMessage('Отчёт переименован')
+      } else if (actionId === 'delete') {
+        await apiRequest(`/api/reports/${reportId}`, { method: 'DELETE' })
+        setReports((current) => current.filter((report) => report.id !== reportId))
+        setReportActionMessage('Отчёт удалён')
+        if (selectedReportId === reportId) {
+          const nextReport = reports.find((report) => report.id !== reportId)
+          if (nextReport) {
+            setSelectedReportId(nextReport.id)
+          } else {
+            setActiveView('reports')
+          }
+        }
+      } else if (actionId === 'send') {
+        await apiRequest(`/api/reports/${reportId}/send`, { method: 'POST' })
+        setReportActionMessage('Отправка отчёта поставлена в очередь')
+      } else if (actionId === 'copy') {
+        const payload = await apiRequest(`/api/reports/${reportId}/copy`)
+        if (navigator.clipboard) {
+          await navigator.clipboard.writeText(payload.text || '')
+        }
+        setReportActionMessage('Текст отчёта скопирован')
+      }
+    } catch (error) {
+      setReportActionMessage(error.message)
+    } finally {
+      setOpenReportActionsId('')
+    }
+  }
+
+  async function runReportLookup(kind) {
+    if (!selectedReportId) {
+      return
+    }
+
+    const endpointByKind = {
+      prompts: 'prompts',
+      history: 'history',
+      search: 'search?q=backend',
+    }
+    const endpoint = endpointByKind[kind]
+    if (!endpoint) {
+      return
+    }
+
+    try {
+      const payload = await apiRequest(`/api/reports/${selectedReportId}/${endpoint}`)
+      if (kind === 'prompts') {
+        setReportActionMessage(`Prompts: ${(payload.prompts || []).length}`)
+      } else if (kind === 'history') {
+        setReportActionMessage(`История чата: ${(payload.history || []).length}`)
+      } else {
+        setReportActionMessage(`Найдено: ${(payload.results || []).length}`)
+      }
+    } catch (error) {
+      setReportActionMessage(error.message)
+    }
+  }
+
+  async function copyReportNotes() {
+    if (activeReportTab !== 'notes' || !selectedReportId) {
+      setReportActionMessage('Копирование заметок доступно только во вкладке Заметки')
+      return
+    }
+
+    try {
+      const payload = await apiRequest(`/api/reports/${selectedReportId}/notes`)
+      const summary = payload.summary || selectedReportDetail?.summary || []
+      const items = payload.actionItems || selectedReportDetail?.actionItems || []
+      const text = [
+        selectedReport.title,
+        '',
+        ...summary.map((section) => `${section.title}\n${section.text}`),
+        '',
+        'Action items',
+        ...items.map((item) => `- ${item.title || item.task} (${item.owner || ''}, ${item.due || ''})`),
+      ].join('\n')
+
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(text)
+      }
+      setReportActionMessage('Заметки скопированы')
+    } catch (error) {
+      setReportActionMessage(error.message)
+    }
+  }
+
+  async function editReportNotes() {
+    if (!selectedReportId) {
+      return
+    }
+
+    setIsDetailActionsOpen(false)
+
+    try {
+      await apiRequest(`/api/reports/${selectedReportId}/notes`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          summary: selectedReportDetail?.summary || [],
+          actionItems: selectedReportDetail?.actionItems || [],
+        }),
+      })
+      setReportActionMessage('Заметки отправлены на редактирование')
+    } catch (error) {
+      setReportActionMessage(error.message || 'Backend endpoint для редактирования заметок пока недоступен')
+    }
+  }
+
+  async function askReportCopilot(message) {
+    const text = message.trim()
+    if (!text || !selectedReportId || isCopilotSending) {
+      return
+    }
+
+    setIsCopilotSending(true)
+    setCopilotInput('')
+    setCopilotMessages((current) => [...current, { role: 'user', text }])
+
+    try {
+      const payload = await apiRequest(`/api/reports/${selectedReportId}/chat`, {
+        method: 'POST',
+        body: JSON.stringify({ message: text }),
+      })
+      setCopilotMessages((current) => [...current, { role: 'assistant', text: payload.answer || 'Ответ пустой' }])
+    } catch (error) {
+      setCopilotMessages((current) => [...current, { role: 'assistant', text: error.message }])
+    } finally {
+      setIsCopilotSending(false)
+    }
   }
 
   function switchView(view) {
@@ -644,7 +1136,7 @@ function App() {
     return (
       <div className="date-filter-dropdown">
         <div className="date-quick-list">
-          {quickDateOptions.map((option) => (
+          {dateFilterOptions.map((option) => (
             <button
               className={timeFilterMode === option.id ? 'date-quick-option active' : 'date-quick-option'}
               type="button"
@@ -739,10 +1231,10 @@ function App() {
         </nav>
 
         <div className="profile-tools">
-          <button className="icon-button has-dot" type="button" aria-label="Notifications">
+          <button className={notifications.unread ? 'icon-button has-dot' : 'icon-button'} type="button" onClick={refreshNotifications} aria-label="Notifications" title={notifications.items?.[0]?.title || 'Notifications'}>
             <Bell size={21} />
           </button>
-          <button className="profile-button" type="button">
+          <button className="profile-button" type="button" onClick={refreshProfile}>
             <span className="avatar">{meetingMeta.initial}</span>
             <span>{meetingMeta.name}</span>
             <ChevronDown size={17} />
@@ -770,10 +1262,10 @@ function App() {
           <button className="icon-button" type="button" onClick={copyRoom} aria-label="Copy room name">
             <Copy size={18} />
           </button>
-          <button className="icon-button" type="button" aria-label="Room link">
+          <button className="icon-button" type="button" onClick={copyRoom} aria-label="Room link">
             <Link size={18} />
           </button>
-          <button className="icon-button" type="button" aria-label="Meeting settings">
+          <button className="icon-button" type="button" onClick={showRoomSettings} aria-label="Meeting settings">
             <Settings size={18} />
           </button>
           {isConnected && (
@@ -978,37 +1470,42 @@ function App() {
         </div>
 
         <div className="ask-read-bar">
-          <button className="ask-locale" type="button">
+          <button className="ask-locale" type="button" onClick={refreshLocales}>
             <Grid2X2 size={18} />
+            <span>{locales.current?.toUpperCase?.() || 'RU'}</span>
             <ChevronDown size={16} />
           </button>
           <span>Спросите Alem о чём угодно...</span>
-          <button className="ask-send" type="button" aria-label="Send question">
+          <button className="ask-send" type="button" onClick={openAskAI} aria-label="Send question">
             <Send size={19} />
           </button>
         </div>
 
         <div className="reports-subnav">
           <div className="report-mode-tabs">
-            <button className="report-mode active" type="button">Отчёты</button>
-            <button className="report-mode" type="button">Неполный</button>
+            <button className={activeReportMode === 'reports' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('reports')}>Отчёты</button>
+            <button className={activeReportMode === 'incomplete' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('incomplete')}>Неполный</button>
           </div>
           <div className="last-updated">
             <RefreshCw size={16} />
             Последнее обновление в 15:37
           </div>
-          <button className="primary-action upload-action" type="button">
+          <button className="primary-action upload-action" type="button" onClick={uploadReport}>
             <Download size={18} />
             Загрузить
           </button>
         </div>
 
         <div className="reports-filters">
-          <div className="report-search-filter">
+          <label className="report-search-filter">
             <Search size={18} />
-            <span>Фильтр по названию отчёта</span>
-          </div>
-          <button className="filter-button" type="button">
+            <input
+              value={reportSearchText}
+              onChange={(event) => setReportSearchText(event.target.value)}
+              placeholder="Фильтр по названию отчёта"
+            />
+          </label>
+          <button className="filter-button" type="button" onClick={resetReportFilters}>
             <FileText size={17} />
             Все отчёты
             <ChevronDown size={16} />
@@ -1047,6 +1544,12 @@ function App() {
           </div>
         </div>
 
+        {(workspaceNotice || reportsError || reportActionMessage) && (
+          <div className={reportsError ? 'reports-status error' : 'reports-status'}>
+            {reportsError || reportActionMessage || workspaceNotice}
+          </div>
+        )}
+
         <div className="reports-table">
           <div className="reports-table-head">
             <span>Источник</span>
@@ -1059,9 +1562,9 @@ function App() {
             <span>Владелец</span>
           </div>
 
-          <div className="reports-week">{reportRows[0].week}</div>
+          <div className="reports-week">{reportsLoading ? 'ЗАГРУЗКА ОТЧЁТОВ...' : visibleReports[0]?.week || 'ОТЧЁТЫ'}</div>
 
-          {reportRows.map((report, index) => (
+          {visibleReports.map((report, index) => (
             <article
               className={index === 0 ? 'report-row selected' : 'report-row'}
               key={report.id}
@@ -1113,22 +1616,26 @@ function App() {
                   </button>
                   {openReportActionsId === report.id && (
                     <span className="report-actions-menu" onClick={keepReportActionsOpen}>
-                      <button className="report-action-item disabled" type="button" disabled>
-                        <Share2 size={19} />
-                        Поделиться
-                      </button>
-                      <button className="report-action-item disabled" type="button" disabled>
-                        <Download size={19} />
-                        Скачать
-                      </button>
-                      <button className="report-action-item disabled" type="button" disabled>
-                        <Edit3 size={19} />
-                        Переименовать отчет
-                      </button>
-                      <button className="report-action-item danger" type="button">
-                        <Trash2 size={19} />
-                        Удалить отчет
-                      </button>
+                      {(reportActions[report.id] || [
+                        { id: 'share', label: 'Поделиться', enabled: true },
+                        { id: 'download', label: 'Скачать', enabled: true },
+                        { id: 'rename', label: 'Переименовать отчет', enabled: true },
+                        { id: 'delete', label: 'Удалить отчет', enabled: true, danger: true },
+                      ]).map((action) => (
+                        <button
+                          className={action.danger ? 'report-action-item danger' : action.enabled === false ? 'report-action-item disabled' : 'report-action-item'}
+                          type="button"
+                          key={action.id}
+                          disabled={action.enabled === false}
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            handleReportAction(report.id, action.id)
+                          }}
+                        >
+                          {action.id === 'share' ? <Share2 size={19} /> : action.id === 'download' ? <Download size={19} /> : action.id === 'rename' ? <Edit3 size={19} /> : action.id === 'delete' ? <Trash2 size={19} /> : action.id === 'send' ? <Send size={19} /> : <Copy size={19} />}
+                          {action.label}
+                        </button>
+                      ))}
                     </span>
                   )}
                 </span>
@@ -1141,6 +1648,13 @@ function App() {
   }
 
   function renderReportPane() {
+    const detailSummary = selectedReportDetail?.summary || []
+    const detailActionItems = selectedReportDetail?.actionItems || actionItems
+    const detailTranscriptLines = selectedReportDetail?.transcriptLines || selectedReportDetail?.transcript || transcriptLines
+    const detailSpeakerStats = selectedReportDetail?.speakerStats || speakerStats
+    const detailHighlights = selectedReportDetail?.highlights || highlights
+    const detailChapters = selectedReportDetail?.chapters || chapters
+
     if (activeReportTab === 'notes') {
       return (
         <div className="detail-notes">
@@ -1168,12 +1682,16 @@ function App() {
               Сводка
             </div>
             <span className="edited-pill">Отредактировано</span>
-            <h3>Команда согласовала новый сценарий входа и структуру AI отчёта</h3>
+            <h3>{detailSummary[0]?.title || 'Команда согласовала новый сценарий входа и структуру AI отчёта'}</h3>
             <p>
-              Встреча была посвящена настройке AlemLive и аналитического отчёта после созвона. Участники договорились,
-              что пользователь должен создавать комнату и присоединяться по названию, а URL и token должны подтягиваться
-              автоматически через backend. После встречи агент показывает резюме, задачи, транскрипт, метрики и главы.
+              {detailSummary[0]?.text || 'Встреча была посвящена настройке AlemLive и аналитического отчёта после созвона. Участники договорились, что пользователь должен создавать комнату и присоединяться по названию, а URL и token должны подтягиваться автоматически через backend. После встречи агент показывает резюме, задачи, транскрипт, метрики и главы.'}
             </p>
+            {detailSummary.slice(1).map((section) => (
+              <p key={section.title}>
+                <strong>{section.title}: </strong>
+                {section.text}
+              </p>
+            ))}
           </section>
 
           <section className="action-list-panel">
@@ -1182,13 +1700,13 @@ function App() {
               Action Items
             </div>
             <div className="action-items">
-              {actionItems.map((item) => (
-                <article className="action-item" key={item.task}>
+              {detailActionItems.map((item) => (
+                <article className="action-item" key={item.id || item.task || item.title}>
                   <span className="action-check">
                     <CheckCircle2 size={17} />
                   </span>
                   <div>
-                    <h4>{item.task}</h4>
+                    <h4>{item.task || item.title}</h4>
                     <p>{item.owner} · {item.due}</p>
                   </div>
                 </article>
@@ -1207,11 +1725,11 @@ function App() {
               <Search size={18} />
               <span>Поиск по транскрипту: token, комната, отчёт</span>
             </div>
-            <span className="report-badge muted">3 найденных момента</span>
+            <span className="report-badge muted">{detailTranscriptLines.length} моментов</span>
           </div>
           <div className="transcript-list">
-            {transcriptLines.map((line) => (
-              <article className="transcript-line" key={`${line.time}-${line.speaker}`}>
+            {detailTranscriptLines.map((line) => (
+              <article className="transcript-line" key={line.id || `${line.time}-${line.speaker}`}>
                 <time>{line.time}</time>
                 <div>
                   <strong>{line.speaker}</strong>
@@ -1248,16 +1766,16 @@ function App() {
             </div>
           </div>
           <div className="speaker-table">
-            {speakerStats.map((speaker) => (
+            {detailSpeakerStats.map((speaker) => (
               <article className="speaker-row" key={speaker.name}>
                 <div>
                   <strong>{speaker.name}</strong>
                   <span>{speaker.sentiment} · {speaker.pace}</span>
                 </div>
-                <div className="talk-bar" aria-label={`${speaker.name} говорил ${speaker.talk}% времени`}>
-                  <span style={{ width: `${speaker.talk}%` }} />
+                <div className="talk-bar" aria-label={`${speaker.name} говорил ${speaker.talk || speaker.talkTime}% времени`}>
+                  <span style={{ width: `${speaker.talk || speaker.talkTime}%` }} />
                 </div>
-                <b>{speaker.talk}%</b>
+                <b>{speaker.talk || speaker.talkTime}%</b>
               </article>
             ))}
           </div>
@@ -1268,14 +1786,14 @@ function App() {
     if (activeReportTab === 'highlights') {
       return (
         <div className="highlights-report report-pane">
-          {highlights.map((item) => (
+          {detailHighlights.map((item) => (
             <article className="highlight-card" key={item.title}>
               <span className="highlight-time">{item.time}</span>
               <div>
                 <h3>{item.title}</h3>
-                <p>{item.note}</p>
+                <p>{item.note || item.text}</p>
               </div>
-              <button className="icon-button" type="button" aria-label={`Open highlight ${item.title}`}>
+              <button className="icon-button" type="button" onClick={openReportRecording} aria-label={`Open highlight ${item.title}`}>
                 <Play size={17} fill="currentColor" />
               </button>
             </article>
@@ -1286,13 +1804,13 @@ function App() {
 
     return (
       <div className="chapters-report report-pane">
-        {chapters.map((chapter, index) => (
+        {detailChapters.map((chapter, index) => (
           <article className="chapter-row" key={chapter.title}>
             <span className="chapter-index">{index + 1}</span>
-            <time>{chapter.time}</time>
+            <time>{chapter.time || chapter.start}</time>
             <div>
               <h3>{chapter.title}</h3>
-              <p>{chapter.duration}</p>
+              <p>{chapter.duration || chapter.text}</p>
             </div>
           </article>
         ))}
@@ -1325,27 +1843,29 @@ function App() {
                 </span>
                 <span>
                   <Users size={17} />
-                  Alison Barker, Мади, Айдана, +1 больше
+                  {selectedReport.participantNames || 'Alison Barker, Мади, Айдана, +1 больше'}
                 </span>
               </div>
             </div>
           </div>
 
           <div className="detail-actions">
-            <button className="soft-action" type="button">
+            <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'download')}>
               <Download size={18} />
               Скачать
             </button>
-            <button className="soft-action" type="button">
+            <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'send')}>
               <Send size={18} />
               Отправить в...
             </button>
-            <button className="soft-action disabled" type="button" disabled>
+            <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'share')}>
               <Share2 size={18} />
               Поделиться
             </button>
           </div>
         </div>
+
+        {reportActionMessage && <div className="report-detail-status">{reportActionMessage}</div>}
 
         <div className="report-detail-layout">
           <div className="report-recording-column">
@@ -1353,7 +1873,7 @@ function App() {
               <div className="video-person">
                 <span>{selectedReport.ownerInitial}</span>
               </div>
-              <button className="video-pop-button" type="button" aria-label="Expand video">
+              <button className="video-pop-button" type="button" onClick={openReportRecording} aria-label="Expand video">
                 <ExternalLink size={19} />
               </button>
               <div className="video-controls">
@@ -1369,29 +1889,59 @@ function App() {
               </div>
             </div>
 
-            <div className="detail-tabs" role="tablist" aria-label="Разделы отчёта">
-              {reportTabs.map(({ id, label, icon: Icon }) => (
-                <button
-                  className={activeReportTab === id ? 'detail-tab active' : 'detail-tab'}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeReportTab === id}
-                  key={id}
-                  onClick={() => setActiveReportTab(id)}
-                >
-                  <Icon size={18} />
-                  {label}
+            <div className="detail-tabs">
+              <div className="detail-tab-list" role="tablist" aria-label="Разделы отчёта">
+                {reportTabs.map(({ id, label, icon: Icon }) => (
+                  <button
+                    className={activeReportTab === id ? 'detail-tab active' : 'detail-tab'}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeReportTab === id}
+                    key={id}
+                    onClick={() => {
+                      setActiveReportTab(id)
+                      setIsDetailActionsOpen(false)
+                    }}
+                  >
+                    <Icon size={18} />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="detail-tab-tools">
+                <button className="detail-tool-button" type="button" onClick={() => runReportLookup('search')} aria-label="Поиск по отчёту">
+                  <Search size={21} />
                 </button>
-              ))}
-              <button className="detail-tab icon-only" type="button" aria-label="Search in report">
-                <Search size={19} />
-              </button>
-              <button className="detail-tab icon-only" type="button" aria-label="Copy report">
-                <Copy size={19} />
-              </button>
-              <button className="detail-tab icon-only" type="button" aria-label="More actions">
-                <MoreHorizontal size={20} />
-              </button>
+                <button
+                  className="detail-tool-button"
+                  type="button"
+                  onClick={copyReportNotes}
+                  disabled={activeReportTab !== 'notes'}
+                  aria-label="Копировать заметки"
+                >
+                  <Copy size={21} />
+                </button>
+                <div className="detail-more-wrap">
+                  <button
+                    className={isDetailActionsOpen ? 'detail-tool-button active' : 'detail-tool-button'}
+                    type="button"
+                    onClick={() => setIsDetailActionsOpen((current) => !current)}
+                    aria-label="Дополнительные действия"
+                    aria-expanded={isDetailActionsOpen}
+                  >
+                    <MoreHorizontal size={22} />
+                  </button>
+                  {isDetailActionsOpen && (
+                    <div className="detail-more-menu">
+                      <button className="detail-more-item" type="button" onClick={editReportNotes}>
+                        <Edit3 size={18} />
+                        Редактировать заметки
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div className="detail-report-content">{renderReportPane()}</div>
@@ -1399,36 +1949,56 @@ function App() {
 
           <aside className="report-copilot">
             <div className="copilot-tools">
-              <button className="icon-button" type="button" aria-label="Edit prompts">
+              <button className="icon-button" type="button" onClick={() => runReportLookup('prompts')} aria-label="Edit prompts">
                 <Edit3 size={18} />
               </button>
-              <button className="icon-button" type="button" aria-label="History">
+              <button className="icon-button" type="button" onClick={() => runReportLookup('history')} aria-label="History">
                 <Clock3 size={18} />
               </button>
               <span />
-              <button className="icon-button" type="button" aria-label="Open side panel">
+              <button className="icon-button" type="button" onClick={focusCopilotPanel} aria-label="Open side panel">
                 <ExternalLink size={18} />
               </button>
-              <button className="icon-button" type="button" aria-label="Collapse side panel">
+              <button className="icon-button" type="button" onClick={collapseCopilotPanel} aria-label="Collapse side panel">
                 <PanelRight size={18} />
               </button>
             </div>
 
             <div className="copilot-question-list">
-              {aiQuestions.map((question) => (
-                <button className="copilot-question" type="button" key={question}>
+              {(selectedReportDetail?.aiQuestions || aiQuestions).map((question) => (
+                <button className="copilot-question" type="button" key={question} onClick={() => askReportCopilot(question)}>
                   <Sparkles size={18} />
                   {question}
                 </button>
               ))}
             </div>
 
-            <div className="copilot-input">
-              <span>Спросите Alem о чём угодно...</span>
-              <button className="ask-send" type="button" aria-label="Ask Alem">
+            {copilotMessages.length > 0 && (
+              <div className="copilot-chat-log">
+                {copilotMessages.slice(-4).map((message, index) => (
+                  <div className={message.role === 'user' ? 'copilot-message user' : 'copilot-message'} key={`${message.role}-${index}-${message.text}`}>
+                    {message.text}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <form
+              className="copilot-input"
+              onSubmit={(event) => {
+                event.preventDefault()
+                askReportCopilot(copilotInput)
+              }}
+            >
+              <input
+                value={copilotInput}
+                onChange={(event) => setCopilotInput(event.target.value)}
+                placeholder="Спросите Alem о чём угодно..."
+              />
+              <button className="ask-send" type="submit" aria-label="Ask Alem" disabled={isCopilotSending}>
                 <Send size={18} />
               </button>
-            </div>
+            </form>
           </aside>
         </div>
       </section>
