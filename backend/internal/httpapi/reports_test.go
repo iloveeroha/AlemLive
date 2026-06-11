@@ -233,6 +233,30 @@ func TestReportUtilityEndpoints(t *testing.T) {
 	}
 }
 
+func TestReportNotesPatch(t *testing.T) {
+	handler := NewServer(config.Config{TokenTTL: time.Hour})
+	body := bytes.NewBufferString(`{
+		"summary":[{"title":"Updated","text":"Saved from frontend"}],
+		"actionItems":[{"id":"x","title":"Check notes","task":"Check notes","owner":"Backend","due":"Today","priority":"Medium","status":"open"}]
+	}`)
+	request := httptest.NewRequest(http.MethodPatch, "/api/reports/read-intro/notes", body)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["status"] != "saved" {
+		t.Fatalf("unexpected notes response: %#v", payload)
+	}
+}
+
 func TestReportActionsTabsAndSubresources(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
 
@@ -255,6 +279,21 @@ func TestReportActionsTabsAndSubresources(t *testing.T) {
 		if response.Code != http.StatusOK {
 			t.Fatalf("%s expected status 200, got %d: %s", path, response.Code, response.Body.String())
 		}
+	}
+}
+
+func TestReportRecordingStream(t *testing.T) {
+	handler := NewServer(config.Config{TokenTTL: time.Hour})
+	request := httptest.NewRequest(http.MethodGet, "/api/reports/read-intro/recording/stream", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if got := response.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
+		t.Fatalf("expected html stream placeholder, got %s", got)
 	}
 }
 

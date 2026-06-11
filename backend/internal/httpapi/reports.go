@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/http"
 	"sort"
 	"strconv"
@@ -213,6 +214,10 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 	if len(parts) > 1 {
 		action = parts[1]
 	}
+	subAction := ""
+	if len(parts) > 2 {
+		subAction = parts[2]
+	}
 
 	detail, ok := demoReportDetail(id, s.clock())
 	if !ok {
@@ -253,6 +258,10 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w, http.MethodGet)
 			return
 		}
+		if subAction == "stream" {
+			s.streamReportRecording(w, detail)
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]any{
 			"reportId": detail.Report.ID,
 			"duration": detail.Report.Duration,
@@ -266,11 +275,37 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, http.StatusOK, reportTabsPayload())
 	case "notes":
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w, http.MethodGet)
-			return
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "summary": detail.Summary, "actionItems": detail.ActionItems})
+		case http.MethodPatch:
+			var payload struct {
+				Summary     []summarySection   `json:"summary"`
+				ActionItems []reportActionItem `json:"actionItems"`
+			}
+			decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 128*1024))
+			if err := decoder.Decode(&payload); err != nil {
+				writeError(w, http.StatusBadRequest, "Invalid JSON body")
+				return
+			}
+			if payload.Summary == nil {
+				payload.Summary = detail.Summary
+			}
+			if payload.ActionItems == nil {
+				payload.ActionItems = detail.ActionItems
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"reportId":     detail.Report.ID,
+				"summary":      payload.Summary,
+				"actionItems":  payload.ActionItems,
+				"status":       "saved",
+				"message":      "Report notes saved",
+				"updatedAt":    s.clock().UTC().Format(time.RFC3339),
+				"editEndpoint": "/api/reports/" + detail.Report.ID + "/notes",
+			})
+		default:
+			methodNotAllowed(w, http.MethodGet+", "+http.MethodPatch)
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "summary": detail.Summary, "actionItems": detail.ActionItems})
 	case "action-items":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -369,6 +404,22 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusNotFound, "Report action not found")
 	}
+}
+
+func (s *Server) streamReportRecording(w http.ResponseWriter, detail reportDetailResponse) {
+	title := html.EscapeString(detail.Report.Title)
+	duration := html.EscapeString(detail.Report.Duration)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, `<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><title>%s</title></head>
+<body style="font-family: system-ui, sans-serif; margin: 32px; background: #0f172a; color: white;">
+<h1>%s</h1>
+<p>Запись встречи пока хранится как backend-заглушка. Длительность: %s.</p>
+<p>Когда появится реальное storage/CDN, этот endpoint можно заменить на redirect или video stream.</p>
+</body>
+</html>`, title, title, duration)
 }
 
 func (s *Server) renameReport(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
