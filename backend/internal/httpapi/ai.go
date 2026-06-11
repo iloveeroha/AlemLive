@@ -219,6 +219,10 @@ func extractJSONObject(raw string) string {
 }
 
 func defaultReportContext(reportID string, now func() time.Time) string {
+	if detail, ok := demoReportDetail(reportID, now()); ok {
+		return reportDetailContext(detail)
+	}
+
 	analysis := demoMeetingAnalysis(firstNonEmpty(reportID, "alem-meeting"), now())
 	return analysisContext(analysis)
 }

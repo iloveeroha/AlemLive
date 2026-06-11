@@ -83,14 +83,17 @@ type highlight struct {
 	Time  string `json:"time"`
 	Title string `json:"title"`
 	Text  string `json:"text"`
+	Note  string `json:"note,omitempty"`
 	Type  string `json:"type"`
 }
 
 type chapter struct {
-	Start string `json:"start"`
-	End   string `json:"end"`
-	Title string `json:"title"`
-	Text  string `json:"text"`
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	Time     string `json:"time,omitempty"`
+	Title    string `json:"title"`
+	Text     string `json:"text"`
+	Duration string `json:"duration,omitempty"`
 }
 
 func NewServer(cfg config.Config) http.Handler {
@@ -113,6 +116,10 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/config", s.config)
 	s.mux.HandleFunc("/api/livekit/token", s.createLiveKitToken)
 	s.mux.HandleFunc("/api/meetings/analysis", s.meetingAnalysis)
+	s.mux.HandleFunc("/api/reports", s.reports)
+	s.mux.HandleFunc("/api/reports/filters", s.reportFilters)
+	s.mux.HandleFunc("/api/reports/upload", s.reportUpload)
+	s.mux.HandleFunc("/api/reports/", s.reportByID)
 	s.mux.HandleFunc("/api/ai/chat", s.aiChat)
 	s.mux.HandleFunc("/api/ai/status", s.aiStatus)
 	s.mux.HandleFunc("/api/ask-ai", s.askAI)
@@ -134,11 +141,13 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{
-		"livekitUrl":       s.cfg.LiveKitURL,
-		"tokenEndpoint":    "/api/livekit/token",
-		"aiChatEndpoint":   "/api/ai/chat",
-		"aiStatusEndpoint": "/api/ai/status",
-		"analysisEndpoint": "/api/meetings/analysis",
+		"livekitUrl":            s.cfg.LiveKitURL,
+		"tokenEndpoint":         "/api/livekit/token",
+		"aiChatEndpoint":        "/api/ai/chat",
+		"aiStatusEndpoint":      "/api/ai/status",
+		"analysisEndpoint":      "/api/meetings/analysis",
+		"reportsEndpoint":       "/api/reports",
+		"reportFiltersEndpoint": "/api/reports/filters",
 	})
 }
 
@@ -334,7 +343,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 			}
 			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		}
 
