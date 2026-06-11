@@ -202,9 +202,9 @@ const quickDateOptions = [
 ]
 
 const typeFilterOptions = [
-  { id: 'meetings', label: 'Отчеты о встречах' },
-  { id: 'readout', label: 'Темы Readout' },
-  { id: 'daily', label: 'Ежедневные обзоры' },
+  { id: 'meetings', value: 'meeting', label: 'Отчеты о встречах', aliases: ['meeting', 'meetings', 'google meet'] },
+  { id: 'readout', value: 'readout', label: 'Темы Readout', aliases: ['readout'] },
+  { id: 'daily', value: 'daily', label: 'Ежедневные обзоры', aliases: ['daily'] },
 ]
 
 const calendarMonthNames = [
@@ -334,7 +334,38 @@ async function apiRequest(path, options = {}) {
   return payload
 }
 
-function buildReportsQuery({ search, mode, timeFilterMode, timeFilterRange }) {
+function getSelectedTypeValues(selectedTypeIds) {
+  return typeFilterOptions
+    .filter((option) => selectedTypeIds.includes(option.id))
+    .map((option) => option.value)
+}
+
+function getReportTypeValue(report) {
+  const rawType = report.type || report.kind || report.reportType || report.category || report.source || ''
+  const normalizedType = String(rawType).trim().toLowerCase()
+
+  if (normalizedType === 'upload') {
+    return 'upload'
+  }
+
+  const matchedOption = typeFilterOptions.find((option) => option.aliases.includes(normalizedType))
+  return matchedOption?.value || normalizedType
+}
+
+function filterReportsByType(rows, selectedTypeIds) {
+  if (selectedTypeIds.length === typeFilterOptions.length) {
+    return rows
+  }
+
+  if (!selectedTypeIds.length) {
+    return []
+  }
+
+  const selectedTypes = new Set(getSelectedTypeValues(selectedTypeIds))
+  return rows.filter((report) => selectedTypes.has(getReportTypeValue(report)))
+}
+
+function buildReportsQuery({ search, mode, timeFilterMode, timeFilterRange, typeIds }) {
   const params = new URLSearchParams()
 
   if (search.trim()) {
@@ -350,6 +381,10 @@ function buildReportsQuery({ search, mode, timeFilterMode, timeFilterRange }) {
     params.set('to', formatAPIDate(timeFilterRange.to || timeFilterRange.from))
   } else if (timeFilterMode && timeFilterMode !== 'all') {
     params.set('datePreset', timeFilterMode)
+  }
+
+  if (typeIds.length > 0 && typeIds.length < typeFilterOptions.length) {
+    params.set('types', getSelectedTypeValues(typeIds).join(','))
   }
 
   return params.toString()
@@ -483,7 +518,7 @@ function App() {
   const timeFilterLabel = timeFilterMode === 'custom' ? formatDateRange(timeFilterRange) : activeQuickDateOption?.label || quickDateOptions[0].label
   const calendarDays = getCalendarDays(calendarMonth)
   const areAllTypeFiltersSelected = selectedTypeFilterIds.length === typeFilterOptions.length
-  const visibleReports = reports.length ? reports : reportRows
+  const visibleReports = filterReportsByType(reports.length ? reports : reportRows, selectedTypeFilterIds)
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
@@ -540,7 +575,13 @@ function App() {
 
   useEffect(() => {
     let isMounted = true
-    const query = buildReportsQuery({ search: reportSearchText, mode: activeReportMode, timeFilterMode, timeFilterRange })
+    const query = buildReportsQuery({
+      search: reportSearchText,
+      mode: activeReportMode,
+      timeFilterMode,
+      timeFilterRange,
+      typeIds: selectedTypeFilterIds,
+    })
 
     async function loadReports() {
       setReportsLoading(true)
@@ -575,7 +616,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [activeReportMode, reportSearchText, selectedReportId, timeFilterMode, timeFilterRange])
+  }, [activeReportMode, reportSearchText, selectedReportId, selectedTypeFilterIds, timeFilterMode, timeFilterRange])
 
   useEffect(() => {
     if (!selectedReportId) {
