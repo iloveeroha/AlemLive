@@ -201,6 +201,12 @@ const quickDateOptions = [
   { id: 'last12months', label: 'Последние 12 месяцев', months: 12 },
 ]
 
+const typeFilterOptions = [
+  { id: 'meetings', label: 'Отчеты о встречах' },
+  { id: 'readout', label: 'Темы Readout' },
+  { id: 'daily', label: 'Ежедневные обзоры' },
+]
+
 const calendarMonthNames = [
   'январь',
   'февраль',
@@ -393,6 +399,8 @@ function App() {
   const [timeFilterRange, setTimeFilterRange] = useState({ from: null, to: null })
   const [draftTimeFilterRange, setDraftTimeFilterRange] = useState({ from: null, to: null })
   const [calendarMonth, setCalendarMonth] = useState(new Date(reportCalendarToday.getFullYear(), reportCalendarToday.getMonth(), 1))
+  const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false)
+  const [selectedTypeFilterIds, setSelectedTypeFilterIds] = useState(typeFilterOptions.map((option) => option.id))
   const [openReportActionsId, setOpenReportActionsId] = useState('')
 
   const canStart = form.userName.trim() && form.roomName.trim()
@@ -401,6 +409,7 @@ function App() {
   const activeQuickDateOption = quickDateOptions.find((option) => option.id === timeFilterMode)
   const timeFilterLabel = timeFilterMode === 'custom' ? formatDateRange(timeFilterRange) : activeQuickDateOption?.label || quickDateOptions[0].label
   const calendarDays = getCalendarDays(calendarMonth)
+  const areAllTypeFiltersSelected = selectedTypeFilterIds.length === typeFilterOptions.length
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
@@ -584,6 +593,51 @@ function App() {
       to: draftTimeFilterRange.to || draftTimeFilterRange.from,
     })
     setIsTimeFilterOpen(false)
+  }
+
+  function toggleAllTypeFilters() {
+    setSelectedTypeFilterIds((current) => (
+      current.length === typeFilterOptions.length ? [] : typeFilterOptions.map((option) => option.id)
+    ))
+  }
+
+  function toggleTypeFilter(optionId) {
+    setSelectedTypeFilterIds((current) => (
+      current.includes(optionId)
+        ? current.filter((id) => id !== optionId)
+        : [...current, optionId]
+    ))
+  }
+
+  function renderTypeFilterDropdown() {
+    return (
+      <div className="type-filter-dropdown">
+        <button className="type-filter-option" type="button" onClick={toggleAllTypeFilters}>
+          <span>Выбрать все</span>
+          <span className={areAllTypeFiltersSelected ? 'type-check active' : 'type-check'}>
+            {areAllTypeFiltersSelected && <Check size={16} />}
+          </span>
+        </button>
+
+        {typeFilterOptions.map((option) => {
+          const isSelected = selectedTypeFilterIds.includes(option.id)
+
+          return (
+            <button
+              className={isSelected ? 'type-filter-option active' : 'type-filter-option'}
+              type="button"
+              key={option.id}
+              onClick={() => toggleTypeFilter(option.id)}
+            >
+              <span>{option.label}</span>
+              <span className={isSelected ? 'type-check active' : 'type-check'}>
+                {isSelected && <Check size={16} />}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+    )
   }
 
   function renderDateFilterDropdown() {
@@ -963,7 +1017,10 @@ function App() {
             <button
               className={isTimeFilterOpen ? 'filter-button time-filter-button active' : 'filter-button time-filter-button'}
               type="button"
-              onClick={() => setIsTimeFilterOpen((current) => !current)}
+              onClick={() => {
+                setIsTimeFilterOpen((current) => !current)
+                setIsTypeFilterOpen(false)
+              }}
               aria-expanded={isTimeFilterOpen}
             >
               <CalendarDays size={17} />
@@ -972,11 +1029,22 @@ function App() {
             </button>
             {isTimeFilterOpen && renderDateFilterDropdown()}
           </div>
-          <button className="filter-button" type="button">
-            <Filter size={17} />
-            Тип
-            <ChevronDown size={16} />
-          </button>
+          <div className="type-filter-wrap">
+            <button
+              className={isTypeFilterOpen ? 'filter-button type-filter-button active' : 'filter-button type-filter-button'}
+              type="button"
+              onClick={() => {
+                setIsTypeFilterOpen((current) => !current)
+                setIsTimeFilterOpen(false)
+              }}
+              aria-expanded={isTypeFilterOpen}
+            >
+              <Filter size={17} />
+              Тип
+              <ChevronDown size={16} />
+            </button>
+            {isTypeFilterOpen && renderTypeFilterDropdown()}
+          </div>
         </div>
 
         <div className="reports-table">
