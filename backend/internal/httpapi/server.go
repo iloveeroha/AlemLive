@@ -23,6 +23,7 @@ type tokenRequest struct {
 	Room     string `json:"room"`
 	UserName string `json:"userName"`
 	Identity string `json:"identity"`
+	IsHost   bool   `json:"isHost"`
 }
 
 type tokenResponse struct {
@@ -166,11 +167,22 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	role := "participant"
+	if req.IsHost {
+		role = "host"
+	}
+	metadata, err := json.Marshal(map[string]string{"role": role})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not create LiveKit token")
+		return
+	}
+
 	token, expiresAt, err := livekit.GenerateToken(
 		s.cfg.LiveKitAPIKey,
 		s.cfg.LiveKitSecret,
 		identity,
 		room,
+		string(metadata),
 		s.cfg.TokenTTL,
 		s.clock(),
 	)

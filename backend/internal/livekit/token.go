@@ -24,10 +24,11 @@ type claims struct {
 	NotBefore int64      `json:"nbf"`
 	ExpiresAt int64      `json:"exp"`
 	Name      string     `json:"name,omitempty"`
+	Metadata  string     `json:"metadata,omitempty"`
 	Video     VideoGrant `json:"video"`
 }
 
-func GenerateToken(apiKey, secret, identity, room string, ttl time.Duration, now time.Time) (string, time.Time, error) {
+func GenerateToken(apiKey, secret, identity, room, metadata string, ttl time.Duration, now time.Time) (string, time.Time, error) {
 	apiKey = strings.TrimSpace(apiKey)
 	secret = strings.TrimSpace(secret)
 	identity = strings.TrimSpace(identity)
@@ -56,6 +57,7 @@ func GenerateToken(apiKey, secret, identity, room string, ttl time.Duration, now
 		NotBefore: now.Unix(),
 		ExpiresAt: expiresAt.Unix(),
 		Name:      identity,
+		Metadata:  metadata,
 		Video: VideoGrant{
 			Room:           room,
 			RoomJoin:       true,

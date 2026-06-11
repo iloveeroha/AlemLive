@@ -7,11 +7,8 @@ import {
   Bot,
   CalendarDays,
   CameraOff,
-  Check,
   CheckCircle2,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   Clock3,
   Contact,
   Copy,
@@ -47,7 +44,7 @@ import {
   Volume2,
   Zap,
 } from 'lucide-react'
-import { LiveKitRoom, VideoConference } from '@livekit/components-react'
+import { LiveKitRoom, VideoConference, useParticipants } from '@livekit/components-react'
 import '@livekit/components-styles'
 import './App.css'
 
@@ -188,117 +185,6 @@ const aiQuestions = [
   'Переведите резюме встречи на русский.',
 ]
 
-const reportCalendarToday = new Date(2026, 5, 12)
-
-const quickDateOptions = [
-  { id: 'all', label: 'В любое время' },
-  { id: 'today', label: 'Сегодня', days: 1 },
-  { id: 'last7', label: 'Последние 7 дней', days: 7 },
-  { id: 'last30', label: 'Последние 30 дней', days: 30 },
-  { id: 'last90', label: 'Последние 90 дней', days: 90 },
-  { id: 'last6months', label: 'Последние 6 месяцев', months: 6 },
-  { id: 'last12months', label: 'Последние 12 месяцев', months: 12 },
-]
-
-const typeFilterOptions = [
-  { id: 'meetings', label: 'Отчеты о встречах' },
-  { id: 'readout', label: 'Темы Readout' },
-  { id: 'daily', label: 'Ежедневные обзоры' },
-]
-
-const calendarMonthNames = [
-  'январь',
-  'февраль',
-  'март',
-  'апрель',
-  'май',
-  'июнь',
-  'июль',
-  'август',
-  'сентябрь',
-  'октябрь',
-  'ноябрь',
-  'декабрь',
-]
-
-const calendarShortMonthNames = ['янв.', 'фев.', 'мар.', 'апр.', 'мая', 'июн.', 'июл.', 'авг.', 'сен.', 'окт.', 'ноя.', 'дек.']
-const calendarWeekdays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
-
-function normalizeDate(date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate())
-}
-
-function shiftDate(date, amount) {
-  const nextDate = new Date(date)
-  nextDate.setDate(nextDate.getDate() + amount)
-  return nextDate
-}
-
-function shiftMonth(date, amount) {
-  return new Date(date.getFullYear(), date.getMonth() + amount, 1)
-}
-
-function isSameDate(firstDate, secondDate) {
-  return firstDate && secondDate && firstDate.getTime() === secondDate.getTime()
-}
-
-function isBetweenDates(date, startDate, endDate) {
-  return startDate && endDate && date > startDate && date < endDate
-}
-
-function getQuickDateRange(option) {
-  const endDate = normalizeDate(reportCalendarToday)
-
-  if (option.id === 'all') {
-    return { from: null, to: null }
-  }
-
-  if (option.months) {
-    return {
-      from: new Date(endDate.getFullYear(), endDate.getMonth() - option.months, endDate.getDate()),
-      to: endDate,
-    }
-  }
-
-  return {
-    from: shiftDate(endDate, -(option.days - 1)),
-    to: endDate,
-  }
-}
-
-function formatCalendarDate(date) {
-  return `${date.getDate()} ${calendarShortMonthNames[date.getMonth()]}`
-}
-
-function formatDateRange(range) {
-  if (!range.from) {
-    return quickDateOptions[0].label
-  }
-
-  if (!range.to || isSameDate(range.from, range.to)) {
-    return formatCalendarDate(range.from)
-  }
-
-  return `${formatCalendarDate(range.from)} - ${formatCalendarDate(range.to)}`
-}
-
-function getCalendarDays(monthDate) {
-  const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1)
-  const startOffset = (monthStart.getDay() + 6) % 7
-  const gridStart = shiftDate(monthStart, -startOffset)
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = normalizeDate(shiftDate(gridStart, index))
-
-    return {
-      date,
-      key: date.toISOString(),
-      isCurrentMonth: date.getMonth() === monthDate.getMonth(),
-      isDisabled: date > normalizeDate(reportCalendarToday),
-    }
-  })
-}
-
 function getInitialReportId() {
   if (typeof window === 'undefined') {
     return ''
@@ -306,6 +192,59 @@ function getInitialReportId() {
 
   const [, reportId] = window.location.hash.match(/^#report\/(.+)$/) || []
   return reportId || ''
+}
+
+function getParticipantRole(participant) {
+  try {
+    const metadata = JSON.parse(participant.metadata || '{}')
+    if (metadata.role === 'host') {
+      return 'Host'
+    }
+  } catch {
+    // ignore malformed metadata
+  }
+
+  return 'Участник'
+}
+
+function ParticipantsList({ participants }) {
+  return (
+    <section className="panel participants-panel">
+      <div className="panel-heading">
+        <span className="panel-icon">
+          <Contact size={21} />
+        </span>
+        <div>
+          <h2>Участники</h2>
+          <p>Команда встречи</p>
+        </div>
+      </div>
+
+      <div className="member-list">
+        {participants.length === 0 ? (
+          <p className="empty-members">Пока никто не присоединился</p>
+        ) : (
+          participants.map((participant) => {
+            const name = participant.name || participant.identity
+            return (
+              <div className="member" key={participant.identity}>
+                <span className="member-avatar">{name.slice(0, 1).toUpperCase()}</span>
+                <div>
+                  <strong>{name}</strong>
+                  <small>{getParticipantRole(participant)}</small>
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </section>
+  )
+}
+
+function ParticipantsPanel() {
+  const participants = useParticipants()
+  return <ParticipantsList participants={participants} />
 }
 
 function App() {
@@ -319,27 +258,27 @@ function App() {
   })
   const [meeting, setMeeting] = useState(null)
   const [entryMode, setEntryMode] = useState('create')
-  const [devices, setDevices] = useState({
-    mic: true,
-    camera: true,
+  const [devices, setDevices] = useState(() => {
+    if (typeof window === 'undefined') {
+      return { mic: true, camera: true }
+    }
+
+    try {
+      const saved = JSON.parse(window.localStorage.getItem('alemlive-devices'))
+      return {
+        mic: saved?.mic ?? true,
+        camera: saved?.camera ?? true,
+      }
+    } catch {
+      return { mic: true, camera: true }
+    }
   })
   const [isStarting, setIsStarting] = useState(false)
   const [joinError, setJoinError] = useState('')
-  const [isTimeFilterOpen, setIsTimeFilterOpen] = useState(false)
-  const [timeFilterMode, setTimeFilterMode] = useState('all')
-  const [timeFilterRange, setTimeFilterRange] = useState({ from: null, to: null })
-  const [draftTimeFilterRange, setDraftTimeFilterRange] = useState({ from: null, to: null })
-  const [calendarMonth, setCalendarMonth] = useState(new Date(reportCalendarToday.getFullYear(), reportCalendarToday.getMonth(), 1))
-  const [isTypeFilterOpen, setIsTypeFilterOpen] = useState(false)
-  const [selectedTypeFilterIds, setSelectedTypeFilterIds] = useState(typeFilterOptions.map((option) => option.id))
 
   const canStart = form.userName.trim() && form.roomName.trim()
   const isConnected = Boolean(meeting)
   const selectedReport = reportRows.find((report) => report.id === selectedReportId) || reportRows[0]
-  const activeQuickDateOption = quickDateOptions.find((option) => option.id === timeFilterMode)
-  const timeFilterLabel = timeFilterMode === 'custom' ? formatDateRange(timeFilterRange) : activeQuickDateOption?.label || quickDateOptions[0].label
-  const calendarDays = getCalendarDays(calendarMonth)
-  const areAllTypeFiltersSelected = selectedTypeFilterIds.length === typeFilterOptions.length
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
@@ -364,16 +303,20 @@ function App() {
   }
 
   function toggleDevice(name) {
-    setDevices((current) => ({ ...current, [name]: !current[name] }))
+    setDevices((current) => {
+      const next = { ...current, [name]: !current[name] }
+      window.localStorage.setItem('alemlive-devices', JSON.stringify(next))
+      return next
+    })
   }
 
-  async function requestToken(roomName, userName) {
+  async function requestToken(roomName, userName, isHost) {
     const response = await fetch('/api/livekit/token', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ roomName, userName }),
+      body: JSON.stringify({ roomName, userName, isHost }),
     })
 
     const payload = await response.json().catch(() => ({}))
@@ -406,7 +349,8 @@ function App() {
     setJoinError('')
 
     try {
-      const payload = await requestToken(nextRoomName, nextUserName)
+      const isHost = mode === 'create'
+      const payload = await requestToken(nextRoomName, nextUserName, isHost)
 
       setForm((current) => ({
         ...current,
@@ -419,6 +363,7 @@ function App() {
         roomName: payload.roomName || nextRoomName,
         userName: payload.userName || nextUserName,
         entryMode: mode,
+        isHost,
         audio: devices.mic,
         video: devices.camera,
       })
@@ -460,167 +405,6 @@ function App() {
     }
   }
 
-  function selectQuickDateOption(option) {
-    const nextRange = getQuickDateRange(option)
-
-    setTimeFilterMode(option.id)
-    setTimeFilterRange(nextRange)
-    setDraftTimeFilterRange(nextRange)
-  }
-
-  function selectCalendarDate(day) {
-    if (day.isDisabled) {
-      return
-    }
-
-    const nextDate = day.date
-
-    setTimeFilterMode('custom')
-    setDraftTimeFilterRange((current) => {
-      if (!current.from || current.to) {
-        return { from: nextDate, to: null }
-      }
-
-      if (nextDate < current.from) {
-        return { from: nextDate, to: current.from }
-      }
-
-      return { from: current.from, to: nextDate }
-    })
-  }
-
-  function applyCustomDateRange() {
-    if (!draftTimeFilterRange.from) {
-      return
-    }
-
-    setTimeFilterMode('custom')
-    setTimeFilterRange({
-      from: draftTimeFilterRange.from,
-      to: draftTimeFilterRange.to || draftTimeFilterRange.from,
-    })
-    setIsTimeFilterOpen(false)
-  }
-
-  function toggleAllTypeFilters() {
-    setSelectedTypeFilterIds((current) => (
-      current.length === typeFilterOptions.length ? [] : typeFilterOptions.map((option) => option.id)
-    ))
-  }
-
-  function toggleTypeFilter(optionId) {
-    setSelectedTypeFilterIds((current) => (
-      current.includes(optionId)
-        ? current.filter((id) => id !== optionId)
-        : [...current, optionId]
-    ))
-  }
-
-  function renderTypeFilterDropdown() {
-    return (
-      <div className="type-filter-dropdown">
-        <button className="type-filter-option" type="button" onClick={toggleAllTypeFilters}>
-          <span>Выбрать все</span>
-          <span className={areAllTypeFiltersSelected ? 'type-check active' : 'type-check'}>
-            {areAllTypeFiltersSelected && <Check size={16} />}
-          </span>
-        </button>
-
-        {typeFilterOptions.map((option) => {
-          const isSelected = selectedTypeFilterIds.includes(option.id)
-
-          return (
-            <button
-              className={isSelected ? 'type-filter-option active' : 'type-filter-option'}
-              type="button"
-              key={option.id}
-              onClick={() => toggleTypeFilter(option.id)}
-            >
-              <span>{option.label}</span>
-              <span className={isSelected ? 'type-check active' : 'type-check'}>
-                {isSelected && <Check size={16} />}
-              </span>
-            </button>
-          )
-        })}
-      </div>
-    )
-  }
-
-  function renderDateFilterDropdown() {
-    return (
-      <div className="date-filter-dropdown">
-        <div className="date-quick-list">
-          {quickDateOptions.map((option) => (
-            <button
-              className={timeFilterMode === option.id ? 'date-quick-option active' : 'date-quick-option'}
-              type="button"
-              key={option.id}
-              onClick={() => selectQuickDateOption(option)}
-            >
-              <span>{option.label}</span>
-              {timeFilterMode === option.id && <Check size={21} />}
-            </button>
-          ))}
-        </div>
-
-        <div className="date-calendar-panel">
-          <div className="calendar-title">{timeFilterMode === 'custom' ? formatDateRange(draftTimeFilterRange) : timeFilterLabel}</div>
-          <div className="calendar-nav">
-            <button className="calendar-nav-button" type="button" onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))} aria-label="Previous month">
-              <ChevronLeft size={18} />
-            </button>
-            <strong>{calendarMonthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()} г.</strong>
-            <button className="calendar-nav-button" type="button" onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))} aria-label="Next month">
-              <ChevronRight size={18} />
-            </button>
-          </div>
-
-          <div className="calendar-grid calendar-weekdays">
-            {calendarWeekdays.map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-
-          <div className="calendar-grid calendar-days">
-            {calendarDays.map((day) => {
-              const rangeStart = draftTimeFilterRange.from
-              const rangeEnd = draftTimeFilterRange.to || draftTimeFilterRange.from
-              const isSelected = isSameDate(day.date, rangeStart) || isSameDate(day.date, rangeEnd)
-              const isInRange = isBetweenDates(day.date, rangeStart, rangeEnd)
-              const dayClassName = [
-                'calendar-day',
-                !day.isCurrentMonth ? 'outside' : '',
-                day.isDisabled ? 'disabled' : '',
-                isSelected ? 'selected' : '',
-                isInRange ? 'in-range' : '',
-                isSameDate(day.date, reportCalendarToday) ? 'today' : '',
-              ].filter(Boolean).join(' ')
-
-              return (
-                <button
-                  className={dayClassName}
-                  type="button"
-                  key={day.key}
-                  onClick={() => selectCalendarDate(day)}
-                  disabled={day.isDisabled}
-                >
-                  {day.date.getDate()}
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="calendar-actions">
-            <button className="calendar-ok-button" type="button" onClick={applyCustomDateRange} disabled={!draftTimeFilterRange.from}>
-              OK
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-
   function renderTopbar() {
     return (
       <header className="topbar">
@@ -660,6 +444,38 @@ function App() {
   }
 
   function renderMeetingView() {
+    const meetingToolbar = (
+      <div className="meeting-toolbar">
+        <div className="room-summary">
+          <span className="live-pill">
+            <Radio size={16} />
+            {isConnected ? 'LIVE' : 'READY'}
+          </span>
+          <div>
+            <h2>{meetingMeta.room}</h2>
+            <p>{isConnected ? 'LiveKit conference запущена' : 'Ожидает подключения'}</p>
+          </div>
+        </div>
+
+        <div className="meeting-actions">
+          <button className="icon-button" type="button" onClick={copyRoom} aria-label="Copy room name">
+            <Copy size={18} />
+          </button>
+          <button className="icon-button" type="button" aria-label="Room link">
+            <Link size={18} />
+          </button>
+          <button className="icon-button" type="button" aria-label="Meeting settings">
+            <Settings size={18} />
+          </button>
+          {isConnected && (
+            <button className="danger-action" type="button" onClick={leaveMeeting}>
+              Завершить
+            </button>
+          )}
+        </div>
+      </div>
+    )
+
     return (
       <>
         <section className="meeting-hero" aria-labelledby="meeting-title">
@@ -751,129 +567,92 @@ function App() {
               </form>
             </section>
 
-            <section className="panel compact-panel">
-              <div className="panel-heading">
-                <span className="panel-icon">
-                  <ShieldCheck size={21} />
-                </span>
-                <div>
-                  <h2>Перед входом</h2>
-                  <p>Выберите, что включить сразу в комнате</p>
+            {!isConnected && (
+              <section className="panel compact-panel">
+                <div className="panel-heading">
+                  <span className="panel-icon">
+                    <ShieldCheck size={21} />
+                  </span>
+                  <div>
+                    <h2>Перед входом</h2>
+                    <p>Выберите, что включить сразу в комнате</p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="device-toggles">
-                <button
-                  className={devices.mic ? 'device-toggle active' : 'device-toggle'}
-                  type="button"
-                  onClick={() => toggleDevice('mic')}
-                  aria-pressed={devices.mic}
-                >
-                  {devices.mic ? <Mic size={19} /> : <MicOff size={19} />}
-                  <span>Микрофон</span>
-                  <strong>{devices.mic ? 'включен' : 'выключен'}</strong>
-                </button>
-                <button
-                  className={devices.camera ? 'device-toggle active' : 'device-toggle'}
-                  type="button"
-                  onClick={() => toggleDevice('camera')}
-                  aria-pressed={devices.camera}
-                >
-                  {devices.camera ? <Video size={19} /> : <CameraOff size={19} />}
-                  <span>Камера</span>
-                  <strong>{devices.camera ? 'включена' : 'выключена'}</strong>
-                </button>
-              </div>
-            </section>
-          </aside>
-
-          <section className="meeting-panel">
-            <div className="meeting-toolbar">
-              <div className="room-summary">
-                <span className="live-pill">
-                  <Radio size={16} />
-                  {isConnected ? 'LIVE' : 'READY'}
-                </span>
-                <div>
-                  <h2>{meetingMeta.room}</h2>
-                  <p>{isConnected ? 'LiveKit conference запущена' : 'Ожидает подключения'}</p>
-                </div>
-              </div>
-
-              <div className="meeting-actions">
-                <button className="icon-button" type="button" onClick={copyRoom} aria-label="Copy room name">
-                  <Copy size={18} />
-                </button>
-                <button className="icon-button" type="button" aria-label="Room link">
-                  <Link size={18} />
-                </button>
-                <button className="icon-button" type="button" aria-label="Meeting settings">
-                  <Settings size={18} />
-                </button>
-                {isConnected && (
-                  <button className="danger-action" type="button" onClick={leaveMeeting}>
-                    Завершить
+                <div className="device-toggles">
+                  <button
+                    className={devices.mic ? 'device-toggle active' : 'device-toggle'}
+                    type="button"
+                    onClick={() => toggleDevice('mic')}
+                    aria-pressed={devices.mic}
+                  >
+                    {devices.mic ? <Mic size={19} /> : <MicOff size={19} />}
+                    <span>Микрофон</span>
+                    <strong>{devices.mic ? 'включен' : 'выключен'}</strong>
                   </button>
-                )}
-              </div>
-            </div>
-
-            <div className={isConnected ? 'livekit-stage connected' : 'livekit-stage'}>
-              {isConnected ? (
-                <LiveKitRoom
-                  serverUrl={meeting.serverUrl}
-                  token={meeting.token}
-                  connect
-                  audio={meeting.audio}
-                  video={meeting.video}
-                  onDisconnected={leaveMeeting}
-                  data-lk-theme="default"
-                >
-                  <VideoConference />
-                </LiveKitRoom>
-              ) : (
-                <div className="empty-meeting">
-                  <div className="empty-orbit">
-                    <Bot size={34} />
-                  </div>
-                  <h3>{entryMode === 'create' ? 'Готово к созданию комнаты' : 'Готово к подключению'}</h3>
-                  <p>
-                    {entryMode === 'create'
-                      ? 'Нажмите создать комнату, и приложение само получит LiveKit token через backend.'
-                      : 'Введите название комнаты и войдите. URL и token вводить вручную больше не нужно.'}
-                  </p>
+                  <button
+                    className={devices.camera ? 'device-toggle active' : 'device-toggle'}
+                    type="button"
+                    onClick={() => toggleDevice('camera')}
+                    aria-pressed={devices.camera}
+                  >
+                    {devices.camera ? <Video size={19} /> : <CameraOff size={19} />}
+                    <span>Камера</span>
+                    <strong>{devices.camera ? 'включена' : 'выключена'}</strong>
+                  </button>
                 </div>
-              )}
-            </div>
-          </section>
-
-          <aside className="side-column">
-            <section className="panel participants-panel">
-              <div className="panel-heading">
-                <span className="panel-icon">
-                  <Contact size={21} />
-                </span>
-                <div>
-                  <h2>Участники</h2>
-                  <p>Команда встречи</p>
-                </div>
-              </div>
-
-              <div className="member-list">
-                {['Мади Орысбек', 'Айдана Сейт', 'Team AI'].map((name, index) => (
-                  <div className="member" key={name}>
-                    <span className={index === 2 ? 'member-avatar ai' : 'member-avatar'}>
-                      {index === 2 ? <Bot size={17} /> : name.slice(0, 1)}
-                    </span>
-                    <div>
-                      <strong>{name}</strong>
-                      <small>{index === 0 ? 'Host' : index === 1 ? 'Invited' : 'Assistant'}</small>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+              </section>
+            )}
           </aside>
+
+          {isConnected ? (
+            <LiveKitRoom
+              serverUrl={meeting.serverUrl}
+              token={meeting.token}
+              connect
+              audio={meeting.audio}
+              video={meeting.video}
+              onDisconnected={leaveMeeting}
+              data-lk-theme="default"
+              className="livekit-context"
+            >
+              <section className="meeting-panel">
+                {meetingToolbar}
+
+                <div className="livekit-stage connected">
+                  <VideoConference />
+                </div>
+              </section>
+
+              <aside className="side-column">
+                <ParticipantsPanel />
+              </aside>
+            </LiveKitRoom>
+          ) : (
+            <>
+              <section className="meeting-panel">
+                {meetingToolbar}
+
+                <div className="livekit-stage">
+                  <div className="empty-meeting">
+                    <div className="empty-orbit">
+                      <Bot size={34} />
+                    </div>
+                    <h3>{entryMode === 'create' ? 'Готово к созданию комнаты' : 'Готово к подключению'}</h3>
+                    <p>
+                      {entryMode === 'create'
+                        ? 'Нажмите создать комнату, и приложение само получит LiveKit token через backend.'
+                        : 'Введите название комнаты и войдите. URL и token вводить вручную больше не нужно.'}
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <aside className="side-column">
+                <ParticipantsList participants={[]} />
+              </aside>
+            </>
+          )}
         </section>
       </>
     )
@@ -909,6 +688,10 @@ function App() {
             <RefreshCw size={16} />
             Последнее обновление в 15:37
           </div>
+          <button className="primary-action upload-action" type="button">
+            <Download size={18} />
+            Загрузить
+          </button>
         </div>
 
         <div className="reports-filters">
@@ -916,43 +699,13 @@ function App() {
             <Search size={18} />
             <span>Фильтр по названию отчёта</span>
           </div>
-          <button className="filter-button" type="button">
-            <FileText size={17} />
-            Все отчёты
-            <ChevronDown size={16} />
-          </button>
-          <div className="time-filter-wrap">
-            <button
-              className={isTimeFilterOpen ? 'filter-button time-filter-button active' : 'filter-button time-filter-button'}
-              type="button"
-              onClick={() => {
-                setIsTimeFilterOpen((current) => !current)
-                setIsTypeFilterOpen(false)
-              }}
-              aria-expanded={isTimeFilterOpen}
-            >
-              <CalendarDays size={17} />
-              {timeFilterLabel}
+          {['Все отчёты', 'В любое время', 'Тип', 'Источник', 'Папка'].map((label, index) => (
+            <button className="filter-button" type="button" key={label}>
+              {index === 0 ? <FileText size={17} /> : index === 1 ? <CalendarDays size={17} /> : <Filter size={17} />}
+              {label}
               <ChevronDown size={16} />
             </button>
-            {isTimeFilterOpen && renderDateFilterDropdown()}
-          </div>
-          <div className="type-filter-wrap">
-            <button
-              className={isTypeFilterOpen ? 'filter-button type-filter-button active' : 'filter-button type-filter-button'}
-              type="button"
-              onClick={() => {
-                setIsTypeFilterOpen((current) => !current)
-                setIsTimeFilterOpen(false)
-              }}
-              aria-expanded={isTypeFilterOpen}
-            >
-              <Filter size={17} />
-              Тип
-              <ChevronDown size={16} />
-            </button>
-            {isTypeFilterOpen && renderTypeFilterDropdown()}
-          </div>
+          ))}
         </div>
 
         <div className="reports-table">

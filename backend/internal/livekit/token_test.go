@@ -13,7 +13,7 @@ import (
 func TestGenerateToken(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 
-	token, expiresAt, err := GenerateToken("api-key", "secret", "Madi", "alem-meeting", time.Hour, now)
+	token, expiresAt, err := GenerateToken("api-key", "secret", "Madi", "alem-meeting", `{"role":"host"}`, time.Hour, now)
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
@@ -56,10 +56,14 @@ func TestGenerateToken(t *testing.T) {
 	if video["room"] != "alem-meeting" || video["roomJoin"] != true {
 		t.Fatalf("unexpected video grant: %#v", video)
 	}
+
+	if payload["metadata"] != `{"role":"host"}` {
+		t.Fatalf("unexpected metadata claim: %#v", payload["metadata"])
+	}
 }
 
 func TestGenerateTokenRequiresInputs(t *testing.T) {
-	_, _, err := GenerateToken("", "secret", "user", "room", time.Hour, time.Now())
+	_, _, err := GenerateToken("", "secret", "user", "room", "", time.Hour, time.Now())
 	if err == nil {
 		t.Fatal("expected missing api key error")
 	}
