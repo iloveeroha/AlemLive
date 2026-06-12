@@ -61,6 +61,26 @@ func TestReportsSearchAndDateFilter(t *testing.T) {
 	}
 }
 
+func TestReportsTypeFilter(t *testing.T) {
+	handler := NewServer(config.Config{TokenTTL: time.Hour})
+	request := httptest.NewRequest(http.MethodGet, "/api/reports?types=readout", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload reportsResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Total != 0 {
+		t.Fatalf("expected no readout demo reports, got %#v", payload.Reports)
+	}
+}
+
 func TestReportFilters(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
 	request := httptest.NewRequest(http.MethodGet, "/api/reports/filters", nil)

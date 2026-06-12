@@ -27,9 +27,11 @@ import {
   ListChecks,
   Loader2,
   Lock,
+  Maximize2,
   MessageSquareText,
   Mic,
   MicOff,
+  Minimize2,
   MoreHorizontal,
   PanelRight,
   Play,
@@ -48,8 +50,9 @@ import {
   Volume2,
   Zap,
 } from 'lucide-react'
-import { Chat, LiveKitRoom, VideoConference, useLocalParticipant, useParticipants } from '@livekit/components-react'
+import { LiveKitRoom, VideoConference, useChat, useLocalParticipant, useParticipants } from '@livekit/components-react'
 import '@livekit/components-styles'
+import { ensureCryptoRandomUUID } from './crypto-polyfill.js'
 import './App.css'
 
 const navItems = [
@@ -399,6 +402,40 @@ function getInitialReportId() {
   return reportId || ''
 }
 
+function getInitialView(initialReportId) {
+  if (initialReportId) {
+    return 'reportDetail'
+  }
+
+  if (typeof window !== 'undefined' && window.location.hash === '#meeting') {
+    return 'meeting'
+  }
+
+  return 'reports'
+}
+
+function getInitialRoomName() {
+  if (typeof window === 'undefined') {
+    return import.meta.env.VITE_LIVEKIT_ROOM ?? 'alem-meeting'
+  }
+
+  const roomFromURL = new URLSearchParams(window.location.search).get('room')
+  return roomFromURL || import.meta.env.VITE_LIVEKIT_ROOM || 'alem-meeting'
+}
+
+function getMeetingShareURL(roomName) {
+  if (typeof window === 'undefined') {
+    return `/?room=${encodeURIComponent(roomName)}#meeting`
+  }
+
+  const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
+  const needsHTTPS = window.location.protocol !== 'https:' && !isLocalhost
+  const protocol = needsHTTPS ? 'https:' : window.location.protocol
+  const port = needsHTTPS && window.location.port === '5173' ? '5174' : window.location.port
+  const host = port ? `${window.location.hostname}:${port}` : window.location.hostname
+  return `${protocol}//${host}/?room=${encodeURIComponent(roomName)}#meeting`
+}
+
 function getParticipantRole(participant) {
   try {
     const metadata = JSON.parse(participant.metadata || '{}')
@@ -556,7 +593,28 @@ function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, o
   )
 }
 
-function ConferenceChatPanel() {
+function ConferenceChatPanel({ onClose }) {
+  const { chatMessages, send, isSending } = useChat()
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+
+  async function submitMessage(event) {
+    event.preventDefault()
+    const text = message.trim()
+    if (!text || isSending) {
+      return
+    }
+
+    try {
+      setError('')
+      ensureCryptoRandomUUID()
+      await send(text)
+      setMessage('')
+    } catch (sendError) {
+      setError(sendError?.message || 'Не удалось отправить сообщение')
+    }
+  }
+
   return (
     <section className="panel conference-chat-panel">
       <div className="panel-heading">
@@ -567,9 +625,49 @@ function ConferenceChatPanel() {
           <h2>Чат встречи</h2>
           <p>Сообщения LiveKit</p>
         </div>
+        {onClose && (
+          <button className="icon-button conference-chat-close" type="button" onClick={onClose} aria-label="Скрыть чат">
+            <ChevronRight size={18} />
+          </button>
+        )}
       </div>
 
-      <Chat className="conference-chat" />
+      <div className="conference-chat" role="log" aria-label="Сообщения встречи">
+        <div className="conference-chat-messages">
+          {chatMessages.length === 0 ? (
+            <p className="conference-chat-empty">Пока сообщений нет</p>
+          ) : (
+            chatMessages.map((item) => {
+              const author = item.from?.name || item.from?.identity || 'Участник'
+              const sentAt = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+
+              return (
+                <article className="conference-message" key={`${item.timestamp}-${author}-${item.message}`}>
+                  <div>
+                    <strong>{author}</strong>
+                    {sentAt && <span>{sentAt}</span>}
+                  </div>
+                  <p>{item.message}</p>
+                </article>
+              )
+            })
+          )}
+        </div>
+
+        <form className="conference-chat-form" onSubmit={submitMessage}>
+          <input
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            placeholder="Написать в чат встречи..."
+            aria-label="Сообщение в чат встречи"
+          />
+          <button className="ask-send" type="submit" disabled={isSending || !message.trim()} aria-label="Отправить сообщение">
+            {isSending ? <Loader2 className="spin-icon" size={18} /> : <Send size={18} />}
+          </button>
+        </form>
+
+        {error && <p className="conference-chat-error">{error}</p>}
+      </div>
     </section>
   )
 }
@@ -577,11 +675,11 @@ function ConferenceChatPanel() {
 function App() {
   const initialReportId = getInitialReportId()
   const manualDisconnectRef = useRef(false)
-  const [activeView, setActiveView] = useState(initialReportId ? 'reportDetail' : 'reports')
+  const [activeView, setActiveView] = useState(() => getInitialView(initialReportId))
   const [selectedReportId, setSelectedReportId] = useState(initialReportId || reportRows[0].id)
   const [activeReportTab, setActiveReportTab] = useState('notes')
   const [form, setForm] = useState({
-    roomName: import.meta.env.VITE_LIVEKIT_ROOM ?? 'alem-meeting',
+    roomName: getInitialRoomName(),
     userName: import.meta.env.VITE_LIVEKIT_NAME ?? 'Мади Орысбек',
   })
   const [meeting, setMeeting] = useState(null)
@@ -629,6 +727,12 @@ function App() {
   const [copilotMessages, setCopilotMessages] = useState([])
   const [isCopilotSending, setIsCopilotSending] = useState(false)
   const [isDetailActionsOpen, setIsDetailActionsOpen] = useState(false)
+  const [isMeetingMaximized, setIsMeetingMaximized] = useState(false)
+  const [isConferenceChatOpen, setIsConferenceChatOpen] = useState(true)
+  const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false)
+  const [roomSettings, setRoomSettings] = useState(null)
+  const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false)
+  const copilotInputRef = useRef(null)
 
   const canStart = form.userName.trim() && form.roomName.trim()
   const isConnected = Boolean(meeting)
@@ -774,6 +878,17 @@ function App() {
     }
   }, [selectedReportId])
 
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return undefined
+    }
+
+    document.body.classList.toggle('meeting-maximized-active', isMeetingMaximized)
+    return () => {
+      document.body.classList.remove('meeting-maximized-active')
+    }
+  }, [isMeetingMaximized])
+
   function updateField(event) {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
@@ -819,6 +934,11 @@ function App() {
     updateDevicePreference(name, enabled, { notifyBackend: false })
   }
 
+  function handleLiveKitDevicePreferenceChange(name, enabled) {
+    setMeetingNotice('')
+    updateDevicePreference(name, enabled)
+  }
+
   function handleLiveKitDeviceError(_name, error) {
     setMeetingNotice(getMediaErrorMessage(error))
     updateDevicePreference(_name, false, { notifyBackend: false })
@@ -830,6 +950,7 @@ function App() {
 
   function handleLiveKitDisconnected() {
     setMeeting(null)
+    setIsMeetingMaximized(false)
     if (manualDisconnectRef.current) {
       manualDisconnectRef.current = false
       setMeetingNotice('')
@@ -910,6 +1031,8 @@ function App() {
         audio: devices.mic,
         video: devices.camera,
       })
+      setIsMeetingMaximized(true)
+      setIsConferenceChatOpen(true)
       recordMeetingEvent(mode === 'create' ? 'created' : 'joined')
     } catch (error) {
       setJoinError(error.message)
@@ -928,6 +1051,7 @@ function App() {
     await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, { method: 'POST' }).catch(() => null)
     await recordMeetingEvent('left')
     setMeeting(null)
+    setIsMeetingMaximized(false)
     setMeetingNotice('')
   }
 
@@ -936,9 +1060,26 @@ function App() {
       return
     }
 
-    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/link`).catch(() => null)
-    await navigator.clipboard.writeText(payload?.joinUrl || payload?.url || meetingMeta.room)
+    await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
     setWorkspaceNotice('Ссылка комнаты скопирована')
+  }
+
+  async function copyRoomName() {
+    if (!navigator.clipboard) {
+      return
+    }
+
+    await navigator.clipboard.writeText(meetingMeta.room)
+    setWorkspaceNotice('Название комнаты скопировано')
+  }
+
+  async function copyRoomLink() {
+    if (!navigator.clipboard) {
+      return
+    }
+
+    await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
+    setWorkspaceNotice('Ссылка на комнату скопирована')
   }
 
   async function showRoomSettings() {
@@ -946,6 +1087,17 @@ function App() {
     if (payload) {
       setWorkspaceNotice(`Запись ${payload.recording ? 'включена' : 'выключена'}, автоотчёт ${payload.autoReport ? 'включен' : 'выключен'}`)
     }
+  }
+
+  async function openRoomSettings() {
+    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/settings`).catch(() => null)
+    if (!payload) {
+      return
+    }
+
+    setRoomSettings(payload)
+    setIsRoomSettingsOpen((current) => !current)
+    setWorkspaceNotice(`Настройки комнаты: запись ${payload.recording ? 'включена' : 'выключена'}, автоотчёт ${payload.autoReport ? 'включён' : 'выключен'}`)
   }
 
   async function openAskAI() {
@@ -996,15 +1148,21 @@ function App() {
 
     const payload = await apiRequest(`/api/reports/${selectedReport.id}/recording`).catch(() => null)
     if (payload) {
+      if (payload.url) {
+        window.open(payload.url, '_blank', 'noopener,noreferrer')
+      }
       setReportActionMessage(`Запись: ${payload.duration}, маркеры ${payload.markers?.join(', ') || 'нет'}`)
     }
   }
 
   function focusCopilotPanel() {
+    setIsCopilotCollapsed(false)
+    window.setTimeout(() => copilotInputRef.current?.focus(), 0)
     setReportActionMessage('Copilot открыт и готов отвечать по отчёту')
   }
 
   function collapseCopilotPanel() {
+    setIsCopilotCollapsed(true)
     setReportActionMessage('Copilot можно свернуть на следующем шаге UI')
   }
 
@@ -1147,10 +1305,15 @@ function App() {
       return
     }
 
+    const searchQuery = kind === 'search' ? window.prompt('Что найти в отчёте?', 'backend') : ''
+    if (kind === 'search' && searchQuery === null) {
+      return
+    }
+
     const endpointByKind = {
       prompts: 'prompts',
       history: 'history',
-      search: 'search?q=backend',
+      search: `search?q=${encodeURIComponent(searchQuery || '')}`,
     }
     const endpoint = endpointByKind[kind]
     if (!endpoint) {
@@ -1414,12 +1577,12 @@ function App() {
   function renderTopbar() {
     return (
       <header className="topbar">
-        <a className="brand" href="/">
+        <button className="brand" type="button" onClick={() => switchView('reports')}>
           <span className="brand-mark">
             <Sparkles size={18} />
           </span>
           <span>Alem Workspace</span>
-        </a>
+        </button>
 
         <nav className="workspace-nav" aria-label="Workspace navigation">
           {navItems.map(({ id, label, icon: Icon }) => (
@@ -1450,6 +1613,15 @@ function App() {
   }
 
   function renderMeetingView() {
+    const meetingGridClassName = [
+      'meeting-grid',
+      isConnected ? 'meeting-grid-connected' : '',
+      isMeetingMaximized ? 'meeting-grid-maximized' : '',
+      isConnected && !isConferenceChatOpen ? 'meeting-chat-collapsed' : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+
     const meetingToolbar = (
       <div className="meeting-toolbar">
         <div className="room-summary">
@@ -1464,19 +1636,41 @@ function App() {
         </div>
 
         <div className="meeting-actions">
-          <button className="icon-button" type="button" onClick={copyRoom} aria-label="Copy room name">
+          <button className="icon-button" type="button" onClick={copyRoomName} aria-label="Copy room name">
             <Copy size={18} />
           </button>
-          <button className="icon-button" type="button" onClick={copyRoom} aria-label="Room link">
+          <button className="icon-button" type="button" onClick={copyRoomLink} aria-label="Room link">
             <Link size={18} />
           </button>
-          <button className="icon-button" type="button" onClick={showRoomSettings} aria-label="Meeting settings">
+          <button className={isRoomSettingsOpen ? 'icon-button active' : 'icon-button'} type="button" onClick={openRoomSettings} aria-label="Meeting settings" aria-pressed={isRoomSettingsOpen}>
             <Settings size={18} />
           </button>
           {isConnected && (
+            <button
+              className={isMeetingMaximized ? 'icon-button active' : 'icon-button'}
+              type="button"
+              onClick={() => setIsMeetingMaximized((current) => !current)}
+              aria-label={isMeetingMaximized ? 'Свернуть видеоконференцию' : 'Развернуть видеоконференцию'}
+              aria-pressed={isMeetingMaximized}
+            >
+              {isMeetingMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+            </button>
+          )}
+          {isConnected && (
+            <button
+              className={isConferenceChatOpen ? 'icon-button active' : 'icon-button'}
+              type="button"
+              onClick={() => setIsConferenceChatOpen((current) => !current)}
+              aria-label={isConferenceChatOpen ? 'Скрыть чат встречи' : 'Показать чат встречи'}
+              aria-pressed={isConferenceChatOpen}
+            >
+              <MessageSquareText size={18} />
+            </button>
+          )}
+          {isConnected && (
             <LiveKitDeviceButtons
               onDeviceStateChange={handleLiveKitDeviceStateChange}
-              onDevicePreferenceChange={updateDevicePreference}
+              onDevicePreferenceChange={handleLiveKitDevicePreferenceChange}
               onDeviceError={handleLiveKitDeviceError}
             />
           )}
@@ -1518,7 +1712,7 @@ function App() {
           </div>
         </section>
 
-        <section className="meeting-grid" aria-label="Meeting workspace">
+        <section className={meetingGridClassName} aria-label="Meeting workspace">
           <aside className="control-column">
             <section className="panel join-panel">
               <div className="panel-heading">
@@ -1638,6 +1832,14 @@ function App() {
             >
               <section className="meeting-panel">
                 {meetingToolbar}
+                {isRoomSettingsOpen && roomSettings && (
+                  <div className="room-settings-panel">
+                    <span>Запись: {roomSettings.recording ? 'включена' : 'выключена'}</span>
+                    <span>Транскрипция: {roomSettings.transcription ? 'включена' : 'выключена'}</span>
+                    <span>Гости: {roomSettings.allowGuests ? 'разрешены' : 'запрещены'}</span>
+                    <span>Автоотчёт: {roomSettings.autoReport ? 'включён' : 'выключен'}</span>
+                  </div>
+                )}
 
                 <div className="livekit-stage connected">
                   <VideoConference />
@@ -1646,13 +1848,21 @@ function App() {
 
               <aside className="side-column">
                 <ParticipantsPanel />
-                <ConferenceChatPanel />
+                <ConferenceChatPanel onClose={() => setIsConferenceChatOpen(false)} />
               </aside>
             </LiveKitRoom>
           ) : (
             <>
               <section className="meeting-panel">
                 {meetingToolbar}
+                {isRoomSettingsOpen && roomSettings && (
+                  <div className="room-settings-panel">
+                    <span>Запись: {roomSettings.recording ? 'включена' : 'выключена'}</span>
+                    <span>Транскрипция: {roomSettings.transcription ? 'включена' : 'выключена'}</span>
+                    <span>Гости: {roomSettings.allowGuests ? 'разрешены' : 'запрещены'}</span>
+                    <span>Автоотчёт: {roomSettings.autoReport ? 'включён' : 'выключен'}</span>
+                  </div>
+                )}
 
                 <div className="livekit-stage">
                   <div className="empty-meeting">
@@ -1784,9 +1994,9 @@ function App() {
 
           <div className="reports-week">{reportsLoading ? 'ЗАГРУЗКА ОТЧЁТОВ...' : visibleReports[0]?.week || 'ОТЧЁТЫ'}</div>
 
-          {visibleReports.map((report, index) => (
+          {visibleReports.map((report) => (
             <article
-              className={index === 0 ? 'report-row selected' : 'report-row'}
+              className={selectedReportId === report.id ? 'report-row selected' : 'report-row'}
               key={report.id}
               role="button"
               tabIndex={0}
@@ -2167,7 +2377,7 @@ function App() {
             <div className="detail-report-content">{renderReportPane()}</div>
           </div>
 
-          <aside className="report-copilot">
+          <aside className={isCopilotCollapsed ? 'report-copilot collapsed' : 'report-copilot'}>
             <div className="copilot-tools">
               <button className="icon-button" type="button" onClick={() => runReportLookup('prompts')} aria-label="Edit prompts">
                 <Edit3 size={18} />
@@ -2184,6 +2394,8 @@ function App() {
               </button>
             </div>
 
+            {!isCopilotCollapsed && (
+              <>
             <div className="copilot-question-list">
               {(selectedReportDetail?.aiQuestions || aiQuestions).map((question) => (
                 <button className="copilot-question" type="button" key={question} onClick={() => askReportCopilot(question)}>
@@ -2211,6 +2423,7 @@ function App() {
               }}
             >
               <input
+                ref={copilotInputRef}
                 value={copilotInput}
                 onChange={(event) => setCopilotInput(event.target.value)}
                 placeholder="Спросите Alem о чём угодно..."
@@ -2219,6 +2432,8 @@ function App() {
                 <Send size={18} />
               </button>
             </form>
+              </>
+            )}
           </aside>
         </div>
       </section>
@@ -2226,7 +2441,15 @@ function App() {
   }
 
   return (
-    <main className={activeView === 'reportDetail' ? 'workspace-shell report-shell' : 'workspace-shell'}>
+    <main
+      className={[
+        'workspace-shell',
+        activeView === 'reportDetail' ? 'report-shell' : '',
+        activeView === 'meeting' && isConnected ? 'meeting-fullscreen-shell' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       {activeView !== 'reportDetail' && renderTopbar()}
       {activeView === 'meeting' && renderMeetingView()}
       {activeView === 'reports' && renderReportsList()}

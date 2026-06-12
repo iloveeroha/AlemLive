@@ -18,6 +18,7 @@ type reportRow struct {
 	ID               string    `json:"id"`
 	Title            string    `json:"title"`
 	Source           string    `json:"source"`
+	Type             string    `json:"type"`
 	Date             string    `json:"date"`
 	Time             string    `json:"time"`
 	Participants     int       `json:"participants"`
@@ -178,6 +179,7 @@ func (s *Server) reportUpload(w http.ResponseWriter, r *http.Request) {
 		ID:               "uploaded-" + now.Format("20060102150405"),
 		Title:            title,
 		Source:           source,
+		Type:             reportTypeFromSource(source),
 		Date:             now.Format("02.01.2006"),
 		Time:             now.Format("15:04"),
 		Participants:     parsePositiveInt(req.Participants, 0),
@@ -576,6 +578,7 @@ func filterReports(rows []reportRow, r *http.Request, now time.Time) ([]reportRo
 	folder := strings.ToLower(strings.TrimSpace(query.Get("folder")))
 	owner := strings.ToLower(strings.TrimSpace(query.Get("owner")))
 	mode := strings.ToLower(strings.TrimSpace(firstNonEmpty(query.Get("mode"), query.Get("status"))))
+	types := parseReportTypes(query.Get("types"))
 	from, to := reportDateRange(query.Get("datePreset"), query.Get("preset"), query.Get("timeFilter"), query.Get("timeFilterMode"), query.Get("from"), query.Get("to"), query.Get("dateFrom"), query.Get("dateTo"), now)
 
 	filtered := make([]reportRow, 0, len(rows))
@@ -594,6 +597,11 @@ func filterReports(rows []reportRow, r *http.Request, now time.Time) ([]reportRo
 		}
 		if mode == "incomplete" && row.ProcessingState == "ready" && row.Score >= 90 {
 			continue
+		}
+		if len(types) > 0 {
+			if _, ok := types[reportTypeValue(row)]; !ok {
+				continue
+			}
 		}
 		if !from.IsZero() && row.OccurredAt.Before(from) {
 			continue
@@ -624,6 +632,7 @@ func reportContains(row reportRow, search string) bool {
 	values := []string{
 		row.Title,
 		row.Source,
+		row.Type,
 		row.Date,
 		row.Time,
 		strconv.Itoa(row.Participants),
@@ -639,6 +648,43 @@ func reportContains(row reportRow, search string) bool {
 		}
 	}
 	return false
+}
+
+func parseReportTypes(value string) map[string]struct{} {
+	types := map[string]struct{}{}
+	for _, item := range strings.Split(value, ",") {
+		normalized := normalizeReportType(item)
+		if normalized == "" {
+			continue
+		}
+		types[normalized] = struct{}{}
+	}
+	return types
+}
+
+func reportTypeValue(row reportRow) string {
+	return firstNonEmpty(normalizeReportType(row.Type), reportTypeFromSource(row.Source))
+}
+
+func reportTypeFromSource(source string) string {
+	return normalizeReportType(source)
+}
+
+func normalizeReportType(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "all":
+		return ""
+	case "meeting", "meetings", "google meet", "zoom", "microsoft teams", "alemlive":
+		return "meeting"
+	case "readout":
+		return "readout"
+	case "daily":
+		return "daily"
+	case "upload":
+		return "upload"
+	default:
+		return strings.ToLower(strings.TrimSpace(value))
+	}
 }
 
 func reportDateRange(datePreset, preset, timeFilter, timeFilterMode, fromValue, toValue, dateFrom, dateTo string, now time.Time) (time.Time, time.Time) {
@@ -762,6 +808,7 @@ func newDemoReport(id, title, source, occurredAt, meetingTime string, participan
 		ID:               id,
 		Title:            title,
 		Source:           source,
+		Type:             reportTypeFromSource(source),
 		Date:             parsed.Format("02.01.2006"),
 		Time:             meetingTime,
 		Participants:     participants,

@@ -22,6 +22,7 @@ services:
       context: ./frontend
     ports:
       - "5173:80"
+      - "5174:443"
     depends_on:
       backend:
         condition: service_healthy
