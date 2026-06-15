@@ -45,6 +45,19 @@ func (s *Server) profile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user, ok := userFromContext(r.Context()); ok {
+		initial := strings.ToUpper(firstNonEmpty(firstRune(user.Name), firstRune(user.Username), "U"))
+		writeJSON(w, http.StatusOK, map[string]string{
+			"id":       user.ID,
+			"name":     user.Name,
+			"email":    user.Email,
+			"username": user.Username,
+			"initial":  initial,
+			"role":     "user",
+		})
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{
 		"id":      "local-user",
 		"name":    "Мади Орысбек",
@@ -85,13 +98,31 @@ func (s *Server) meetingEvent(w http.ResponseWriter, r *http.Request) {
 	roomName := strings.TrimSpace(firstNonEmpty(req.RoomName, "alem-meeting"))
 	userName := strings.TrimSpace(firstNonEmpty(req.UserName, "Guest"))
 	event := strings.TrimSpace(firstNonEmpty(req.Event, "unknown"))
-	writeJSON(w, http.StatusOK, map[string]string{
+
+	response := map[string]any{
 		"roomName": roomName,
 		"userName": userName,
 		"event":    event,
 		"status":   "recorded",
 		"at":       s.clock().UTC().Format(time.RFC3339),
-	})
+	}
+	switch strings.ToLower(event) {
+	case "created", "joined":
+		if state, err := s.startRoomRecording(r.Context(), roomName); err == nil {
+			response["recording"] = state
+			response["recordingStatus"] = "started"
+		} else {
+			response["recordingStatus"] = "not_started"
+		}
+	case "left", "ended":
+		if state, err := s.stopRoomRecording(r.Context(), roomName); err == nil {
+			response["recording"] = state
+			response["recordingStatus"] = "stopped"
+		} else {
+			response["recordingStatus"] = "not_stopped"
+		}
+	}
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) devicePreference(w http.ResponseWriter, r *http.Request) {
@@ -153,16 +184,29 @@ func (s *Server) roomAction(w http.ResponseWriter, r *http.Request) {
 		})
 	case "settings":
 		s.roomSettings(w, r, roomName)
+	case "recording":
+		subAction := ""
+		if len(parts) > 2 {
+			subAction = parts[2]
+		}
+		s.roomRecording(w, r, roomName, subAction)
 	case "leave":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w, http.MethodPost)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]string{
+		response := map[string]any{
 			"roomName": roomName,
 			"status":   "left",
 			"at":       s.clock().UTC().Format(time.RFC3339),
-		})
+		}
+		if state, err := s.stopRoomRecording(r.Context(), roomName); err == nil {
+			response["recording"] = state
+			response["recordingStatus"] = "stopped"
+		} else {
+			response["recordingStatus"] = "not_stopped"
+		}
+		writeJSON(w, http.StatusOK, response)
 	default:
 		writeError(w, http.StatusNotFound, "Room action not found")
 	}
@@ -172,14 +216,15 @@ func (s *Server) roomSettings(w http.ResponseWriter, r *http.Request, roomName s
 	switch r.Method {
 	case http.MethodGet:
 		writeJSON(w, http.StatusOK, map[string]any{
-			"roomName":        roomName,
-			"recording":       true,
-			"transcription":   true,
-			"waitingRoom":     false,
-			"allowGuests":     true,
-			"autoReport":      true,
-			"reportEndpoint":  "/api/meetings/analysis?roomName=" + roomName,
-			"livekitEndpoint": "/api/livekit/token",
+			"roomName":          roomName,
+			"recording":         s.egress != nil && s.egress.Configured(),
+			"transcription":     s.stt != nil && s.stt.Configured(),
+			"waitingRoom":       false,
+			"allowGuests":       true,
+			"autoReport":        true,
+			"reportEndpoint":    "/api/meetings/analysis?roomName=" + roomName,
+			"livekitEndpoint":   "/api/livekit/token",
+			"recordingEndpoint": "/api/rooms/" + roomName + "/recording",
 		})
 	case http.MethodPatch:
 		var settings map[string]any

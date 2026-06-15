@@ -27,6 +27,8 @@ $env:LIVEKIT_URL="wss://your-project.livekit.cloud"
 $env:LIVEKIT_API_KEY="your_key"
 $env:LIVEKIT_API_SECRET="your_secret"
 $env:LLM_API_KEY="your_llm_key"
+$env:LLM_MODEL="moonshotai/Kimi-K2.6"
+$env:STT_MODEL="whisper-1"
 go run ./cmd/server
 ```
 
@@ -40,10 +42,13 @@ The backend listens on `http://localhost:8080` by default. Vite proxies `/api` t
 - `ALLOWED_ORIGINS` is a comma-separated CORS allowlist.
 - `LLM_BASE_URL` defaults to `https://llm.nitec.kz`.
 - `LLM_API_KEY` enables AI chat and AI meeting analysis.
-- `LLM_MODEL` defaults to `openai/gpt-oss-120b`.
+- `LLM_MODEL` defaults to `moonshotai/Kimi-K2.6`.
+- `STT_BASE_URL` defaults to `LLM_BASE_URL` and must expose OpenAI-compatible `/v1/audio/transcriptions`.
+- `STT_API_KEY` defaults to `LLM_API_KEY`.
+- `STT_MODEL` defaults to `whisper-1`.
 - `LLM_TIMEOUT_SECONDS` defaults to `60`.
 
-Keep `LIVEKIT_API_SECRET` and `LLM_API_KEY` only on the backend. Never expose them through Vite environment variables or browser code.
+Keep `LIVEKIT_API_SECRET`, `LLM_API_KEY`, and `STT_API_KEY` only on the backend. Never expose them through Vite environment variables or browser code.
 
 ## Endpoints
 
@@ -51,6 +56,7 @@ Keep `LIVEKIT_API_SECRET` and `LLM_API_KEY` only on the backend. Never expose th
 - `GET /api/config` returns public frontend configuration.
 - `GET /api/ai/status` returns whether AI is configured plus the active public model metadata.
 - `POST /api/ai/chat` sends a report-aware chat prompt to the configured LLM provider.
+- `POST /api/meetings/transcribe` accepts audio/video upload or `transcriptText`, runs Whisper STT, then returns transcript plus meeting analysis.
 - `GET /api/meetings/analysis?roomName=...` returns AI-generated meeting analysis when AI is configured, otherwise falls back to a demo report.
 - `GET /api/ask-ai` returns `{"url": "https://alem-workspace.gov.kz/web/alem-rag"}` for the external Alem Workspace RAG assistant.
 - `POST /api/livekit/token` accepts:

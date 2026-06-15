@@ -35,9 +35,12 @@ type aiChatResponse struct {
 }
 
 type aiStatusResponse struct {
-	Configured bool   `json:"configured"`
-	BaseURL    string `json:"baseUrl,omitempty"`
-	Model      string `json:"model,omitempty"`
+	Configured    bool   `json:"configured"`
+	BaseURL       string `json:"baseUrl,omitempty"`
+	Model         string `json:"model,omitempty"`
+	STTConfigured bool   `json:"sttConfigured"`
+	STTBaseURL    string `json:"sttBaseUrl,omitempty"`
+	STTModel      string `json:"sttModel,omitempty"`
 }
 
 func (s *Server) aiStatus(w http.ResponseWriter, r *http.Request) {
@@ -51,6 +54,11 @@ func (s *Server) aiStatus(w http.ResponseWriter, r *http.Request) {
 		response.Configured = true
 		response.BaseURL = s.cfg.LLMBaseURL
 		response.Model = s.cfg.LLMModel
+	}
+	if s.stt != nil && s.stt.Configured() {
+		response.STTConfigured = true
+		response.STTBaseURL = s.cfg.STTBaseURL
+		response.STTModel = s.cfg.STTModel
 	}
 
 	writeJSON(w, http.StatusOK, response)

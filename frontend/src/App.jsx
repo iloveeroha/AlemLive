@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowLeft,
@@ -57,183 +57,183 @@ import './App.css'
 
 const navItems = [
   { id: 'meeting', label: 'AlemLive', icon: Grid2X2 },
-  { id: 'reports', label: 'Отчёты', icon: FileText },
+  { id: 'reports', label: 'РћС‚С‡С‘С‚С‹', icon: FileText },
 ]
 
 const reportTabs = [
-  { id: 'notes', label: 'Заметки', icon: FileText },
-  { id: 'transcript', label: 'Транскрипт', icon: MessageSquareText },
-  { id: 'deepDive', label: 'Глубокое погружение', icon: BarChart3 },
-  { id: 'highlights', label: 'Основные моменты', icon: Highlighter },
-  { id: 'chapters', label: 'Главы', icon: ListChecks },
+  { id: 'notes', label: 'Р—Р°РјРµС‚РєРё', icon: FileText },
+  { id: 'transcript', label: 'РўСЂР°РЅСЃРєСЂРёРїС‚', icon: MessageSquareText },
+  { id: 'deepDive', label: 'Р“Р»СѓР±РѕРєРѕРµ РїРѕРіСЂСѓР¶РµРЅРёРµ', icon: BarChart3 },
+  { id: 'highlights', label: 'РћСЃРЅРѕРІРЅС‹Рµ РјРѕРјРµРЅС‚С‹', icon: Highlighter },
+  { id: 'chapters', label: 'Р“Р»Р°РІС‹', icon: ListChecks },
 ]
 
 const reportDownloadOptions = [
-  { id: 'summary', label: 'Итог встречи (.txt)', extension: 'txt' },
-  { id: 'transcript', label: 'Стенограмма встречи (.txt)', extension: 'txt' },
-  { id: 'trailer', label: 'Трейлер встречи (.mp4)', extension: 'mp4', pending: true },
-  { id: 'highlights', label: 'Основные моменты встречи (.mp4)', extension: 'mp4', pending: true },
-  { id: 'video', label: 'Видео встречи (.mp4)', extension: 'mp4', pending: true },
+  { id: 'summary', label: 'РС‚РѕРі РІСЃС‚СЂРµС‡Рё (.txt)', extension: 'txt' },
+  { id: 'transcript', label: 'РЎС‚РµРЅРѕРіСЂР°РјРјР° РІСЃС‚СЂРµС‡Рё (.txt)', extension: 'txt' },
+  { id: 'trailer', label: 'РўСЂРµР№Р»РµСЂ РІСЃС‚СЂРµС‡Рё (.mp4)', extension: 'mp4', pending: true },
+  { id: 'highlights', label: 'РћСЃРЅРѕРІРЅС‹Рµ РјРѕРјРµРЅС‚С‹ РІСЃС‚СЂРµС‡Рё (.mp4)', extension: 'mp4', pending: true },
+  { id: 'video', label: 'Р’РёРґРµРѕ РІСЃС‚СЂРµС‡Рё (.mp4)', extension: 'mp4', pending: true },
 ]
 
 const reportRows = [
   {
     id: 'read-intro',
-    title: 'Ввод в Alem AI - Пример отчёта',
+    title: 'Р’РІРѕРґ РІ Alem AI - РџСЂРёРјРµСЂ РѕС‚С‡С‘С‚Р°',
     source: 'Google Meet',
-    date: 'пт, 2 янв. 2026 г.',
+    date: 'РїС‚, 2 СЏРЅРІ. 2026 Рі.',
     time: '02:00 - 03:45',
     participants: 4,
     score: 89,
-    folder: 'Образцы отчётов',
-    owner: 'Мади',
-    ownerInitial: 'М',
+    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
+    owner: 'РњР°РґРё',
+    ownerInitial: 'Рњ',
     thumbnailTone: 'teal',
-    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
+    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
   },
   {
     id: 'meeting-usage',
-    title: 'Использование отчёта собрания - Пример отчёта',
+    title: 'РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ РѕС‚С‡С‘С‚Р° СЃРѕР±СЂР°РЅРёСЏ - РџСЂРёРјРµСЂ РѕС‚С‡С‘С‚Р°',
     source: 'Google Meet',
-    date: 'пт, 2 янв. 2026 г.',
+    date: 'РїС‚, 2 СЏРЅРІ. 2026 Рі.',
     time: '01:00 - 01:04',
     participants: 4,
     score: 89,
-    folder: 'Образцы отчётов',
-    owner: 'Айдана',
-    ownerInitial: 'А',
+    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
+    owner: 'РђР№РґР°РЅР°',
+    ownerInitial: 'Рђ',
     thumbnailTone: 'blue',
-    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
+    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
   },
   {
     id: 'copilot-search',
-    title: 'Используйте Copilot для поиска - Пример отчёта',
+    title: 'РСЃРїРѕР»СЊР·СѓР№С‚Рµ Copilot РґР»СЏ РїРѕРёСЃРєР° - РџСЂРёРјРµСЂ РѕС‚С‡С‘С‚Р°',
     source: 'Google Meet',
-    date: 'пт, 2 янв. 2026 г.',
+    date: 'РїС‚, 2 СЏРЅРІ. 2026 Рі.',
     time: '00:00 - 00:07',
     participants: 4,
     score: 88,
-    folder: 'Образцы отчётов',
-    owner: 'Елиас',
-    ownerInitial: 'Е',
+    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
+    owner: 'Р•Р»РёР°СЃ',
+    ownerInitial: 'Р•',
     thumbnailTone: 'violet',
-    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
+    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
   },
   {
     id: 'mobile-guide',
-    title: 'Руководство по использованию настольного и мобильного приложения',
+    title: 'Р СѓРєРѕРІРѕРґСЃС‚РІРѕ РїРѕ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЋ РЅР°СЃС‚РѕР»СЊРЅРѕРіРѕ Рё РјРѕР±РёР»СЊРЅРѕРіРѕ РїСЂРёР»РѕР¶РµРЅРёСЏ',
     source: 'Google Meet',
-    date: 'чт, 1 янв. 2026 г.',
+    date: 'С‡С‚, 1 СЏРЅРІ. 2026 Рі.',
     time: '23:00 - 23:04',
     participants: 5,
     score: 92,
-    folder: 'Образцы отчётов',
-    owner: 'Келси',
-    ownerInitial: 'К',
+    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
+    owner: 'РљРµР»СЃРё',
+    ownerInitial: 'Рљ',
     thumbnailTone: 'green',
-    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
+    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
   },
   {
     id: 'real-cases',
-    title: 'Исследуйте реальные случаи использования - Пример отчёта',
+    title: 'РСЃСЃР»РµРґСѓР№С‚Рµ СЂРµР°Р»СЊРЅС‹Рµ СЃР»СѓС‡Р°Рё РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ - РџСЂРёРјРµСЂ РѕС‚С‡С‘С‚Р°',
     source: 'Google Meet',
-    date: 'чт, 1 янв. 2026 г.',
+    date: 'С‡С‚, 1 СЏРЅРІ. 2026 Рі.',
     time: '22:00 - 22:08',
     participants: 4,
     score: 87,
-    folder: 'Образцы отчётов',
-    owner: 'Сара',
-    ownerInitial: 'С',
+    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
+    owner: 'РЎР°СЂР°',
+    ownerInitial: 'РЎ',
     thumbnailTone: 'rose',
-    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
+    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
   },
 ]
 
 const actionItems = [
-  { task: 'Подготовить список вопросов для демо клиента', owner: 'Мади Орысбек', due: 'Сегодня, 18:00' },
-  { task: 'Проверить backend endpoint для LiveKit token', owner: 'Айдана Сейт', due: 'Завтра, 11:00' },
-  { task: 'Обновить UI отчёта после тестовой встречи', owner: 'Team AI', due: 'После созвона' },
+  { task: 'РџРѕРґРіРѕС‚РѕРІРёС‚СЊ СЃРїРёСЃРѕРє РІРѕРїСЂРѕСЃРѕРІ РґР»СЏ РґРµРјРѕ РєР»РёРµРЅС‚Р°', owner: 'РњР°РґРё РћСЂС‹СЃР±РµРє', due: 'РЎРµРіРѕРґРЅСЏ, 18:00' },
+  { task: 'РџСЂРѕРІРµСЂРёС‚СЊ backend endpoint РґР»СЏ LiveKit token', owner: 'РђР№РґР°РЅР° РЎРµР№С‚', due: 'Р—Р°РІС‚СЂР°, 11:00' },
+  { task: 'РћР±РЅРѕРІРёС‚СЊ UI РѕС‚С‡С‘С‚Р° РїРѕСЃР»Рµ С‚РµСЃС‚РѕРІРѕР№ РІСЃС‚СЂРµС‡Рё', owner: 'Team AI', due: 'РџРѕСЃР»Рµ СЃРѕР·РІРѕРЅР°' },
 ]
 
 const transcriptLines = [
   {
     time: '00:42',
-    speaker: 'Мади',
-    text: 'Нам нужно, чтобы участник мог войти в комнату только по названию, без ручного token.',
+    speaker: 'РњР°РґРё',
+    text: 'РќР°Рј РЅСѓР¶РЅРѕ, С‡С‚РѕР±С‹ СѓС‡Р°СЃС‚РЅРёРє РјРѕРі РІРѕР№С‚Рё РІ РєРѕРјРЅР°С‚Сѓ С‚РѕР»СЊРєРѕ РїРѕ РЅР°Р·РІР°РЅРёСЋ, Р±РµР· СЂСѓС‡РЅРѕРіРѕ token.',
   },
   {
     time: '04:18',
-    speaker: 'Айдана',
-    text: 'После встречи отчёт должен быстро показывать summary, задачи и полный контекст разговора.',
+    speaker: 'РђР№РґР°РЅР°',
+    text: 'РџРѕСЃР»Рµ РІСЃС‚СЂРµС‡Рё РѕС‚С‡С‘С‚ РґРѕР»Р¶РµРЅ Р±С‹СЃС‚СЂРѕ РїРѕРєР°Р·С‹РІР°С‚СЊ summary, Р·Р°РґР°С‡Рё Рё РїРѕР»РЅС‹Р№ РєРѕРЅС‚РµРєСЃС‚ СЂР°Р·РіРѕРІРѕСЂР°.',
   },
   {
     time: '12:05',
     speaker: 'Team AI',
-    text: 'Я выделю главы, вопросы и места, где обсуждение затянулось или было особенно активным.',
+    text: 'РЇ РІС‹РґРµР»СЋ РіР»Р°РІС‹, РІРѕРїСЂРѕСЃС‹ Рё РјРµСЃС‚Р°, РіРґРµ РѕР±СЃСѓР¶РґРµРЅРёРµ Р·Р°С‚СЏРЅСѓР»РѕСЃСЊ РёР»Рё Р±С‹Р»Рѕ РѕСЃРѕР±РµРЅРЅРѕ Р°РєС‚РёРІРЅС‹Рј.',
   },
 ]
 
 const speakerStats = [
-  { name: 'Мади', talk: 48, sentiment: 'Позитивный', pace: '142 слов/мин' },
-  { name: 'Айдана', talk: 34, sentiment: 'Нейтральный', pace: '128 слов/мин' },
-  { name: 'Team AI', talk: 18, sentiment: 'Фокус', pace: '96 слов/мин' },
+  { name: 'РњР°РґРё', talk: 48, sentiment: 'РџРѕР·РёС‚РёРІРЅС‹Р№', pace: '142 СЃР»РѕРІ/РјРёРЅ' },
+  { name: 'РђР№РґР°РЅР°', talk: 34, sentiment: 'РќРµР№С‚СЂР°Р»СЊРЅС‹Р№', pace: '128 СЃР»РѕРІ/РјРёРЅ' },
+  { name: 'Team AI', talk: 18, sentiment: 'Р¤РѕРєСѓСЃ', pace: '96 СЃР»РѕРІ/РјРёРЅ' },
 ]
 
 const highlights = [
-  { time: '03:20', title: 'Решение по входу в комнату', note: 'Название комнаты становится главным способом подключения.' },
-  { time: '17:45', title: 'Риск по backend', note: 'Если backend не запущен, агент должен явно показать ошибку подключения.' },
-  { time: '28:10', title: 'Следующий шаг', note: 'Добавить автоматический отчёт после завершения митинга.' },
+  { time: '03:20', title: 'Р РµС€РµРЅРёРµ РїРѕ РІС…РѕРґСѓ РІ РєРѕРјРЅР°С‚Сѓ', note: 'РќР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹ СЃС‚Р°РЅРѕРІРёС‚СЃСЏ РіР»Р°РІРЅС‹Рј СЃРїРѕСЃРѕР±РѕРј РїРѕРґРєР»СЋС‡РµРЅРёСЏ.' },
+  { time: '17:45', title: 'Р РёСЃРє РїРѕ backend', note: 'Р•СЃР»Рё backend РЅРµ Р·Р°РїСѓС‰РµРЅ, Р°РіРµРЅС‚ РґРѕР»Р¶РµРЅ СЏРІРЅРѕ РїРѕРєР°Р·Р°С‚СЊ РѕС€РёР±РєСѓ РїРѕРґРєР»СЋС‡РµРЅРёСЏ.' },
+  { time: '28:10', title: 'РЎР»РµРґСѓСЋС‰РёР№ С€Р°Рі', note: 'Р”РѕР±Р°РІРёС‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРёР№ РѕС‚С‡С‘С‚ РїРѕСЃР»Рµ Р·Р°РІРµСЂС€РµРЅРёСЏ РјРёС‚РёРЅРіР°.' },
 ]
 
 const chapters = [
-  { time: '00:00', title: 'Старт и цель встречи', duration: '4 мин' },
-  { time: '04:01', title: 'LiveKit вход и комнаты', duration: '9 мин' },
-  { time: '13:10', title: 'Структура AI отчёта', duration: '12 мин' },
-  { time: '25:30', title: 'Action items и финальные решения', duration: '7 мин' },
+  { time: '00:00', title: 'РЎС‚Р°СЂС‚ Рё С†РµР»СЊ РІСЃС‚СЂРµС‡Рё', duration: '4 РјРёРЅ' },
+  { time: '04:01', title: 'LiveKit РІС…РѕРґ Рё РєРѕРјРЅР°С‚С‹', duration: '9 РјРёРЅ' },
+  { time: '13:10', title: 'РЎС‚СЂСѓРєС‚СѓСЂР° AI РѕС‚С‡С‘С‚Р°', duration: '12 РјРёРЅ' },
+  { time: '25:30', title: 'Action items Рё С„РёРЅР°Р»СЊРЅС‹Рµ СЂРµС€РµРЅРёСЏ', duration: '7 РјРёРЅ' },
 ]
 
 const aiQuestions = [
-  'Как отключить автоматическую отправку заметок внешним участникам?',
-  'Как проверить и отредактировать заметки перед отправкой?',
-  'Какие права нужны для Search Copilot?',
-  'Какие задачи появились после встречи?',
-  'Переведите резюме встречи на русский.',
+  'РљР°Рє РѕС‚РєР»СЋС‡РёС‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєСѓСЋ РѕС‚РїСЂР°РІРєСѓ Р·Р°РјРµС‚РѕРє РІРЅРµС€РЅРёРј СѓС‡Р°СЃС‚РЅРёРєР°Рј?',
+  'РљР°Рє РїСЂРѕРІРµСЂРёС‚СЊ Рё РѕС‚СЂРµРґР°РєС‚РёСЂРѕРІР°С‚СЊ Р·Р°РјРµС‚РєРё РїРµСЂРµРґ РѕС‚РїСЂР°РІРєРѕР№?',
+  'РљР°РєРёРµ РїСЂР°РІР° РЅСѓР¶РЅС‹ РґР»СЏ Search Copilot?',
+  'РљР°РєРёРµ Р·Р°РґР°С‡Рё РїРѕСЏРІРёР»РёСЃСЊ РїРѕСЃР»Рµ РІСЃС‚СЂРµС‡Рё?',
+  'РџРµСЂРµРІРµРґРёС‚Рµ СЂРµР·СЋРјРµ РІСЃС‚СЂРµС‡Рё РЅР° СЂСѓСЃСЃРєРёР№.',
 ]
 
 const reportCalendarToday = new Date(2026, 5, 12)
 
 const quickDateOptions = [
-  { id: 'all', label: 'В любое время' },
-  { id: 'today', label: 'Сегодня', days: 1 },
-  { id: 'last7', label: 'Последние 7 дней', days: 7 },
-  { id: 'last30', label: 'Последние 30 дней', days: 30 },
-  { id: 'last90', label: 'Последние 90 дней', days: 90 },
-  { id: 'last6months', label: 'Последние 6 месяцев', months: 6 },
-  { id: 'last12months', label: 'Последние 12 месяцев', months: 12 },
+  { id: 'all', label: 'Р’ Р»СЋР±РѕРµ РІСЂРµРјСЏ' },
+  { id: 'today', label: 'РЎРµРіРѕРґРЅСЏ', days: 1 },
+  { id: 'last7', label: 'РџРѕСЃР»РµРґРЅРёРµ 7 РґРЅРµР№', days: 7 },
+  { id: 'last30', label: 'РџРѕСЃР»РµРґРЅРёРµ 30 РґРЅРµР№', days: 30 },
+  { id: 'last90', label: 'РџРѕСЃР»РµРґРЅРёРµ 90 РґРЅРµР№', days: 90 },
+  { id: 'last6months', label: 'РџРѕСЃР»РµРґРЅРёРµ 6 РјРµСЃСЏС†РµРІ', months: 6 },
+  { id: 'last12months', label: 'РџРѕСЃР»РµРґРЅРёРµ 12 РјРµСЃСЏС†РµРІ', months: 12 },
 ]
 
 const typeFilterOptions = [
-  { id: 'meetings', value: 'meeting', label: 'Отчеты о встречах', aliases: ['meeting', 'meetings', 'google meet'] },
-  { id: 'readout', value: 'readout', label: 'Темы Readout', aliases: ['readout'] },
-  { id: 'daily', value: 'daily', label: 'Ежедневные обзоры', aliases: ['daily'] },
+  { id: 'meetings', value: 'meeting', label: 'РћС‚С‡РµС‚С‹ Рѕ РІСЃС‚СЂРµС‡Р°С…', aliases: ['meeting', 'meetings', 'google meet'] },
+  { id: 'readout', value: 'readout', label: 'РўРµРјС‹ Readout', aliases: ['readout'] },
+  { id: 'daily', value: 'daily', label: 'Р•Р¶РµРґРЅРµРІРЅС‹Рµ РѕР±Р·РѕСЂС‹', aliases: ['daily'] },
 ]
 
 const calendarMonthNames = [
-  'январь',
-  'февраль',
-  'март',
-  'апрель',
-  'май',
-  'июнь',
-  'июль',
-  'август',
-  'сентябрь',
-  'октябрь',
-  'ноябрь',
-  'декабрь',
+  'СЏРЅРІР°СЂСЊ',
+  'С„РµРІСЂР°Р»СЊ',
+  'РјР°СЂС‚',
+  'Р°РїСЂРµР»СЊ',
+  'РјР°Р№',
+  'РёСЋРЅСЊ',
+  'РёСЋР»СЊ',
+  'Р°РІРіСѓСЃС‚',
+  'СЃРµРЅС‚СЏР±СЂСЊ',
+  'РѕРєС‚СЏР±СЂСЊ',
+  'РЅРѕСЏР±СЂСЊ',
+  'РґРµРєР°Р±СЂСЊ',
 ]
 
-const calendarShortMonthNames = ['янв.', 'фев.', 'мар.', 'апр.', 'мая', 'июн.', 'июл.', 'авг.', 'сен.', 'окт.', 'ноя.', 'дек.']
+const calendarShortMonthNames = ['СЏРЅРІ.', 'С„РµРІ.', 'РјР°СЂ.', 'Р°РїСЂ.', 'РјР°СЏ', 'РёСЋРЅ.', 'РёСЋР».', 'Р°РІРі.', 'СЃРµРЅ.', 'РѕРєС‚.', 'РЅРѕСЏ.', 'РґРµРє.']
 const calendarWeekdays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
 
 function normalizeDate(date) {
@@ -326,11 +326,25 @@ function formatAPIDate(date) {
   return `${year}-${month}-${day}`
 }
 
+const authSessionKey = 'alemlive-auth-session'
+const authVerifierKey = 'alemlive-auth-verifier'
+let currentAccessToken = ''
+
+function setCurrentAccessToken(token) {
+  currentAccessToken = token || ''
+}
+
+function getAuthHeaders() {
+  return currentAccessToken ? { Authorization: `Bearer ${currentAccessToken}` } : {}
+}
+
 async function apiRequest(path, options = {}) {
+  const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData
   const response = await fetch(path, {
     ...options,
     headers: {
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(!isFormDataBody && options.body ? { 'Content-Type': 'application/json' } : {}),
+      ...getAuthHeaders(),
       ...options.headers,
     },
   })
@@ -358,6 +372,84 @@ function saveDownload(blob, filename) {
 
 function saveTextDownload(text, filename) {
   saveDownload(new Blob([text], { type: 'text/plain;charset=utf-8' }), filename)
+}
+
+function loadAuthSession() {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  try {
+    const session = JSON.parse(window.localStorage.getItem(authSessionKey))
+    if (!session?.accessToken || isJWTExpired(session.accessToken)) {
+      window.localStorage.removeItem(authSessionKey)
+      return null
+    }
+    return session
+  } catch {
+    window.localStorage.removeItem(authSessionKey)
+    return null
+  }
+}
+
+function saveAuthSession(session) {
+  window.localStorage.setItem(authSessionKey, JSON.stringify(session))
+  setCurrentAccessToken(session?.accessToken || '')
+}
+
+function clearAuthSession() {
+  window.localStorage.removeItem(authSessionKey)
+  window.sessionStorage.removeItem(authVerifierKey)
+  setCurrentAccessToken('')
+}
+
+function decodeJWTClaims(token) {
+  try {
+    const [, payload] = token.split('.')
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=')
+    const json = decodeURIComponent(
+      atob(normalized)
+        .split('')
+        .map((char) => `%${char.charCodeAt(0).toString(16).padStart(2, '0')}`)
+        .join(''),
+    )
+    return JSON.parse(json)
+  } catch {
+    return {}
+  }
+}
+
+function isJWTExpired(token) {
+  const claims = decodeJWTClaims(token)
+  return !claims.exp || claims.exp * 1000 <= Date.now() + 30000
+}
+
+function base64URL(bytes) {
+  const raw = String.fromCharCode(...new Uint8Array(bytes))
+  return btoa(raw).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+function randomPKCEValue(length = 64) {
+  const bytes = new Uint8Array(length)
+  window.crypto.getRandomValues(bytes)
+  return base64URL(bytes)
+}
+
+async function sha256Base64URL(value) {
+  const digest = await window.crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))
+  return base64URL(digest)
+}
+
+function getAuthRedirectURI() {
+  return `${window.location.origin}${window.location.pathname}`
+}
+
+function cleanAuthCallbackURL() {
+  const url = new URL(window.location.href)
+  url.searchParams.delete('code')
+  url.searchParams.delete('state')
+  url.searchParams.delete('session_state')
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash || '#meeting'}`)
 }
 
 function getSelectedTypeValues(selectedTypeIds) {
@@ -469,7 +561,7 @@ function getParticipantRole(participant) {
     // ignore malformed metadata
   }
 
-  return 'Участник'
+  return 'РЈС‡Р°СЃС‚РЅРёРє'
 }
 
 function ParticipantsList({ participants }) {
@@ -480,14 +572,14 @@ function ParticipantsList({ participants }) {
           <Contact size={21} />
         </span>
         <div>
-          <h2>Участники</h2>
-          <p>Команда встречи</p>
+          <h2>РЈС‡Р°СЃС‚РЅРёРєРё</h2>
+          <p>РљРѕРјР°РЅРґР° РІСЃС‚СЂРµС‡Рё</p>
         </div>
       </div>
 
       <div className="member-list">
         {participants.length === 0 ? (
-          <p className="empty-members">Пока никто не присоединился</p>
+          <p className="empty-members">РџРѕРєР° РЅРёРєС‚Рѕ РЅРµ РїСЂРёСЃРѕРµРґРёРЅРёР»СЃСЏ</p>
         ) : (
           participants.map((participant) => {
             const name = participant.name || participant.identity
@@ -517,22 +609,22 @@ function getMediaErrorMessage(error) {
   const message = error?.message || ''
 
   if (name === 'NotAllowedError' || /permission|denied|not allowed/i.test(message)) {
-    return 'Разрешите доступ к камере и микрофону в браузере'
+    return 'Р Р°Р·СЂРµС€РёС‚Рµ РґРѕСЃС‚СѓРї Рє РєР°РјРµСЂРµ Рё РјРёРєСЂРѕС„РѕРЅСѓ РІ Р±СЂР°СѓР·РµСЂРµ'
   }
 
   if (name === 'NotFoundError' || /not found|device not found/i.test(message)) {
-    return 'Камера или микрофон не найдены'
+    return 'РљР°РјРµСЂР° РёР»Рё РјРёРєСЂРѕС„РѕРЅ РЅРµ РЅР°Р№РґРµРЅС‹'
   }
 
   if (name === 'NotReadableError' || /busy|in use|could not start/i.test(message)) {
-    return 'Камера или микрофон заняты другим приложением'
+    return 'РљР°РјРµСЂР° РёР»Рё РјРёРєСЂРѕС„РѕРЅ Р·Р°РЅСЏС‚С‹ РґСЂСѓРіРёРј РїСЂРёР»РѕР¶РµРЅРёРµРј'
   }
 
   if (shouldWarnAboutMediaSecurity()) {
-    return 'Откройте встречу через HTTPS или localhost, иначе браузер может блокировать камеру и микрофон'
+    return 'РћС‚РєСЂРѕР№С‚Рµ РІСЃС‚СЂРµС‡Сѓ С‡РµСЂРµР· HTTPS РёР»Рё localhost, РёРЅР°С‡Рµ Р±СЂР°СѓР·РµСЂ РјРѕР¶РµС‚ Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ РєР°РјРµСЂСѓ Рё РјРёРєСЂРѕС„РѕРЅ'
   }
 
-  return message || 'Не удалось включить камеру или микрофон'
+  return message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РІРєР»СЋС‡РёС‚СЊ РєР°РјРµСЂСѓ РёР»Рё РјРёРєСЂРѕС„РѕРЅ'
 }
 
 function shouldWarnAboutMediaSecurity() {
@@ -597,7 +689,7 @@ function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, o
         type="button"
         onClick={() => toggleLiveKitDevice('mic')}
         disabled={pendingDevice === 'mic'}
-        aria-label={isMicrophoneEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
+        aria-label={isMicrophoneEnabled ? 'Р’С‹РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ' : 'Р’РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ'}
         aria-pressed={isMicrophoneEnabled}
       >
         {isMicrophoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
@@ -607,7 +699,7 @@ function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, o
         type="button"
         onClick={() => toggleLiveKitDevice('camera')}
         disabled={pendingDevice === 'camera'}
-        aria-label={isCameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
+        aria-label={isCameraEnabled ? 'Р’С‹РєР»СЋС‡РёС‚СЊ РєР°РјРµСЂСѓ' : 'Р’РєР»СЋС‡РёС‚СЊ РєР°РјРµСЂСѓ'}
         aria-pressed={isCameraEnabled}
       >
         {isCameraEnabled ? <Video size={18} /> : <CameraOff size={18} />}
@@ -634,7 +726,7 @@ function ConferenceChatPanel({ onClose }) {
       await send(text)
       setMessage('')
     } catch (sendError) {
-      setError(sendError?.message || 'Не удалось отправить сообщение')
+      setError(sendError?.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ')
     }
   }
 
@@ -645,23 +737,23 @@ function ConferenceChatPanel({ onClose }) {
           <MessageSquareText size={21} />
         </span>
         <div>
-          <h2>Чат встречи</h2>
-          <p>Сообщения LiveKit</p>
+          <h2>Р§Р°С‚ РІСЃС‚СЂРµС‡Рё</h2>
+          <p>РЎРѕРѕР±С‰РµРЅРёСЏ LiveKit</p>
         </div>
         {onClose && (
-          <button className="icon-button conference-chat-close" type="button" onClick={onClose} aria-label="Скрыть чат">
+          <button className="icon-button conference-chat-close" type="button" onClick={onClose} aria-label="РЎРєСЂС‹С‚СЊ С‡Р°С‚">
             <ChevronRight size={18} />
           </button>
         )}
       </div>
 
-      <div className="conference-chat" role="log" aria-label="Сообщения встречи">
+      <div className="conference-chat" role="log" aria-label="РЎРѕРѕР±С‰РµРЅРёСЏ РІСЃС‚СЂРµС‡Рё">
         <div className="conference-chat-messages">
           {chatMessages.length === 0 ? (
-            <p className="conference-chat-empty">Пока сообщений нет</p>
+            <p className="conference-chat-empty">РџРѕРєР° СЃРѕРѕР±С‰РµРЅРёР№ РЅРµС‚</p>
           ) : (
             chatMessages.map((item) => {
-              const author = item.from?.name || item.from?.identity || 'Участник'
+              const author = item.from?.name || item.from?.identity || 'РЈС‡Р°СЃС‚РЅРёРє'
               const sentAt = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
 
               return (
@@ -681,10 +773,10 @@ function ConferenceChatPanel({ onClose }) {
           <input
             value={message}
             onChange={(event) => setMessage(event.target.value)}
-            placeholder="Написать в чат встречи..."
-            aria-label="Сообщение в чат встречи"
+            placeholder="РќР°РїРёСЃР°С‚СЊ РІ С‡Р°С‚ РІСЃС‚СЂРµС‡Рё..."
+            aria-label="РЎРѕРѕР±С‰РµРЅРёРµ РІ С‡Р°С‚ РІСЃС‚СЂРµС‡Рё"
           />
-          <button className="ask-send" type="submit" disabled={isSending || !message.trim()} aria-label="Отправить сообщение">
+          <button className="ask-send" type="submit" disabled={isSending || !message.trim()} aria-label="РћС‚РїСЂР°РІРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ">
             {isSending ? <Loader2 className="spin-icon" size={18} /> : <Send size={18} />}
           </button>
         </form>
@@ -703,7 +795,7 @@ function App() {
   const [activeReportTab, setActiveReportTab] = useState('notes')
   const [form, setForm] = useState({
     roomName: getInitialRoomName(),
-    userName: import.meta.env.VITE_LIVEKIT_NAME ?? 'Мади Орысбек',
+    userName: import.meta.env.VITE_LIVEKIT_NAME ?? 'РњР°РґРё РћСЂС‹СЃР±РµРє',
   })
   const [meeting, setMeeting] = useState(null)
   const [entryMode, setEntryMode] = useState('create')
@@ -733,6 +825,10 @@ function App() {
   const [selectedTypeFilterIds, setSelectedTypeFilterIds] = useState(typeFilterOptions.map((option) => option.id))
   const [openReportActionsId, setOpenReportActionsId] = useState('')
   const [profile, setProfile] = useState(null)
+  const [authConfig, setAuthConfig] = useState({ enabled: false })
+  const [authSession, setAuthSession] = useState(() => loadAuthSession())
+  const [authError, setAuthError] = useState('')
+  const [authReady, setAuthReady] = useState(false)
   const [notifications, setNotifications] = useState({ unread: 0, items: [] })
   const [locales, setLocales] = useState({ current: 'ru', items: [] })
   const [reports, setReports] = useState(reportRows)
@@ -757,9 +853,12 @@ function App() {
   const [roomSettings, setRoomSettings] = useState(null)
   const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false)
   const copilotInputRef = useRef(null)
+  const reportUploadInputRef = useRef(null)
 
   const canStart = form.userName.trim() && form.roomName.trim()
   const isConnected = Boolean(meeting)
+  const isAuthEnabled = Boolean(authConfig.enabled)
+  const isAuthenticated = !isAuthEnabled || Boolean(authSession?.accessToken)
   const selectedReportDetail = reportDetails[selectedReportId]
   const selectedReport = selectedReportDetail?.report || reports.find((report) => report.id === selectedReportId) || reports[0] || reportRows[0]
   const dateFilterOptions = quickDateOptions.map((option) => ({
@@ -784,6 +883,132 @@ function App() {
   }, [form.roomName, form.userName, meeting, profile])
 
   useEffect(() => {
+    setCurrentAccessToken(authSession?.accessToken || '')
+  }, [authSession])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function initializeAuth() {
+      try {
+        const configPayload = await apiRequest('/api/auth/config')
+        if (!isMounted) {
+          return
+        }
+
+        setAuthConfig(configPayload)
+
+        if (!configPayload.enabled) {
+          setAuthReady(true)
+          return
+        }
+
+        const callbackURL = new URL(window.location.href)
+        const code = callbackURL.searchParams.get('code')
+        const state = callbackURL.searchParams.get('state')
+        const verifierPayload = JSON.parse(window.sessionStorage.getItem(authVerifierKey) || '{}')
+
+        if (code) {
+          if (!state || state !== verifierPayload.state || !verifierPayload.verifier) {
+            throw new Error('Invalid Keycloak login state')
+          }
+
+          const tokenResponse = await fetch(configPayload.tokenEndpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              code,
+              redirectUri: getAuthRedirectURI(),
+              codeVerifier: verifierPayload.verifier,
+            }),
+          })
+          const tokenPayload = await tokenResponse.json().catch(() => ({}))
+          if (!tokenResponse.ok) {
+            throw new Error(tokenPayload.error_description || tokenPayload.error || 'Keycloak token exchange failed')
+          }
+
+          const nextSession = {
+            accessToken: tokenPayload.access_token,
+            idToken: tokenPayload.id_token,
+            refreshToken: tokenPayload.refresh_token,
+            expiresAt: Date.now() + Number(tokenPayload.expires_in || 0) * 1000,
+          }
+          saveAuthSession(nextSession)
+          setAuthSession(nextSession)
+          cleanAuthCallbackURL()
+          setAuthReady(true)
+          return
+        }
+
+        const storedSession = loadAuthSession()
+        if (storedSession) {
+          setAuthSession(storedSession)
+          setCurrentAccessToken(storedSession.accessToken)
+        } else {
+          clearAuthSession()
+          setAuthSession(null)
+        }
+      } catch (error) {
+        clearAuthSession()
+        setAuthSession(null)
+        setAuthError(error.message)
+      } finally {
+        if (isMounted) {
+          setAuthReady(true)
+        }
+      }
+    }
+
+    initializeAuth()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  async function loginWithKeycloak() {
+    if (!authConfig.enabled || !authConfig.authorizationEndpoint || !authConfig.clientId) {
+      setAuthError('Keycloak is not configured')
+      return
+    }
+
+    const verifier = randomPKCEValue()
+    const state = randomPKCEValue(24)
+    const challenge = await sha256Base64URL(verifier)
+    window.sessionStorage.setItem(authVerifierKey, JSON.stringify({ verifier, state }))
+
+    const authURL = new URL(authConfig.authorizationEndpoint)
+    authURL.searchParams.set('client_id', authConfig.clientId)
+    authURL.searchParams.set('response_type', 'code')
+    authURL.searchParams.set('scope', 'openid profile email')
+    authURL.searchParams.set('redirect_uri', getAuthRedirectURI())
+    authURL.searchParams.set('code_challenge', challenge)
+    authURL.searchParams.set('code_challenge_method', 'S256')
+    authURL.searchParams.set('state', state)
+    window.location.assign(authURL.toString())
+  }
+
+  function logoutFromKeycloak() {
+    const idToken = authSession?.idToken
+    clearAuthSession()
+    setAuthSession(null)
+    setProfile(null)
+
+    if (authConfig.logoutEndpoint) {
+      const logoutURL = new URL(authConfig.logoutEndpoint)
+      logoutURL.searchParams.set('post_logout_redirect_uri', `${window.location.origin}${window.location.pathname}#meeting`)
+      if (idToken) {
+        logoutURL.searchParams.set('id_token_hint', idToken)
+      }
+      window.location.assign(logoutURL.toString())
+    }
+  }
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated) {
+      return undefined
+    }
+
     let isMounted = true
 
     async function loadWorkspace() {
@@ -816,14 +1041,14 @@ function App() {
 
     loadWorkspace().catch(() => {
       if (isMounted) {
-        setWorkspaceNotice('Backend workspace недоступен, показаны локальные данные')
+        setWorkspaceNotice('Backend workspace РЅРµРґРѕСЃС‚СѓРїРµРЅ, РїРѕРєР°Р·Р°РЅС‹ Р»РѕРєР°Р»СЊРЅС‹Рµ РґР°РЅРЅС‹Рµ')
       }
     })
 
     return () => {
       isMounted = false
     }
-  }, [])
+  }, [authReady, isAuthenticated])
 
   useEffect(() => {
     let isMounted = true
@@ -854,7 +1079,7 @@ function App() {
       } catch (error) {
         if (isMounted) {
           setReports(reportRows)
-          setReportsError(error.message || 'Не удалось загрузить отчёты из backend')
+          setReportsError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РѕС‚С‡С‘С‚С‹ РёР· backend')
         }
       } finally {
         if (isMounted) {
@@ -981,7 +1206,7 @@ function App() {
       return
     }
 
-    setMeetingNotice('Соединение с комнатой разорвано')
+    setMeetingNotice('РЎРѕРµРґРёРЅРµРЅРёРµ СЃ РєРѕРјРЅР°С‚РѕР№ СЂР°Р·РѕСЂРІР°РЅРѕ')
   }
 
   function recordMeetingEvent(event) {
@@ -1000,6 +1225,7 @@ function App() {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...getAuthHeaders(),
       },
       body: JSON.stringify({ roomName, userName, isHost }),
     })
@@ -1007,11 +1233,11 @@ function App() {
     const payload = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      throw new Error(payload.error || 'Не удалось получить token для комнаты')
+      throw new Error(payload.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ token РґР»СЏ РєРѕРјРЅР°С‚С‹')
     }
 
     if (!payload.serverUrl || !payload.token) {
-      throw new Error('Backend не вернул LiveKit URL или token')
+      throw new Error('Backend РЅРµ РІРµСЂРЅСѓР» LiveKit URL РёР»Рё token')
     }
 
     return payload
@@ -1029,7 +1255,7 @@ function App() {
     const nextUserName = form.userName.trim()
 
     if (!nextUserName || !nextRoomName) {
-      setJoinError('Введите имя и название комнаты')
+      setJoinError('Р’РІРµРґРёС‚Рµ РёРјСЏ Рё РЅР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹')
       return
     }
 
@@ -1085,7 +1311,7 @@ function App() {
     }
 
     await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
-    setWorkspaceNotice('Ссылка комнаты скопирована')
+    setWorkspaceNotice('РЎСЃС‹Р»РєР° РєРѕРјРЅР°С‚С‹ СЃРєРѕРїРёСЂРѕРІР°РЅР°')
   }
 
   async function copyRoomName() {
@@ -1094,7 +1320,7 @@ function App() {
     }
 
     await navigator.clipboard.writeText(meetingMeta.room)
-    setWorkspaceNotice('Название комнаты скопировано')
+    setWorkspaceNotice('РќР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹ СЃРєРѕРїРёСЂРѕРІР°РЅРѕ')
   }
 
   async function copyRoomLink() {
@@ -1103,13 +1329,13 @@ function App() {
     }
 
     await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
-    setWorkspaceNotice('Ссылка на комнату скопирована')
+    setWorkspaceNotice('РЎСЃС‹Р»РєР° РЅР° РєРѕРјРЅР°С‚Сѓ СЃРєРѕРїРёСЂРѕРІР°РЅР°')
   }
 
   async function showRoomSettings() {
     const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/settings`).catch(() => null)
     if (payload) {
-      setWorkspaceNotice(`Запись ${payload.recording ? 'включена' : 'выключена'}, автоотчёт ${payload.autoReport ? 'включен' : 'выключен'}`)
+      setWorkspaceNotice(`Р—Р°РїРёСЃСЊ ${payload.recording ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}, Р°РІС‚РѕРѕС‚С‡С‘С‚ ${payload.autoReport ? 'РІРєР»СЋС‡РµРЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}`)
     }
   }
 
@@ -1121,7 +1347,7 @@ function App() {
 
     setRoomSettings(payload)
     setIsRoomSettingsOpen((current) => !current)
-    setWorkspaceNotice(`Настройки комнаты: запись ${payload.recording ? 'включена' : 'выключена'}, автоотчёт ${payload.autoReport ? 'включён' : 'выключен'}`)
+    setWorkspaceNotice(`РќР°СЃС‚СЂРѕР№РєРё РєРѕРјРЅР°С‚С‹: Р·Р°РїРёСЃСЊ ${payload.recording ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}, Р°РІС‚РѕРѕС‚С‡С‘С‚ ${payload.autoReport ? 'РІРєР»СЋС‡С‘РЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}`)
   }
 
   async function openAskAI() {
@@ -1135,7 +1361,7 @@ function App() {
     const payload = await apiRequest('/api/notifications').catch(() => null)
     if (payload) {
       setNotifications(payload)
-      setWorkspaceNotice(payload.items?.[0]?.body || 'Уведомления обновлены')
+      setWorkspaceNotice(payload.items?.[0]?.body || 'РЈРІРµРґРѕРјР»РµРЅРёСЏ РѕР±РЅРѕРІР»РµРЅС‹')
     }
   }
 
@@ -1143,7 +1369,7 @@ function App() {
     const payload = await apiRequest('/api/profile').catch(() => null)
     if (payload) {
       setProfile(payload)
-      setWorkspaceNotice(`${payload.name} · ${payload.role || 'profile'}`)
+      setWorkspaceNotice(`${payload.name} В· ${payload.role || 'profile'}`)
     }
   }
 
@@ -1151,7 +1377,7 @@ function App() {
     const payload = await apiRequest('/api/locales').catch(() => null)
     if (payload) {
       setLocales(payload)
-      setWorkspaceNotice(`Язык: ${payload.items?.find((item) => item.id === payload.current)?.label || payload.current}`)
+      setWorkspaceNotice(`РЇР·С‹Рє: ${payload.items?.find((item) => item.id === payload.current)?.label || payload.current}`)
     }
   }
 
@@ -1162,7 +1388,7 @@ function App() {
     setTimeFilterRange({ from: null, to: null })
     setDraftTimeFilterRange({ from: null, to: null })
     setSelectedTypeFilterIds(typeFilterOptions.map((option) => option.id))
-    setWorkspaceNotice('Фильтры сброшены')
+    setWorkspaceNotice('Р¤РёР»СЊС‚СЂС‹ СЃР±СЂРѕС€РµРЅС‹')
   }
 
   async function openReportRecording() {
@@ -1175,19 +1401,19 @@ function App() {
       if (payload.url) {
         window.open(payload.url, '_blank', 'noopener,noreferrer')
       }
-      setReportActionMessage(`Запись: ${payload.duration}, маркеры ${payload.markers?.join(', ') || 'нет'}`)
+      setReportActionMessage(`Р—Р°РїРёСЃСЊ: ${payload.duration}, РјР°СЂРєРµСЂС‹ ${payload.markers?.join(', ') || 'РЅРµС‚'}`)
     }
   }
 
   function focusCopilotPanel() {
     setIsCopilotCollapsed(false)
     window.setTimeout(() => copilotInputRef.current?.focus(), 0)
-    setReportActionMessage('Copilot открыт и готов отвечать по отчёту')
+    setReportActionMessage('Copilot РѕС‚РєСЂС‹С‚ Рё РіРѕС‚РѕРІ РѕС‚РІРµС‡Р°С‚СЊ РїРѕ РѕС‚С‡С‘С‚Сѓ')
   }
 
   function collapseCopilotPanel() {
     setIsCopilotCollapsed(true)
-    setReportActionMessage('Copilot можно свернуть на следующем шаге UI')
+    setReportActionMessage('Copilot РјРѕР¶РЅРѕ СЃРІРµСЂРЅСѓС‚СЊ РЅР° СЃР»РµРґСѓСЋС‰РµРј С€Р°РіРµ UI')
   }
 
   function openReport(reportId) {
@@ -1236,16 +1462,22 @@ function App() {
   }
 
   async function uploadReport() {
+    if (reportUploadInputRef.current) {
+      reportUploadInputRef.current.value = ''
+      reportUploadInputRef.current.click()
+      return
+    }
+
     setReportActionMessage('')
 
     try {
       const payload = await apiRequest('/api/reports/upload', {
         method: 'POST',
         body: JSON.stringify({
-          title: 'Новая встреча',
+          title: 'РќРѕРІР°СЏ РІСЃС‚СЂРµС‡Р°',
           source: 'Upload',
           owner: meetingMeta.name,
-          folder: 'Обработка',
+          folder: 'РћР±СЂР°Р±РѕС‚РєР°',
         }),
       })
       const nextReport = payload.report
@@ -1253,9 +1485,47 @@ function App() {
         setReports((current) => [nextReport, ...current])
         setSelectedReportId(nextReport.id)
       }
-      setReportActionMessage(payload.message || 'Отчёт отправлен на обработку')
+      setReportActionMessage(payload.message || 'РћС‚С‡С‘С‚ РѕС‚РїСЂР°РІР»РµРЅ РЅР° РѕР±СЂР°Р±РѕС‚РєСѓ')
     } catch (error) {
       setReportActionMessage(error.message)
+    }
+  }
+
+  async function uploadReportFile(event) {
+    const file = event.target.files?.[0]
+    if (!file) {
+      return
+    }
+
+    setReportActionMessage('')
+
+    try {
+      const body = new FormData()
+      body.append('file', file)
+      body.append('roomName', meetingMeta.room || 'alem-meeting')
+      body.append('title', file.name.replace(/\.[^.]+$/, '') || 'Uploaded meeting')
+      body.append('source', 'Upload')
+      body.append('owner', meetingMeta.name || 'Team AI')
+      body.append('folder', 'Processed')
+
+      const payload = await apiRequest('/api/reports/upload', {
+        method: 'POST',
+        body,
+      })
+      const nextReport = payload.report
+      if (nextReport) {
+        setReports((current) => [nextReport, ...current.filter((report) => report.id !== nextReport.id)])
+        setSelectedReportId(nextReport.id)
+      }
+      if (payload.detail && nextReport?.id) {
+        setReportDetails((current) => ({ ...current, [nextReport.id]: payload.detail }))
+      }
+      setActiveReportTab('notes')
+      setReportActionMessage(payload.message || 'Recording transcribed and analyzed')
+    } catch (error) {
+      setReportActionMessage(error.message)
+    } finally {
+      event.target.value = ''
     }
   }
 
@@ -1264,7 +1534,7 @@ function App() {
     const filename = `${reportId}-${option.id}.${option.extension}`
 
     if (option.pending) {
-      return `${option.label.replace(/\s*\(.+\)$/, '')} будет доступно после обработки записи`
+      return `${option.label.replace(/\s*\(.+\)$/, '')} will be available after recording processing`
     }
 
     if (option.id === 'transcript') {
@@ -1273,23 +1543,25 @@ function App() {
       const report = detail?.report || reports.find((item) => item.id === reportId) || selectedReport
       const lines = payload.lines || detail?.transcriptLines || []
       const text = [
-        report?.title || 'Стенограмма встречи',
+        report?.title || 'Meeting transcript',
         '',
         ...lines.map((line) => `${line.time || ''} ${line.speaker || ''}: ${line.text || ''}`.trim()),
       ].join('\n')
       saveTextDownload(text, filename)
-      return 'Скачивание стенограммы началось'
+      return 'Transcript download started'
     }
 
-    const response = await fetch(`/api/reports/${reportId}/download`)
+    const response = await fetch(`/api/reports/${reportId}/download`, {
+      headers: getAuthHeaders(),
+    })
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}))
-      throw new Error(payload.error || 'Не удалось скачать отчёт')
+      throw new Error(payload.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ РѕС‚С‡С‘С‚')
     }
 
     const blob = await response.blob()
     saveDownload(blob, filename)
-    return 'Скачивание итога встречи началось'
+    return 'РЎРєР°С‡РёРІР°РЅРёРµ РёС‚РѕРіР° РІСЃС‚СЂРµС‡Рё РЅР°С‡Р°Р»РѕСЃСЊ'
   }
 
   async function handleReportAction(reportId, actionId) {
@@ -1305,10 +1577,10 @@ function App() {
         if (navigator.clipboard) {
           await navigator.clipboard.writeText(payload.url || `/report/${reportId}`)
         }
-        setReportActionMessage('Ссылка на отчёт скопирована')
+        setReportActionMessage('РЎСЃС‹Р»РєР° РЅР° РѕС‚С‡С‘С‚ СЃРєРѕРїРёСЂРѕРІР°РЅР°')
       } else if (actionId === 'rename') {
         const currentTitle = (reportDetails[reportId]?.report || reports.find((report) => report.id === reportId))?.title || ''
-        const title = window.prompt('Новое название отчёта', currentTitle)
+        const title = window.prompt('РќРѕРІРѕРµ РЅР°Р·РІР°РЅРёРµ РѕС‚С‡С‘С‚Р°', currentTitle)
         if (!title) {
           return
         }
@@ -1326,11 +1598,11 @@ function App() {
             },
           }))
         }
-        setReportActionMessage('Отчёт переименован')
+        setReportActionMessage('РћС‚С‡С‘С‚ РїРµСЂРµРёРјРµРЅРѕРІР°РЅ')
       } else if (actionId === 'delete') {
         await apiRequest(`/api/reports/${reportId}`, { method: 'DELETE' })
         setReports((current) => current.filter((report) => report.id !== reportId))
-        setReportActionMessage('Отчёт удалён')
+        setReportActionMessage('РћС‚С‡С‘С‚ СѓРґР°Р»С‘РЅ')
         if (selectedReportId === reportId) {
           const nextReport = reports.find((report) => report.id !== reportId)
           if (nextReport) {
@@ -1341,13 +1613,13 @@ function App() {
         }
       } else if (actionId === 'send') {
         await apiRequest(`/api/reports/${reportId}/send`, { method: 'POST' })
-        setReportActionMessage('Отправка отчёта поставлена в очередь')
+        setReportActionMessage('РћС‚РїСЂР°РІРєР° РѕС‚С‡С‘С‚Р° РїРѕСЃС‚Р°РІР»РµРЅР° РІ РѕС‡РµСЂРµРґСЊ')
       } else if (actionId === 'copy') {
         const payload = await apiRequest(`/api/reports/${reportId}/copy`)
         if (navigator.clipboard) {
           await navigator.clipboard.writeText(payload.text || '')
         }
-        setReportActionMessage('Текст отчёта скопирован')
+        setReportActionMessage('РўРµРєСЃС‚ РѕС‚С‡С‘С‚Р° СЃРєРѕРїРёСЂРѕРІР°РЅ')
       }
     } catch (error) {
       setReportActionMessage(error.message)
@@ -1361,7 +1633,7 @@ function App() {
       return
     }
 
-    const searchQuery = kind === 'search' ? window.prompt('Что найти в отчёте?', 'backend') : ''
+    const searchQuery = kind === 'search' ? window.prompt('Р§С‚Рѕ РЅР°Р№С‚Рё РІ РѕС‚С‡С‘С‚Рµ?', 'backend') : ''
     if (kind === 'search' && searchQuery === null) {
       return
     }
@@ -1381,9 +1653,9 @@ function App() {
       if (kind === 'prompts') {
         setReportActionMessage(`Prompts: ${(payload.prompts || []).length}`)
       } else if (kind === 'history') {
-        setReportActionMessage(`История чата: ${(payload.history || []).length}`)
+        setReportActionMessage(`РСЃС‚РѕСЂРёСЏ С‡Р°С‚Р°: ${(payload.history || []).length}`)
       } else {
-        setReportActionMessage(`Найдено: ${(payload.results || []).length}`)
+        setReportActionMessage(`РќР°Р№РґРµРЅРѕ: ${(payload.results || []).length}`)
       }
     } catch (error) {
       setReportActionMessage(error.message)
@@ -1392,7 +1664,7 @@ function App() {
 
   async function copyReportNotes() {
     if (activeReportTab !== 'notes' || !selectedReportId) {
-      setReportActionMessage('Копирование заметок доступно только во вкладке Заметки')
+      setReportActionMessage('РљРѕРїРёСЂРѕРІР°РЅРёРµ Р·Р°РјРµС‚РѕРє РґРѕСЃС‚СѓРїРЅРѕ С‚РѕР»СЊРєРѕ РІРѕ РІРєР»Р°РґРєРµ Р—Р°РјРµС‚РєРё')
       return
     }
 
@@ -1412,7 +1684,7 @@ function App() {
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(text)
       }
-      setReportActionMessage('Заметки скопированы')
+      setReportActionMessage('Р—Р°РјРµС‚РєРё СЃРєРѕРїРёСЂРѕРІР°РЅС‹')
     } catch (error) {
       setReportActionMessage(error.message)
     }
@@ -1433,9 +1705,9 @@ function App() {
           actionItems: selectedReportDetail?.actionItems || [],
         }),
       })
-      setReportActionMessage('Заметки отправлены на редактирование')
+      setReportActionMessage('Р—Р°РјРµС‚РєРё РѕС‚РїСЂР°РІР»РµРЅС‹ РЅР° СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ')
     } catch (error) {
-      setReportActionMessage(error.message || 'Backend endpoint для редактирования заметок пока недоступен')
+      setReportActionMessage(error.message || 'Backend endpoint РґР»СЏ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ Р·Р°РјРµС‚РѕРє РїРѕРєР° РЅРµРґРѕСЃС‚СѓРїРµРЅ')
     }
   }
 
@@ -1454,7 +1726,7 @@ function App() {
         method: 'POST',
         body: JSON.stringify({ message: text }),
       })
-      setCopilotMessages((current) => [...current, { role: 'assistant', text: payload.answer || 'Ответ пустой' }])
+      setCopilotMessages((current) => [...current, { role: 'assistant', text: payload.answer || 'РћС‚РІРµС‚ РїСѓСЃС‚РѕР№' }])
     } catch (error) {
       setCopilotMessages((current) => [...current, { role: 'assistant', text: error.message }])
     } finally {
@@ -1531,7 +1803,7 @@ function App() {
     return (
       <div className="type-filter-dropdown">
         <button className="type-filter-option" type="button" onClick={toggleAllTypeFilters}>
-          <span>Выбрать все</span>
+          <span>Р’С‹Р±СЂР°С‚СЊ РІСЃРµ</span>
           <span className={areAllTypeFiltersSelected ? 'type-check active' : 'type-check'}>
             {areAllTypeFiltersSelected && <Check size={16} />}
           </span>
@@ -1581,7 +1853,7 @@ function App() {
             <button className="calendar-nav-button" type="button" onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))} aria-label="Previous month">
               <ChevronLeft size={18} />
             </button>
-            <strong>{calendarMonthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()} г.</strong>
+            <strong>{calendarMonthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()} Рі.</strong>
             <button className="calendar-nav-button" type="button" onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))} aria-label="Next month">
               <ChevronRight size={18} />
             </button>
@@ -1657,6 +1929,19 @@ function App() {
         </nav>
 
         <div className="profile-tools">
+          {isAuthEnabled && (
+            authSession?.accessToken ? (
+              <button className="soft-action compact-auth-action" type="button" onClick={logoutFromKeycloak}>
+                <Lock size={17} />
+                Logout
+              </button>
+            ) : (
+              <button className="soft-action compact-auth-action" type="button" onClick={loginWithKeycloak}>
+                <Lock size={17} />
+                Login
+              </button>
+            )
+          )}
           <button className={notifications.unread ? 'icon-button has-dot' : 'icon-button'} type="button" onClick={refreshNotifications} aria-label="Notifications" title={notifications.items?.[0]?.title || 'Notifications'}>
             <Bell size={21} />
           </button>
@@ -1689,7 +1974,7 @@ function App() {
           </span>
           <div>
             <h2>{meetingMeta.room}</h2>
-            <p>{isConnected ? 'LiveKit conference запущена' : 'Ожидает подключения'}</p>
+            <p>{isConnected ? 'LiveKit conference Р·Р°РїСѓС‰РµРЅР°' : 'РћР¶РёРґР°РµС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ'}</p>
           </div>
         </div>
 
@@ -1708,7 +1993,7 @@ function App() {
               className={isMeetingMaximized ? 'icon-button active' : 'icon-button'}
               type="button"
               onClick={() => setIsMeetingMaximized((current) => !current)}
-              aria-label={isMeetingMaximized ? 'Свернуть видеоконференцию' : 'Развернуть видеоконференцию'}
+              aria-label={isMeetingMaximized ? 'РЎРІРµСЂРЅСѓС‚СЊ РІРёРґРµРѕРєРѕРЅС„РµСЂРµРЅС†РёСЋ' : 'Р Р°Р·РІРµСЂРЅСѓС‚СЊ РІРёРґРµРѕРєРѕРЅС„РµСЂРµРЅС†РёСЋ'}
               aria-pressed={isMeetingMaximized}
             >
               {isMeetingMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -1719,7 +2004,7 @@ function App() {
               className={isConferenceChatOpen ? 'icon-button active' : 'icon-button'}
               type="button"
               onClick={() => setIsConferenceChatOpen((current) => !current)}
-              aria-label={isConferenceChatOpen ? 'Скрыть чат встречи' : 'Показать чат встречи'}
+              aria-label={isConferenceChatOpen ? 'РЎРєСЂС‹С‚СЊ С‡Р°С‚ РІСЃС‚СЂРµС‡Рё' : 'РџРѕРєР°Р·Р°С‚СЊ С‡Р°С‚ РІСЃС‚СЂРµС‡Рё'}
               aria-pressed={isConferenceChatOpen}
             >
               <MessageSquareText size={18} />
@@ -1734,7 +2019,7 @@ function App() {
           )}
           {isConnected && (
             <button className="danger-action" type="button" onClick={leaveMeeting}>
-              Завершить
+              Р—Р°РІРµСЂС€РёС‚СЊ
             </button>
           )}
         </div>
@@ -1746,8 +2031,8 @@ function App() {
         <section className="meeting-hero" aria-labelledby="meeting-title">
           <div>
             <span className="date-label">AlemLive</span>
-            <h1 id="meeting-title">Комната для созвона</h1>
-            <p>Создайте новую комнату одним нажатием или подключитесь по названию уже существующей комнаты.</p>
+            <h1 id="meeting-title">РљРѕРјРЅР°С‚Р° РґР»СЏ СЃРѕР·РІРѕРЅР°</h1>
+            <p>РЎРѕР·РґР°Р№С‚Рµ РЅРѕРІСѓСЋ РєРѕРјРЅР°С‚Сѓ РѕРґРЅРёРј РЅР°Р¶Р°С‚РёРµРј РёР»Рё РїРѕРґРєР»СЋС‡РёС‚РµСЃСЊ РїРѕ РЅР°Р·РІР°РЅРёСЋ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РµР№ РєРѕРјРЅР°С‚С‹.</p>
           </div>
 
           <div className="hero-actions">
@@ -1761,11 +2046,11 @@ function App() {
               disabled={isStarting}
             >
               {isStarting && entryMode === 'create' ? <Loader2 className="spin-icon" size={20} /> : <Sparkles size={20} />}
-              Создать комнату
+              РЎРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ
             </button>
             <button className="soft-action" type="button" onClick={() => selectEntryMode('join')}>
               <Link size={18} />
-              Присоединиться
+              РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ
             </button>
           </div>
         </section>
@@ -1779,19 +2064,19 @@ function App() {
                 </span>
                 <div>
                   <h2>LiveKit meeting</h2>
-                  <p>{isConnected ? 'Комната активна' : 'URL и token будут получены автоматически'}</p>
+                  <p>{isConnected ? 'РљРѕРјРЅР°С‚Р° Р°РєС‚РёРІРЅР°' : 'URL Рё token Р±СѓРґСѓС‚ РїРѕР»СѓС‡РµРЅС‹ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё'}</p>
                 </div>
               </div>
 
               <form className="join-form" onSubmit={joinMeeting}>
-                <div className="entry-switch" aria-label="Выберите действие">
+                <div className="entry-switch" aria-label="Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ">
                   <button
                     className={entryMode === 'create' ? 'entry-option active' : 'entry-option'}
                     type="button"
                     onClick={() => selectEntryMode('create')}
                   >
                     <Sparkles size={18} />
-                    Создать комнату
+                    РЎРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ
                   </button>
                   <button
                     className={entryMode === 'join' ? 'entry-option active' : 'entry-option'}
@@ -1799,17 +2084,17 @@ function App() {
                     onClick={() => selectEntryMode('join')}
                   >
                     <Link size={18} />
-                    Присоединиться
+                    РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ
                   </button>
                 </div>
 
                 <label>
-                  <span>Ваше имя</span>
+                  <span>Р’Р°С€Рµ РёРјСЏ</span>
                   <input name="userName" value={form.userName} onChange={updateField} autoComplete="name" />
                 </label>
 
                 <label>
-                  <span>Название комнаты</span>
+                  <span>РќР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹</span>
                   <input
                     name="roomName"
                     value={form.roomName}
@@ -1822,7 +2107,7 @@ function App() {
                 {joinError && <p className="form-error">{joinError}</p>}
                 {shouldWarnAboutMediaSecurity() && (
                   <p className="form-warning">
-                    Для камеры и микрофона откройте встречу через HTTPS или localhost.
+                    Р”Р»СЏ РєР°РјРµСЂС‹ Рё РјРёРєСЂРѕС„РѕРЅР° РѕС‚РєСЂРѕР№С‚Рµ РІСЃС‚СЂРµС‡Сѓ С‡РµСЂРµР· HTTPS РёР»Рё localhost.
                   </p>
                 )}
                 {meetingNotice && <p className="form-error">{meetingNotice}</p>}
@@ -1830,10 +2115,10 @@ function App() {
                 <button className="join-button" type="submit" disabled={!canStart || isStarting}>
                   {isStarting ? <Loader2 className="spin-icon" size={18} /> : <Play size={18} fill="currentColor" />}
                   {isConnected
-                    ? 'Переподключиться'
+                    ? 'РџРµСЂРµРїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ'
                     : entryMode === 'create'
-                      ? 'Создать и войти'
-                      : 'Войти по названию'}
+                      ? 'РЎРѕР·РґР°С‚СЊ Рё РІРѕР№С‚Рё'
+                      : 'Р’РѕР№С‚Рё РїРѕ РЅР°Р·РІР°РЅРёСЋ'}
                 </button>
               </form>
             </section>
@@ -1845,8 +2130,8 @@ function App() {
                     <ShieldCheck size={21} />
                   </span>
                   <div>
-                    <h2>Перед входом</h2>
-                    <p>Выберите, что включить сразу в комнате</p>
+                    <h2>РџРµСЂРµРґ РІС…РѕРґРѕРј</h2>
+                    <p>Р’С‹Р±РµСЂРёС‚Рµ, С‡С‚Рѕ РІРєР»СЋС‡РёС‚СЊ СЃСЂР°Р·Сѓ РІ РєРѕРјРЅР°С‚Рµ</p>
                   </div>
                 </div>
 
@@ -1858,8 +2143,8 @@ function App() {
                     aria-pressed={devices.mic}
                   >
                     {devices.mic ? <Mic size={19} /> : <MicOff size={19} />}
-                    <span>Микрофон</span>
-                    <strong>{devices.mic ? 'включен' : 'выключен'}</strong>
+                    <span>РњРёРєСЂРѕС„РѕРЅ</span>
+                    <strong>{devices.mic ? 'РІРєР»СЋС‡РµРЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}</strong>
                   </button>
                   <button
                     className={devices.camera ? 'device-toggle active' : 'device-toggle'}
@@ -1868,8 +2153,8 @@ function App() {
                     aria-pressed={devices.camera}
                   >
                     {devices.camera ? <Video size={19} /> : <CameraOff size={19} />}
-                    <span>Камера</span>
-                    <strong>{devices.camera ? 'включена' : 'выключена'}</strong>
+                    <span>РљР°РјРµСЂР°</span>
+                    <strong>{devices.camera ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</strong>
                   </button>
                 </div>
               </section>
@@ -1892,10 +2177,10 @@ function App() {
                 {meetingToolbar}
                 {isRoomSettingsOpen && roomSettings && (
                   <div className="room-settings-panel">
-                    <span>Запись: {roomSettings.recording ? 'включена' : 'выключена'}</span>
-                    <span>Транскрипция: {roomSettings.transcription ? 'включена' : 'выключена'}</span>
-                    <span>Гости: {roomSettings.allowGuests ? 'разрешены' : 'запрещены'}</span>
-                    <span>Автоотчёт: {roomSettings.autoReport ? 'включён' : 'выключен'}</span>
+                    <span>Р—Р°РїРёСЃСЊ: {roomSettings.recording ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</span>
+                    <span>РўСЂР°РЅСЃРєСЂРёРїС†РёСЏ: {roomSettings.transcription ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</span>
+                    <span>Р“РѕСЃС‚Рё: {roomSettings.allowGuests ? 'СЂР°Р·СЂРµС€РµРЅС‹' : 'Р·Р°РїСЂРµС‰РµРЅС‹'}</span>
+                    <span>РђРІС‚РѕРѕС‚С‡С‘С‚: {roomSettings.autoReport ? 'РІРєР»СЋС‡С‘РЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}</span>
                   </div>
                 )}
 
@@ -1915,10 +2200,10 @@ function App() {
                 {meetingToolbar}
                 {isRoomSettingsOpen && roomSettings && (
                   <div className="room-settings-panel">
-                    <span>Запись: {roomSettings.recording ? 'включена' : 'выключена'}</span>
-                    <span>Транскрипция: {roomSettings.transcription ? 'включена' : 'выключена'}</span>
-                    <span>Гости: {roomSettings.allowGuests ? 'разрешены' : 'запрещены'}</span>
-                    <span>Автоотчёт: {roomSettings.autoReport ? 'включён' : 'выключен'}</span>
+                    <span>Р—Р°РїРёСЃСЊ: {roomSettings.recording ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</span>
+                    <span>РўСЂР°РЅСЃРєСЂРёРїС†РёСЏ: {roomSettings.transcription ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</span>
+                    <span>Р“РѕСЃС‚Рё: {roomSettings.allowGuests ? 'СЂР°Р·СЂРµС€РµРЅС‹' : 'Р·Р°РїСЂРµС‰РµРЅС‹'}</span>
+                    <span>РђРІС‚РѕРѕС‚С‡С‘С‚: {roomSettings.autoReport ? 'РІРєР»СЋС‡С‘РЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}</span>
                   </div>
                 )}
 
@@ -1927,11 +2212,11 @@ function App() {
                     <div className="empty-orbit">
                       <Bot size={34} />
                     </div>
-                    <h3>{entryMode === 'create' ? 'Готово к созданию комнаты' : 'Готово к подключению'}</h3>
+                    <h3>{entryMode === 'create' ? 'Р“РѕС‚РѕРІРѕ Рє СЃРѕР·РґР°РЅРёСЋ РєРѕРјРЅР°С‚С‹' : 'Р“РѕС‚РѕРІРѕ Рє РїРѕРґРєР»СЋС‡РµРЅРёСЋ'}</h3>
                     <p>
                       {entryMode === 'create'
-                        ? 'Нажмите создать комнату, и приложение само получит LiveKit token через backend.'
-                        : 'Введите название комнаты и войдите. URL и token вводить вручную больше не нужно.'}
+                        ? 'РќР°Р¶РјРёС‚Рµ СЃРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ, Рё РїСЂРёР»РѕР¶РµРЅРёРµ СЃР°РјРѕ РїРѕР»СѓС‡РёС‚ LiveKit token С‡РµСЂРµР· backend.'
+                        : 'Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹ Рё РІРѕР№РґРёС‚Рµ. URL Рё token РІРІРѕРґРёС‚СЊ РІСЂСѓС‡РЅСѓСЋ Р±РѕР»СЊС€Рµ РЅРµ РЅСѓР¶РЅРѕ.'}
                     </p>
                   </div>
                 </div>
@@ -1954,7 +2239,7 @@ function App() {
           <button className="back-title-button" type="button" onClick={() => switchView('meeting')} aria-label="Back to meeting">
             <ArrowLeft size={24} />
           </button>
-          <h1>Отчёты</h1>
+          <h1>РћС‚С‡С‘С‚С‹</h1>
         </div>
 
         <div className="ask-read-bar">
@@ -1963,7 +2248,7 @@ function App() {
             <span>{locales.current?.toUpperCase?.() || 'RU'}</span>
             <ChevronDown size={16} />
           </button>
-          <span>Спросите Alem о чём угодно...</span>
+          <span>РЎРїСЂРѕСЃРёС‚Рµ Alem Рѕ С‡С‘Рј СѓРіРѕРґРЅРѕ...</span>
           <button className="ask-send" type="button" onClick={openAskAI} aria-label="Send question">
             <Send size={19} />
           </button>
@@ -1971,31 +2256,38 @@ function App() {
 
         <div className="reports-subnav">
           <div className="report-mode-tabs">
-            <button className={activeReportMode === 'reports' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('reports')}>Отчёты</button>
-            <button className={activeReportMode === 'incomplete' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('incomplete')}>Неполный</button>
+            <button className={activeReportMode === 'reports' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('reports')}>РћС‚С‡С‘С‚С‹</button>
+            <button className={activeReportMode === 'incomplete' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('incomplete')}>РќРµРїРѕР»РЅС‹Р№</button>
           </div>
           <div className="last-updated">
             <RefreshCw size={16} />
-            Последнее обновление в 15:37
+            РџРѕСЃР»РµРґРЅРµРµ РѕР±РЅРѕРІР»РµРЅРёРµ РІ 15:37
           </div>
           <button className="primary-action upload-action" type="button" onClick={uploadReport}>
             <Download size={18} />
-            Загрузить
+            Р—Р°РіСЂСѓР·РёС‚СЊ
           </button>
         </div>
 
+          <input
+            ref={reportUploadInputRef}
+            type="file"
+            accept="audio/*,video/*,.webm,.mp3,.mp4,.m4a,.wav,.ogg"
+            onChange={uploadReportFile}
+            style={{ display: 'none' }}
+          />
         <div className="reports-filters">
           <label className="report-search-filter">
             <Search size={18} />
             <input
               value={reportSearchText}
               onChange={(event) => setReportSearchText(event.target.value)}
-              placeholder="Фильтр по названию отчёта"
+              placeholder="Р¤РёР»СЊС‚СЂ РїРѕ РЅР°Р·РІР°РЅРёСЋ РѕС‚С‡С‘С‚Р°"
             />
           </label>
           <button className="filter-button" type="button" onClick={resetReportFilters}>
             <FileText size={17} />
-            Все отчёты
+            Р’СЃРµ РѕС‚С‡С‘С‚С‹
             <ChevronDown size={16} />
           </button>
           <div className="time-filter-wrap">
@@ -2025,7 +2317,7 @@ function App() {
               aria-expanded={isTypeFilterOpen}
             >
               <Filter size={17} />
-              Тип
+              РўРёРї
               <ChevronDown size={16} />
             </button>
             {isTypeFilterOpen && renderTypeFilterDropdown()}
@@ -2040,17 +2332,17 @@ function App() {
 
         <div className="reports-table">
           <div className="reports-table-head">
-            <span>Источник</span>
-            <span>Отчёт</span>
+            <span>РСЃС‚РѕС‡РЅРёРє</span>
+            <span>РћС‚С‡С‘С‚</span>
             <span>
-              Дата и время
+              Р”Р°С‚Р° Рё РІСЂРµРјСЏ
               <ArrowDown size={17} />
             </span>
-            <span>Папки</span>
-            <span>Владелец</span>
+            <span>РџР°РїРєРё</span>
+            <span>Р’Р»Р°РґРµР»РµС†</span>
           </div>
 
-          <div className="reports-week">{reportsLoading ? 'ЗАГРУЗКА ОТЧЁТОВ...' : visibleReports[0]?.week || 'ОТЧЁТЫ'}</div>
+          <div className="reports-week">{reportsLoading ? 'Р—РђР“Р РЈР—РљРђ РћРўР§РЃРўРћР’...' : visibleReports[0]?.week || 'РћРўР§РЃРўР«'}</div>
 
           {visibleReports.map((report) => (
             <article
@@ -2097,7 +2389,7 @@ function App() {
                     className={openReportActionsId === report.id ? 'report-actions-button active' : 'report-actions-button'}
                     type="button"
                     onClick={(event) => toggleReportActions(event, report.id)}
-                    aria-label={`Действия для отчёта ${report.title}`}
+                    aria-label={`Р”РµР№СЃС‚РІРёСЏ РґР»СЏ РѕС‚С‡С‘С‚Р° ${report.title}`}
                     aria-expanded={openReportActionsId === report.id}
                   >
                     <MoreHorizontal size={22} />
@@ -2105,10 +2397,10 @@ function App() {
                   {openReportActionsId === report.id && (
                     <span className="report-actions-menu" onClick={keepReportActionsOpen}>
                       {(reportActions[report.id] || [
-                        { id: 'share', label: 'Поделиться', enabled: true },
-                        { id: 'download', label: 'Скачать', enabled: true },
-                        { id: 'rename', label: 'Переименовать отчет', enabled: true },
-                        { id: 'delete', label: 'Удалить отчет', enabled: true, danger: true },
+                        { id: 'share', label: 'РџРѕРґРµР»РёС‚СЊСЃСЏ', enabled: true },
+                        { id: 'download', label: 'РЎРєР°С‡Р°С‚СЊ', enabled: true },
+                        { id: 'rename', label: 'РџРµСЂРµРёРјРµРЅРѕРІР°С‚СЊ РѕС‚С‡РµС‚', enabled: true },
+                        { id: 'delete', label: 'РЈРґР°Р»РёС‚СЊ РѕС‚С‡РµС‚', enabled: true, danger: true },
                       ]).map((action) => (
                         <button
                           className={action.danger ? 'report-action-item danger' : action.enabled === false ? 'report-action-item disabled' : 'report-action-item'}
@@ -2148,31 +2440,31 @@ function App() {
         <div className="detail-notes">
           <div className="score-strip">
             <div>
-              <span>Оценка Alem</span>
+              <span>РћС†РµРЅРєР° Alem</span>
               <strong>{selectedReport.score}</strong>
-              <small>ХОРОШО</small>
+              <small>РҐРћР РћРЁРћ</small>
             </div>
             <div>
-              <span>Вовлечённость</span>
+              <span>Р’РѕРІР»РµС‡С‘РЅРЅРѕСЃС‚СЊ</span>
               <strong>93</strong>
-              <small>ХОРОШО</small>
+              <small>РҐРћР РћРЁРћ</small>
             </div>
             <div>
-              <span>Настроение</span>
+              <span>РќР°СЃС‚СЂРѕРµРЅРёРµ</span>
               <strong>85</strong>
-              <small>ХОРОШО</small>
+              <small>РҐРћР РћРЁРћ</small>
             </div>
           </div>
 
           <section className="report-main-panel">
             <div className="section-kicker">
               <Sparkles size={18} />
-              Сводка
+              РЎРІРѕРґРєР°
             </div>
-            <span className="edited-pill">Отредактировано</span>
-            <h3>{detailSummary[0]?.title || 'Команда согласовала новый сценарий входа и структуру AI отчёта'}</h3>
+            <span className="edited-pill">РћС‚СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРѕ</span>
+            <h3>{detailSummary[0]?.title || 'РљРѕРјР°РЅРґР° СЃРѕРіР»Р°СЃРѕРІР°Р»Р° РЅРѕРІС‹Р№ СЃС†РµРЅР°СЂРёР№ РІС…РѕРґР° Рё СЃС‚СЂСѓРєС‚СѓСЂСѓ AI РѕС‚С‡С‘С‚Р°'}</h3>
             <p>
-              {detailSummary[0]?.text || 'Встреча была посвящена настройке AlemLive и аналитического отчёта после созвона. Участники договорились, что пользователь должен создавать комнату и присоединяться по названию, а URL и token должны подтягиваться автоматически через backend. После встречи агент показывает резюме, задачи, транскрипт, метрики и главы.'}
+              {detailSummary[0]?.text || 'Р’СЃС‚СЂРµС‡Р° Р±С‹Р»Р° РїРѕСЃРІСЏС‰РµРЅР° РЅР°СЃС‚СЂРѕР№РєРµ AlemLive Рё Р°РЅР°Р»РёС‚РёС‡РµСЃРєРѕРіРѕ РѕС‚С‡С‘С‚Р° РїРѕСЃР»Рµ СЃРѕР·РІРѕРЅР°. РЈС‡Р°СЃС‚РЅРёРєРё РґРѕРіРѕРІРѕСЂРёР»РёСЃСЊ, С‡С‚Рѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РґРѕР»Р¶РµРЅ СЃРѕР·РґР°РІР°С‚СЊ РєРѕРјРЅР°С‚Сѓ Рё РїСЂРёСЃРѕРµРґРёРЅСЏС‚СЊСЃСЏ РїРѕ РЅР°Р·РІР°РЅРёСЋ, Р° URL Рё token РґРѕР»Р¶РЅС‹ РїРѕРґС‚СЏРіРёРІР°С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё С‡РµСЂРµР· backend. РџРѕСЃР»Рµ РІСЃС‚СЂРµС‡Рё Р°РіРµРЅС‚ РїРѕРєР°Р·С‹РІР°РµС‚ СЂРµР·СЋРјРµ, Р·Р°РґР°С‡Рё, С‚СЂР°РЅСЃРєСЂРёРїС‚, РјРµС‚СЂРёРєРё Рё РіР»Р°РІС‹.'}
             </p>
             {detailSummary.slice(1).map((section) => (
               <p key={section.title}>
@@ -2195,7 +2487,7 @@ function App() {
                   </span>
                   <div>
                     <h4>{item.task || item.title}</h4>
-                    <p>{item.owner} · {item.due}</p>
+                    <p>{item.owner} В· {item.due}</p>
                   </div>
                 </article>
               ))}
@@ -2211,9 +2503,9 @@ function App() {
           <div className="transcript-tools">
             <div className="transcript-search">
               <Search size={18} />
-              <span>Поиск по транскрипту: token, комната, отчёт</span>
+              <span>РџРѕРёСЃРє РїРѕ С‚СЂР°РЅСЃРєСЂРёРїС‚Сѓ: token, РєРѕРјРЅР°С‚Р°, РѕС‚С‡С‘С‚</span>
             </div>
-            <span className="report-badge muted">{detailTranscriptLines.length} моментов</span>
+            <span className="report-badge muted">{detailTranscriptLines.length} РјРѕРјРµРЅС‚РѕРІ</span>
           </div>
           <div className="transcript-list">
             {detailTranscriptLines.map((line) => (
@@ -2238,19 +2530,19 @@ function App() {
               <TrendingUp size={20} />
               <span>Sentiment</span>
               <strong>82%</strong>
-              <p>Позитивная динамика</p>
+              <p>РџРѕР·РёС‚РёРІРЅР°СЏ РґРёРЅР°РјРёРєР°</p>
             </div>
             <div className="metric-card">
               <Zap size={20} />
               <span>Engagement</span>
               <strong>74%</strong>
-              <p>Высокое участие</p>
+              <p>Р’С‹СЃРѕРєРѕРµ СѓС‡Р°СЃС‚РёРµ</p>
             </div>
             <div className="metric-card">
               <Clock3 size={20} />
               <span>Interruptions</span>
               <strong>3</strong>
-              <p>Низкий уровень перебиваний</p>
+              <p>РќРёР·РєРёР№ СѓСЂРѕРІРµРЅСЊ РїРµСЂРµР±РёРІР°РЅРёР№</p>
             </div>
           </div>
           <div className="speaker-table">
@@ -2258,9 +2550,9 @@ function App() {
               <article className="speaker-row" key={speaker.name}>
                 <div>
                   <strong>{speaker.name}</strong>
-                  <span>{speaker.sentiment} · {speaker.pace}</span>
+                  <span>{speaker.sentiment} В· {speaker.pace}</span>
                 </div>
-                <div className="talk-bar" aria-label={`${speaker.name} говорил ${speaker.talk || speaker.talkTime}% времени`}>
+                <div className="talk-bar" aria-label={`${speaker.name} РіРѕРІРѕСЂРёР» ${speaker.talk || speaker.talkTime}% РІСЂРµРјРµРЅРё`}>
                   <span style={{ width: `${speaker.talk || speaker.talkTime}%` }} />
                 </div>
                 <b>{speaker.talk || speaker.talkTime}%</b>
@@ -2331,7 +2623,7 @@ function App() {
                 </span>
                 <span>
                   <Users size={17} />
-                  {selectedReport.participantNames || 'Alison Barker, Мади, Айдана, +1 больше'}
+                  {selectedReport.participantNames || 'Alison Barker, РњР°РґРё, РђР№РґР°РЅР°, +1 Р±РѕР»СЊС€Рµ'}
                 </span>
               </div>
             </div>
@@ -2347,7 +2639,7 @@ function App() {
                 aria-expanded={isDownloadMenuOpen}
               >
                 <Download size={18} />
-                Скачать
+                РЎРєР°С‡Р°С‚СЊ
               </button>
               {isDownloadMenuOpen && (
                 <div className="download-menu" role="menu" onClick={keepDownloadMenuOpen}>
@@ -2361,11 +2653,11 @@ function App() {
             </div>
             <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'send')}>
               <Send size={18} />
-              Отправить в...
+              РћС‚РїСЂР°РІРёС‚СЊ РІ...
             </button>
             <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'share')}>
               <Share2 size={18} />
-              Поделиться
+              РџРѕРґРµР»РёС‚СЊСЃСЏ
             </button>
           </div>
         </div>
@@ -2395,7 +2687,7 @@ function App() {
             </div>
 
             <div className="detail-tabs">
-              <div className="detail-tab-list" role="tablist" aria-label="Разделы отчёта">
+              <div className="detail-tab-list" role="tablist" aria-label="Р Р°Р·РґРµР»С‹ РѕС‚С‡С‘С‚Р°">
                 {reportTabs.map(({ id, label, icon: Icon }) => (
                   <button
                     className={activeReportTab === id ? 'detail-tab active' : 'detail-tab'}
@@ -2415,7 +2707,7 @@ function App() {
               </div>
 
               <div className="detail-tab-tools">
-                <button className="detail-tool-button" type="button" onClick={() => runReportLookup('search')} aria-label="Поиск по отчёту">
+                <button className="detail-tool-button" type="button" onClick={() => runReportLookup('search')} aria-label="РџРѕРёСЃРє РїРѕ РѕС‚С‡С‘С‚Сѓ">
                   <Search size={21} />
                 </button>
                 <button
@@ -2423,7 +2715,7 @@ function App() {
                   type="button"
                   onClick={copyReportNotes}
                   disabled={activeReportTab !== 'notes'}
-                  aria-label="Копировать заметки"
+                  aria-label="РљРѕРїРёСЂРѕРІР°С‚СЊ Р·Р°РјРµС‚РєРё"
                 >
                   <Copy size={21} />
                 </button>
@@ -2432,7 +2724,7 @@ function App() {
                     className={isDetailActionsOpen ? 'detail-tool-button active' : 'detail-tool-button'}
                     type="button"
                     onClick={() => setIsDetailActionsOpen((current) => !current)}
-                    aria-label="Дополнительные действия"
+                    aria-label="Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ РґРµР№СЃС‚РІРёСЏ"
                     aria-expanded={isDetailActionsOpen}
                   >
                     <MoreHorizontal size={22} />
@@ -2441,7 +2733,7 @@ function App() {
                     <div className="detail-more-menu">
                       <button className="detail-more-item" type="button" onClick={editReportNotes}>
                         <Edit3 size={18} />
-                        Редактировать заметки
+                        Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ Р·Р°РјРµС‚РєРё
                       </button>
                     </div>
                   )}
@@ -2501,7 +2793,7 @@ function App() {
                 ref={copilotInputRef}
                 value={copilotInput}
                 onChange={(event) => setCopilotInput(event.target.value)}
-                placeholder="Спросите Alem о чём угодно..."
+                placeholder="РЎРїСЂРѕСЃРёС‚Рµ Alem Рѕ С‡С‘Рј СѓРіРѕРґРЅРѕ..."
               />
               <button className="ask-send" type="submit" aria-label="Ask Alem" disabled={isCopilotSending}>
                 <Send size={18} />
@@ -2513,6 +2805,31 @@ function App() {
         </div>
       </section>
     )
+  }
+
+  function renderAuthGate() {
+    return (
+      <main className="workspace-shell auth-shell">
+        <section className="auth-panel">
+          <span className="brand-mark">
+            <Lock size={22} />
+          </span>
+          <h1>AlemLive</h1>
+          <p>{authReady ? 'Р’РѕР№РґРёС‚Рµ С‡РµСЂРµР· Keycloak, С‡С‚РѕР±С‹ РїСЂРѕРґРѕР»Р¶РёС‚СЊ.' : 'РџСЂРѕРІРµСЂСЏРµРј Р°РІС‚РѕСЂРёР·Р°С†РёСЋ...'}</p>
+          {authError && <p className="auth-error">{authError}</p>}
+          {authReady && (
+            <button className="primary-action" type="button" onClick={loginWithKeycloak}>
+              <Lock size={18} />
+              Login with Keycloak
+            </button>
+          )}
+        </section>
+      </main>
+    )
+  }
+
+  if (!authReady || (isAuthEnabled && !isAuthenticated)) {
+    return renderAuthGate()
   }
 
   return (

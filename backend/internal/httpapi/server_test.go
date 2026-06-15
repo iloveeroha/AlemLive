@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -80,6 +81,100 @@ func TestMeetingAnalysis(t *testing.T) {
 	}
 	if len(payload.Chapters) == 0 || len(payload.Highlights) == 0 {
 		t.Fatalf("timeline payload is incomplete: %#v", payload)
+	}
+}
+
+func TestMeetingTranscription(t *testing.T) {
+	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/audio/transcriptions":
+			if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+				t.Fatalf("unexpected authorization header: %s", got)
+			}
+			if err := r.ParseMultipartForm(1024 * 1024); err != nil {
+				t.Fatalf("parse multipart: %v", err)
+			}
+			if r.FormValue("model") != "whisper-1" {
+				t.Fatalf("unexpected model: %s", r.FormValue("model"))
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"text": "We discussed LiveKit recording and automatic reports.",
+				"segments": []map[string]any{
+					{"id": 1, "start": 0, "end": 4.5, "text": "We discussed LiveKit recording."},
+					{"id": 2, "start": 4.5, "end": 8.5, "text": "Automatic reports should be generated."},
+				},
+			})
+		case "/v1/chat/completions":
+			writeJSON(w, http.StatusOK, map[string]any{
+				"choices": []map[string]any{
+					{"message": map[string]string{"role": "assistant", "content": `{
+						"roomName":"alem-meeting",
+						"generatedAt":"2026-01-01T00:00:00Z",
+						"summary":[{"title":"Recording","text":"Recording and reports were discussed."}],
+						"actionItems":[{"task":"Connect recorder","owner":"Backend","due":"Today","priority":"High"}],
+						"transcript":[{"time":"00:00","speaker":"Speaker","text":"We discussed LiveKit recording."}],
+						"insights":{
+							"sentiment":"Constructive",
+							"talkTime":[{"label":"Speaker","value":100,"unit":"%"}],
+							"speechRate":[{"label":"Average","value":120,"unit":"wpm"}],
+							"interruptions":[{"label":"Total","value":0,"unit":"times"}],
+							"engagement":[{"label":"Action items","value":1,"unit":"items"}]
+						},
+						"highlights":[{"time":"00:00","title":"Recording","text":"Recording is needed.","type":"Action"}],
+						"chapters":[{"start":"00:00","end":"00:08","title":"Recording","text":"Recording and reports."}]
+					}`}},
+				},
+			})
+		default:
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+	}))
+	defer llmServer.Close()
+
+	handler := NewServer(config.Config{
+		TokenTTL:   time.Hour,
+		LLMBaseURL: llmServer.URL,
+		LLMAPIKey:  "test-key",
+		LLMModel:   "test-chat-model",
+		STTModel:   "whisper-1",
+		LLMTimeout: time.Second,
+	})
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("roomName", "alem-meeting"); err != nil {
+		t.Fatalf("write roomName: %v", err)
+	}
+	file, err := writer.CreateFormFile("file", "meeting.webm")
+	if err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+	if _, err := file.Write([]byte("fake audio")); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/meetings/transcribe", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload meetingTranscriptionResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.TranscriptText == "" || len(payload.Transcript) != 2 {
+		t.Fatalf("unexpected transcript payload: %#v", payload)
+	}
+	if len(payload.Analysis.Summary) == 0 || len(payload.Analysis.ActionItems) == 0 {
+		t.Fatalf("unexpected analysis payload: %#v", payload.Analysis)
 	}
 }
 

@@ -122,14 +122,15 @@ func (s *Server) reports(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reports, total, limit, offset := filterReports(demoReports(), r, s.clock())
+	allReports := s.allReports()
+	reports, total, limit, offset := filterReports(allReports, r, s.clock())
 	writeJSON(w, http.StatusOK, reportsResponse{
 		Reports: reports,
 		Items:   reports,
 		Total:   total,
 		Limit:   limit,
 		Offset:  offset,
-		Filters: buildReportFilters(demoReports()),
+		Filters: buildReportFilters(allReports),
 	})
 }
 
@@ -139,12 +140,17 @@ func (s *Server) reportFilters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, buildReportFilters(demoReports()))
+	writeJSON(w, http.StatusOK, buildReportFilters(s.allReports()))
 }
 
 func (s *Server) reportUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		s.reportRecordingUpload(w, r)
 		return
 	}
 
@@ -196,11 +202,192 @@ func (s *Server) reportUpload(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:        now.Format(time.RFC3339),
 		OccurredAt:       now,
 	}
+	s.storeReport(reportDetailResponse{
+		Report: report,
+		Summary: []summarySection{
+			{Title: "Processing", Text: "Report accepted for AI processing."},
+		},
+		ActionItems:     []reportActionItem{},
+		TranscriptLines: []reportTranscript{},
+		Transcript:      []reportTranscript{},
+		SpeakerStats:    []speakerStat{},
+		Highlights:      []highlight{},
+		Chapters:        []chapter{},
+		AIQuestions: []string{
+			"What is this meeting about?",
+			"What action items were found?",
+		},
+	})
 
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"report":  report,
 		"message": "Report accepted for AI processing",
 	})
+}
+
+func (s *Server) reportRecordingUpload(w http.ResponseWriter, r *http.Request) {
+	if s.stt == nil || !s.stt.Configured() {
+		writeError(w, http.StatusServiceUnavailable, "Speech-to-text backend is not configured")
+		return
+	}
+
+	roomName, transcription, err := s.readTranscriptionInput(w, r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	transcriptText := truncateRunes(strings.TrimSpace(transcription.Text), maxTranscriptRunes)
+	lines := transcriptLinesFromTranscription(transcription)
+	if len(lines) == 0 {
+		lines = transcriptLinesFromText(transcriptText)
+	}
+
+	analysis, err := s.generateMeetingAnalysisFromTranscript(r.Context(), roomName, transcriptText, lines)
+	if err != nil {
+		analysis = fallbackAnalysisFromTranscript(roomName, transcriptText, lines, s.clock())
+	}
+
+	now := s.clock().UTC()
+	owner := strings.TrimSpace(firstNonEmpty(r.FormValue("owner"), "Team AI"))
+	source := strings.TrimSpace(firstNonEmpty(r.FormValue("source"), "Upload"))
+	folder := strings.TrimSpace(firstNonEmpty(r.FormValue("folder"), "Processed"))
+	title := strings.TrimSpace(firstNonEmpty(r.FormValue("title"), roomName, "Uploaded meeting"))
+	initial := strings.ToUpper(firstRune(owner))
+	if initial == "" {
+		initial = "A"
+	}
+
+	report := reportRow{
+		ID:               "uploaded-" + now.Format("20060102150405"),
+		Title:            title,
+		Source:           source,
+		Type:             reportTypeFromSource(source),
+		Date:             now.Format("02.01.2006"),
+		Time:             now.Format("15:04"),
+		Participants:     parsePositiveInt(r.FormValue("participants"), 0),
+		ParticipantNames: firstNonEmpty(r.FormValue("participantNames"), owner),
+		Score:            90,
+		Folder:           folder,
+		Owner:            owner,
+		OwnerInitial:     initial,
+		ThumbnailTone:    "mint",
+		Week:             "Uploads",
+		Duration:         formatTranscriptTime(float64(max(30, len(lines)*30))),
+		Status:           "ready",
+		ProcessingState:  "ready",
+		CreatedAt:        now.Format(time.RFC3339),
+		OccurredAt:       now,
+	}
+
+	detail := reportDetailFromAnalysis(report, analysis)
+	s.storeReport(detail)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"report":         report,
+		"detail":         detail,
+		"analysis":       analysis,
+		"transcriptText": transcriptText,
+		"message":        "Recording transcribed and analyzed",
+	})
+}
+
+func reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) reportDetailResponse {
+	actionItems := make([]reportActionItem, 0, len(analysis.ActionItems))
+	for i, item := range analysis.ActionItems {
+		id := fmt.Sprintf("action-%d", i+1)
+		actionItems = append(actionItems, reportActionItem{
+			ID:       id,
+			Title:    item.Task,
+			Task:     item.Task,
+			Owner:    item.Owner,
+			Due:      item.Due,
+			Priority: item.Priority,
+			Status:   "open",
+		})
+	}
+
+	transcript := make([]reportTranscript, 0, len(analysis.Transcript))
+	for i, line := range analysis.Transcript {
+		transcript = append(transcript, reportTranscript{
+			ID:      fmt.Sprintf("t%d", i+1),
+			Time:    line.Time,
+			Speaker: line.Speaker,
+			Text:    line.Text,
+		})
+	}
+
+	speakerStats := make([]speakerStat, 0, len(analysis.Insights.TalkTime))
+	for _, metric := range analysis.Insights.TalkTime {
+		speakerStats = append(speakerStats, speakerStat{
+			Name:         metric.Label,
+			Role:         "Speaker",
+			TalkTime:     metric.Value,
+			TalkTimeText: fmt.Sprintf("%d%s", metric.Value, metric.Unit),
+			Talk:         metric.Value,
+			Sentiment:    analysis.Insights.Sentiment,
+			Pace:         "",
+		})
+	}
+
+	return reportDetailResponse{
+		Report:          report,
+		Summary:         analysis.Summary,
+		ActionItems:     actionItems,
+		TranscriptLines: transcript,
+		Transcript:      transcript,
+		SpeakerStats:    speakerStats,
+		Highlights:      analysis.Highlights,
+		Chapters:        analysis.Chapters,
+		AIQuestions: []string{
+			"What were the key decisions?",
+			"What action items appeared after the meeting?",
+			"Summarize this meeting in Russian.",
+		},
+	}
+}
+
+func (s *Server) storeReport(detail reportDetailResponse) {
+	if detail.Report.ID == "" {
+		return
+	}
+	s.reportsMu.Lock()
+	defer s.reportsMu.Unlock()
+
+	replaced := false
+	for i, row := range s.generatedReports {
+		if row.ID == detail.Report.ID {
+			s.generatedReports[i] = detail.Report
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		s.generatedReports = append([]reportRow{detail.Report}, s.generatedReports...)
+	}
+	s.generatedReportStore[detail.Report.ID] = detail
+}
+
+func (s *Server) allReports() []reportRow {
+	rows := demoReports()
+	s.reportsMu.Lock()
+	defer s.reportsMu.Unlock()
+	if len(s.generatedReports) == 0 {
+		return rows
+	}
+	out := make([]reportRow, 0, len(s.generatedReports)+len(rows))
+	out = append(out, s.generatedReports...)
+	out = append(out, rows...)
+	return out
+}
+
+func (s *Server) reportDetailByID(id string) (reportDetailResponse, bool) {
+	s.reportsMu.Lock()
+	if detail, ok := s.generatedReportStore[id]; ok {
+		s.reportsMu.Unlock()
+		return detail, true
+	}
+	s.reportsMu.Unlock()
+	return demoReportDetail(id, s.clock())
 }
 
 func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
@@ -221,7 +408,7 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 		subAction = parts[2]
 	}
 
-	detail, ok := demoReportDetail(id, s.clock())
+	detail, ok := s.reportDetailByID(id)
 	if !ok {
 		writeError(w, http.StatusNotFound, "Report not found")
 		return

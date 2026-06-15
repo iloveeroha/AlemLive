@@ -10,6 +10,51 @@
   color: #18233a;
 }
 
+.auth-shell {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-panel {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+  width: min(460px, 100%);
+  padding: 34px;
+  border: 1px solid #dfe7f2;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 22px 60px rgba(75, 91, 120, 0.14);
+  text-align: center;
+}
+
+.auth-panel h1 {
+  margin: 0;
+  color: #10192b;
+  font-size: 34px;
+  line-height: 1.1;
+}
+
+.auth-panel p {
+  margin: 0;
+  color: #65748d;
+  font-weight: 750;
+}
+
+.auth-error {
+  width: 100%;
+  padding: 12px;
+  border-radius: 14px;
+  color: #b4232f;
+  background: #fff1f2;
+}
+
+.compact-auth-action {
+  min-height: 42px;
+  padding-inline: 14px;
+}
+
 button,
 input,
 textarea {

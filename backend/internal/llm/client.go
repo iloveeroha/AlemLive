@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"strings"
 	"time"
 )
@@ -38,6 +40,26 @@ type ChatOptions struct {
 	MaxTokens   int
 }
 
+type TranscriptionOptions struct {
+	Model          string
+	Language       string
+	Prompt         string
+	ResponseFormat string
+	Temperature    float64
+}
+
+type Transcription struct {
+	Text     string                 `json:"text"`
+	Segments []TranscriptionSegment `json:"segments,omitempty"`
+}
+
+type TranscriptionSegment struct {
+	ID    int     `json:"id,omitempty"`
+	Start float64 `json:"start"`
+	End   float64 `json:"end"`
+	Text  string  `json:"text"`
+}
+
 type APIError struct {
 	StatusCode int
 	Message    string
@@ -61,6 +83,20 @@ type chatCompletionResponse struct {
 	Choices []struct {
 		Message Message `json:"message"`
 	} `json:"choices"`
+	Error *struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+	} `json:"error,omitempty"`
+}
+
+type transcriptionResponse struct {
+	Text     string `json:"text"`
+	Segments []struct {
+		ID    int     `json:"id,omitempty"`
+		Start float64 `json:"start"`
+		End   float64 `json:"end"`
+		Text  string  `json:"text"`
+	} `json:"segments,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
 		Type    string `json:"type"`
@@ -126,6 +162,123 @@ func (c *Client) Chat(ctx context.Context, messages []Message, opts ChatOptions)
 	return "", lastErr
 }
 
+func (c *Client) Transcribe(ctx context.Context, fileName, contentType string, data []byte, opts TranscriptionOptions) (Transcription, error) {
+	if !c.Configured() {
+		return Transcription{}, ErrNotConfigured
+	}
+	if len(data) == 0 {
+		return Transcription{}, errors.New("audio data is required")
+	}
+	if strings.TrimSpace(fileName) == "" {
+		fileName = "recording.webm"
+	}
+	if strings.TrimSpace(contentType) == "" {
+		contentType = "application/octet-stream"
+	}
+
+	model := strings.TrimSpace(opts.Model)
+	if model == "" {
+		model = c.Model
+	}
+	responseFormat := strings.TrimSpace(opts.ResponseFormat)
+	if responseFormat == "" {
+		responseFormat = "verbose_json"
+	}
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	header := make(textproto.MIMEHeader)
+	header.Set("Content-Disposition", fmt.Sprintf(`form-data; name="file"; filename="%s"`, escapeMultipartFileName(fileName)))
+	header.Set("Content-Type", contentType)
+	part, err := writer.CreatePart(header)
+	if err != nil {
+		return Transcription{}, fmt.Errorf("create multipart file: %w", err)
+	}
+	if _, err := part.Write(data); err != nil {
+		return Transcription{}, fmt.Errorf("write multipart file: %w", err)
+	}
+	if err := writer.WriteField("model", model); err != nil {
+		return Transcription{}, fmt.Errorf("write model field: %w", err)
+	}
+	if opts.Language != "" {
+		if err := writer.WriteField("language", opts.Language); err != nil {
+			return Transcription{}, fmt.Errorf("write language field: %w", err)
+		}
+	}
+	if opts.Prompt != "" {
+		if err := writer.WriteField("prompt", opts.Prompt); err != nil {
+			return Transcription{}, fmt.Errorf("write prompt field: %w", err)
+		}
+	}
+	if err := writer.WriteField("response_format", responseFormat); err != nil {
+		return Transcription{}, fmt.Errorf("write response_format field: %w", err)
+	}
+	if opts.Temperature > 0 {
+		if err := writer.WriteField("temperature", fmt.Sprintf("%.2f", opts.Temperature)); err != nil {
+			return Transcription{}, fmt.Errorf("write temperature field: %w", err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		return Transcription{}, fmt.Errorf("close multipart writer: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v1/audio/transcriptions", &body)
+	if err != nil {
+		return Transcription{}, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+c.APIKey)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return Transcription{}, fmt.Errorf("call transcription: %w", err)
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes*16))
+	if err != nil {
+		return Transcription{}, fmt.Errorf("read response: %w", err)
+	}
+
+	var parsed transcriptionResponse
+	if len(raw) > 0 && strings.Contains(resp.Header.Get("Content-Type"), "application/json") {
+		if err := json.Unmarshal(raw, &parsed); err != nil && resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return Transcription{}, fmt.Errorf("decode response: %w", err)
+		}
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return Transcription{}, apiErrorFromTranscriptionResponse(resp.StatusCode, parsed, raw)
+	}
+
+	text := strings.TrimSpace(parsed.Text)
+	if text == "" {
+		text = strings.TrimSpace(string(raw))
+	}
+	if text == "" {
+		return Transcription{}, errors.New("transcription response is empty")
+	}
+
+	result := Transcription{Text: text}
+	for _, segment := range parsed.Segments {
+		if strings.TrimSpace(segment.Text) == "" {
+			continue
+		}
+		result.Segments = append(result.Segments, TranscriptionSegment{
+			ID:    segment.ID,
+			Start: segment.Start,
+			End:   segment.End,
+			Text:  strings.TrimSpace(segment.Text),
+		})
+	}
+
+	return result, nil
+}
+
+func escapeMultipartFileName(fileName string) string {
+	return strings.NewReplacer("\\", "\\\\", `"`, "\\\"").Replace(fileName)
+}
+
 func (c *Client) doChat(ctx context.Context, body []byte) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
@@ -169,6 +322,17 @@ func (c *Client) doChat(ctx context.Context, body []byte) (string, error) {
 	}
 
 	return answer, nil
+}
+
+func apiErrorFromTranscriptionResponse(status int, parsed transcriptionResponse, raw []byte) error {
+	if parsed.Error != nil && strings.TrimSpace(parsed.Error.Message) != "" {
+		return &APIError{StatusCode: status, Message: strings.TrimSpace(parsed.Error.Message)}
+	}
+	message := strings.TrimSpace(string(raw))
+	if message == "" {
+		message = http.StatusText(status)
+	}
+	return &APIError{StatusCode: status, Message: message}
 }
 
 func normalizeOptions(opts ChatOptions) ChatOptions {

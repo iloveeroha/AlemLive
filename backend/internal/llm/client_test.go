@@ -39,6 +39,63 @@ func TestChat(t *testing.T) {
 	}
 }
 
+func TestTranscribe(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/audio/transcriptions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Fatalf("unexpected authorization header: %s", got)
+		}
+
+		reader, err := r.MultipartReader()
+		if err != nil {
+			t.Fatalf("multipart reader: %v", err)
+		}
+		fields := map[string]string{}
+		hasFile := false
+		for {
+			part, err := reader.NextPart()
+			if err != nil {
+				break
+			}
+			if part.FormName() == "file" {
+				hasFile = true
+				continue
+			}
+			data := make([]byte, 128)
+			n, _ := part.Read(data)
+			fields[part.FormName()] = string(data[:n])
+		}
+		if !hasFile {
+			t.Fatal("expected file part")
+		}
+		if fields["model"] != "whisper-1" || fields["language"] != "ru" {
+			t.Fatalf("unexpected fields: %#v", fields)
+		}
+
+		writeJSON(t, w, http.StatusOK, map[string]any{
+			"text": "hello meeting",
+			"segments": []map[string]any{
+				{"id": 1, "start": 0, "end": 1.5, "text": "hello meeting"},
+			},
+		})
+	}))
+	defer server.Close()
+
+	client := New(server.URL, "test-key", "test-model", time.Second)
+	result, err := client.Transcribe(context.Background(), "meeting.webm", "audio/webm", []byte("audio"), TranscriptionOptions{
+		Model:    "whisper-1",
+		Language: "ru",
+	})
+	if err != nil {
+		t.Fatalf("transcribe failed: %v", err)
+	}
+	if result.Text != "hello meeting" || len(result.Segments) != 1 {
+		t.Fatalf("unexpected transcription: %#v", result)
+	}
+}
+
 func TestChatRetriesTemporaryAPIError(t *testing.T) {
 	attempts := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

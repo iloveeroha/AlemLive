@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -14,10 +15,17 @@ import (
 )
 
 type Server struct {
-	cfg   config.Config
-	clock func() time.Time
-	ai    *llm.Client
-	mux   *http.ServeMux
+	cfg    config.Config
+	clock  func() time.Time
+	ai     *llm.Client
+	stt    *llm.Client
+	egress *livekit.EgressManager
+	mux    *http.ServeMux
+	jwks   jwksCache
+
+	reportsMu            sync.Mutex
+	generatedReports     []reportRow
+	generatedReportStore map[string]reportDetailResponse
 }
 
 type tokenRequest struct {
@@ -97,16 +105,25 @@ type chapter struct {
 }
 
 func NewServer(cfg config.Config) http.Handler {
+	sttBaseURL := firstNonEmpty(cfg.STTBaseURL, cfg.LLMBaseURL)
+	sttAPIKey := firstNonEmpty(cfg.STTAPIKey, cfg.LLMAPIKey)
+	sttModel := firstNonEmpty(cfg.STTModel, "whisper-1")
 	server := &Server{
-		cfg:   cfg,
-		clock: time.Now,
-		ai:    llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, cfg.LLMTimeout),
-		mux:   http.NewServeMux(),
+		cfg:                  cfg,
+		clock:                time.Now,
+		ai:                   llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, cfg.LLMTimeout),
+		stt:                  llm.New(sttBaseURL, sttAPIKey, sttModel, cfg.LLMTimeout),
+		egress:               livekit.NewEgressManager(egressConfigFromAppConfig(cfg)),
+		mux:                  http.NewServeMux(),
+		generatedReportStore: map[string]reportDetailResponse{},
 	}
+	server.cfg.STTBaseURL = sttBaseURL
+	server.cfg.STTAPIKey = sttAPIKey
+	server.cfg.STTModel = sttModel
 
 	server.routes()
 
-	return server.withCORS(server.mux)
+	return server.withCORS(server.withAuth(server.mux))
 }
 
 const askAIURL = "https://alem-workspace.gov.kz/web/alem-rag"
@@ -114,8 +131,12 @@ const askAIURL = "https://alem-workspace.gov.kz/web/alem-rag"
 func (s *Server) routes() {
 	s.mux.HandleFunc("/healthz", s.health)
 	s.mux.HandleFunc("/api/config", s.config)
+	s.mux.HandleFunc("/api/auth/config", s.authConfig)
+	s.mux.HandleFunc("/api/auth/token", s.authToken)
+	s.mux.HandleFunc("/api/livekit/webhook", s.liveKitWebhook)
 	s.mux.HandleFunc("/api/livekit/token", s.createLiveKitToken)
 	s.mux.HandleFunc("/api/meetings/analysis", s.meetingAnalysis)
+	s.mux.HandleFunc("/api/meetings/transcribe", s.meetingTranscription)
 	s.mux.HandleFunc("/api/meetings/events", s.meetingEvent)
 	s.mux.HandleFunc("/api/rooms/", s.roomAction)
 	s.mux.HandleFunc("/api/devices", s.devicePreference)
@@ -146,20 +167,65 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{
-		"livekitUrl":            s.cfg.LiveKitURL,
-		"tokenEndpoint":         "/api/livekit/token",
-		"aiChatEndpoint":        "/api/ai/chat",
-		"aiStatusEndpoint":      "/api/ai/status",
-		"analysisEndpoint":      "/api/meetings/analysis",
-		"meetingEventsEndpoint": "/api/meetings/events",
-		"roomsEndpoint":         "/api/rooms",
-		"devicesEndpoint":       "/api/devices",
-		"notificationsEndpoint": "/api/notifications",
-		"profileEndpoint":       "/api/profile",
-		"localesEndpoint":       "/api/locales",
-		"reportsEndpoint":       "/api/reports",
-		"reportFiltersEndpoint": "/api/reports/filters",
+	writeJSON(w, http.StatusOK, map[string]any{
+		"livekitUrl":             s.cfg.LiveKitURL,
+		"tokenEndpoint":          "/api/livekit/token",
+		"livekitWebhookEndpoint": "/api/livekit/webhook",
+		"egressEnabled":          s.egress != nil && s.egress.Configured(),
+		"aiChatEndpoint":         "/api/ai/chat",
+		"aiStatusEndpoint":       "/api/ai/status",
+		"analysisEndpoint":       "/api/meetings/analysis",
+		"speechToTextEndpoint":   "/api/meetings/transcribe",
+		"meetingEventsEndpoint":  "/api/meetings/events",
+		"roomsEndpoint":          "/api/rooms",
+		"devicesEndpoint":        "/api/devices",
+		"notificationsEndpoint":  "/api/notifications",
+		"profileEndpoint":        "/api/profile",
+		"localesEndpoint":        "/api/locales",
+		"reportsEndpoint":        "/api/reports",
+		"reportFiltersEndpoint":  "/api/reports/filters",
+		"llmModel":               s.cfg.LLMModel,
+		"sttModel":               s.cfg.STTModel,
+	})
+}
+
+func egressConfigFromAppConfig(cfg config.Config) livekit.EgressConfig {
+	return livekit.EgressConfig{
+		Enabled:       cfg.LiveKitEgressEnabled,
+		ServerURL:     cfg.LiveKitURL,
+		APIKey:        cfg.LiveKitAPIKey,
+		APISecret:     cfg.LiveKitSecret,
+		AudioOnly:     cfg.LiveKitEgressAudioOnly,
+		Layout:        cfg.LiveKitEgressLayout,
+		FilePrefix:    cfg.LiveKitEgressFilePrefix,
+		PublicBaseURL: cfg.LiveKitEgressPublicBaseURL,
+		WebhookURL:    cfg.LiveKitEgressWebhookURL,
+		S3: livekit.S3Config{
+			AccessKey:      cfg.LiveKitS3AccessKey,
+			Secret:         cfg.LiveKitS3Secret,
+			SessionToken:   cfg.LiveKitS3SessionToken,
+			Region:         cfg.LiveKitS3Region,
+			Endpoint:       cfg.LiveKitS3Endpoint,
+			Bucket:         cfg.LiveKitS3Bucket,
+			ForcePathStyle: cfg.LiveKitS3ForcePathStyle,
+		},
+	}
+}
+
+func (s *Server) authConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+
+	issuer := s.cfg.KeycloakIssuerURL
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled":               s.authEnabled(),
+		"issuerUrl":             issuer,
+		"clientId":              s.cfg.KeycloakClientID,
+		"authorizationEndpoint": authEndpoint(issuer, "auth"),
+		"tokenEndpoint":         "/api/auth/token",
+		"logoutEndpoint":        authEndpoint(issuer, "logout"),
 	})
 }
 
@@ -356,7 +422,7 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 			}
 			w.Header().Set("Vary", "Origin")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		}
 
 		if r.Method == http.MethodOptions {
@@ -391,6 +457,13 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+func authEndpoint(issuerURL, action string) string {
+	if issuerURL == "" {
+		return ""
+	}
+	return strings.TrimRight(issuerURL, "/") + "/protocol/openid-connect/" + action
 }
 
 func methodNotAllowed(w http.ResponseWriter, allowed string) {

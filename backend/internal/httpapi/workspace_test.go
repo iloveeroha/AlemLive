@@ -26,6 +26,42 @@ func TestWorkspaceUtilityEndpoints(t *testing.T) {
 	}
 }
 
+func TestAuthConfigEndpoint(t *testing.T) {
+	handler := NewServer(config.Config{
+		TokenTTL:          time.Hour,
+		KeycloakIssuerURL: "https://keycloak.example/realms/alem",
+		KeycloakClientID:  "alemlive",
+	})
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/auth/config", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected auth config status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode auth config: %v", err)
+	}
+	if payload["enabled"] != true || payload["clientId"] != "alemlive" {
+		t.Fatalf("unexpected auth config: %#v", payload)
+	}
+}
+
+func TestKeycloakEnabledRequiresBearerToken(t *testing.T) {
+	handler := NewServer(config.Config{
+		TokenTTL:          time.Hour,
+		KeycloakIssuerURL: "https://keycloak.example/realms/alem",
+		KeycloakClientID:  "alemlive",
+	})
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/profile", nil))
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
 func TestRoomActions(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
 
