@@ -26,6 +26,8 @@ type Server struct {
 	reportsMu            sync.Mutex
 	generatedReports     []reportRow
 	generatedReportStore map[string]reportDetailResponse
+	activeMeetings       map[string]meetingSession
+	latestRoomReports    map[string]string
 }
 
 type tokenRequest struct {
@@ -116,10 +118,13 @@ func NewServer(cfg config.Config) http.Handler {
 		egress:               livekit.NewEgressManager(egressConfigFromAppConfig(cfg)),
 		mux:                  http.NewServeMux(),
 		generatedReportStore: map[string]reportDetailResponse{},
+		activeMeetings:       map[string]meetingSession{},
+		latestRoomReports:    map[string]string{},
 	}
 	server.cfg.STTBaseURL = sttBaseURL
 	server.cfg.STTAPIKey = sttAPIKey
 	server.cfg.STTModel = sttModel
+	server.loadReports()
 
 	server.routes()
 

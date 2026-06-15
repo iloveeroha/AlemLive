@@ -34,6 +34,7 @@ import {
   Minimize2,
   MoreHorizontal,
   PanelRight,
+  Pause,
   Play,
   Radio,
   RefreshCw,
@@ -48,6 +49,7 @@ import {
   Users,
   Video,
   Volume2,
+  VolumeX,
   Zap,
 } from 'lucide-react'
 import { LiveKitRoom, VideoConference, useChat, useLocalParticipant, useParticipants } from '@livekit/components-react'
@@ -57,183 +59,183 @@ import './App.css'
 
 const navItems = [
   { id: 'meeting', label: 'AlemLive', icon: Grid2X2 },
-  { id: 'reports', label: 'РћС‚С‡С‘С‚С‹', icon: FileText },
+  { id: 'reports', label: 'Отчёты', icon: FileText },
 ]
 
 const reportTabs = [
-  { id: 'notes', label: 'Р—Р°РјРµС‚РєРё', icon: FileText },
-  { id: 'transcript', label: 'РўСЂР°РЅСЃРєСЂРёРїС‚', icon: MessageSquareText },
-  { id: 'deepDive', label: 'Р“Р»СѓР±РѕРєРѕРµ РїРѕРіСЂСѓР¶РµРЅРёРµ', icon: BarChart3 },
-  { id: 'highlights', label: 'РћСЃРЅРѕРІРЅС‹Рµ РјРѕРјРµРЅС‚С‹', icon: Highlighter },
-  { id: 'chapters', label: 'Р“Р»Р°РІС‹', icon: ListChecks },
+  { id: 'notes', label: 'Заметки', icon: FileText },
+  { id: 'transcript', label: 'Транскрипт', icon: MessageSquareText },
+  { id: 'deepDive', label: 'Глубокое погружение', icon: BarChart3 },
+  { id: 'highlights', label: 'Основные моменты', icon: Highlighter },
+  { id: 'chapters', label: 'Главы', icon: ListChecks },
 ]
 
 const reportDownloadOptions = [
-  { id: 'summary', label: 'РС‚РѕРі РІСЃС‚СЂРµС‡Рё (.txt)', extension: 'txt' },
-  { id: 'transcript', label: 'РЎС‚РµРЅРѕРіСЂР°РјРјР° РІСЃС‚СЂРµС‡Рё (.txt)', extension: 'txt' },
-  { id: 'trailer', label: 'РўСЂРµР№Р»РµСЂ РІСЃС‚СЂРµС‡Рё (.mp4)', extension: 'mp4', pending: true },
-  { id: 'highlights', label: 'РћСЃРЅРѕРІРЅС‹Рµ РјРѕРјРµРЅС‚С‹ РІСЃС‚СЂРµС‡Рё (.mp4)', extension: 'mp4', pending: true },
-  { id: 'video', label: 'Р’РёРґРµРѕ РІСЃС‚СЂРµС‡Рё (.mp4)', extension: 'mp4', pending: true },
+  { id: 'summary', label: 'Итог встречи (.txt)', extension: 'txt' },
+  { id: 'transcript', label: 'Стенограмма встречи (.txt)', extension: 'txt' },
+  { id: 'trailer', label: 'Трейлер встречи (.mp4)', extension: 'mp4' },
+  { id: 'highlights', label: 'Основные моменты встречи (.mp4)', extension: 'mp4' },
+  { id: 'video', label: 'Видео встречи (.mp4)', extension: 'mp4' },
 ]
 
 const reportRows = [
   {
     id: 'read-intro',
-    title: 'Р’РІРѕРґ РІ Alem AI - РџСЂРёРјРµСЂ РѕС‚С‡С‘С‚Р°',
+    title: 'Ввод в Alem AI - Пример отчёта',
     source: 'Google Meet',
-    date: 'РїС‚, 2 СЏРЅРІ. 2026 Рі.',
+    date: 'пт, 2 янв. 2026 г.',
     time: '02:00 - 03:45',
     participants: 4,
     score: 89,
-    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
-    owner: 'РњР°РґРё',
-    ownerInitial: 'Рњ',
+    folder: 'Образцы отчётов',
+    owner: 'Мади',
+    ownerInitial: 'М',
     thumbnailTone: 'teal',
-    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
+    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
   },
   {
     id: 'meeting-usage',
-    title: 'РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ РѕС‚С‡С‘С‚Р° СЃРѕР±СЂР°РЅРёСЏ - РџСЂРёРјРµСЂ РѕС‚С‡С‘С‚Р°',
+    title: 'Использование отчёта собрания - Пример отчёта',
     source: 'Google Meet',
-    date: 'РїС‚, 2 СЏРЅРІ. 2026 Рі.',
+    date: 'пт, 2 янв. 2026 г.',
     time: '01:00 - 01:04',
     participants: 4,
     score: 89,
-    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
-    owner: 'РђР№РґР°РЅР°',
-    ownerInitial: 'Рђ',
+    folder: 'Образцы отчётов',
+    owner: 'Айдана',
+    ownerInitial: 'А',
     thumbnailTone: 'blue',
-    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
+    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
   },
   {
     id: 'copilot-search',
-    title: 'РСЃРїРѕР»СЊР·СѓР№С‚Рµ Copilot РґР»СЏ РїРѕРёСЃРєР° - РџСЂРёРјРµСЂ РѕС‚С‡С‘С‚Р°',
+    title: 'Используйте Copilot для поиска - Пример отчёта',
     source: 'Google Meet',
-    date: 'РїС‚, 2 СЏРЅРІ. 2026 Рі.',
+    date: 'пт, 2 янв. 2026 г.',
     time: '00:00 - 00:07',
     participants: 4,
     score: 88,
-    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
-    owner: 'Р•Р»РёР°СЃ',
-    ownerInitial: 'Р•',
+    folder: 'Образцы отчётов',
+    owner: 'Елиас',
+    ownerInitial: 'Е',
     thumbnailTone: 'violet',
-    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
+    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
   },
   {
     id: 'mobile-guide',
-    title: 'Р СѓРєРѕРІРѕРґСЃС‚РІРѕ РїРѕ РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЋ РЅР°СЃС‚РѕР»СЊРЅРѕРіРѕ Рё РјРѕР±РёР»СЊРЅРѕРіРѕ РїСЂРёР»РѕР¶РµРЅРёСЏ',
+    title: 'Руководство по использованию настольного и мобильного приложения',
     source: 'Google Meet',
-    date: 'С‡С‚, 1 СЏРЅРІ. 2026 Рі.',
+    date: 'чт, 1 янв. 2026 г.',
     time: '23:00 - 23:04',
     participants: 5,
     score: 92,
-    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
-    owner: 'РљРµР»СЃРё',
-    ownerInitial: 'Рљ',
+    folder: 'Образцы отчётов',
+    owner: 'Келси',
+    ownerInitial: 'К',
     thumbnailTone: 'green',
-    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
+    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
   },
   {
     id: 'real-cases',
-    title: 'РСЃСЃР»РµРґСѓР№С‚Рµ СЂРµР°Р»СЊРЅС‹Рµ СЃР»СѓС‡Р°Рё РёСЃРїРѕР»СЊР·РѕРІР°РЅРёСЏ - РџСЂРёРјРµСЂ РѕС‚С‡С‘С‚Р°',
+    title: 'Исследуйте реальные случаи использования - Пример отчёта',
     source: 'Google Meet',
-    date: 'С‡С‚, 1 СЏРЅРІ. 2026 Рі.',
+    date: 'чт, 1 янв. 2026 г.',
     time: '22:00 - 22:08',
     participants: 4,
     score: 87,
-    folder: 'РћР±СЂР°Р·С†С‹ РѕС‚С‡С‘С‚РѕРІ',
-    owner: 'РЎР°СЂР°',
-    ownerInitial: 'РЎ',
+    folder: 'Образцы отчётов',
+    owner: 'Сара',
+    ownerInitial: 'С',
     thumbnailTone: 'rose',
-    week: 'РќР•Р”Р•Р›РЇ РЎ 29 Р”Р•Рљ.-4 РЇРќР’., 2025',
+    week: 'НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025',
   },
 ]
 
 const actionItems = [
-  { task: 'РџРѕРґРіРѕС‚РѕРІРёС‚СЊ СЃРїРёСЃРѕРє РІРѕРїСЂРѕСЃРѕРІ РґР»СЏ РґРµРјРѕ РєР»РёРµРЅС‚Р°', owner: 'РњР°РґРё РћСЂС‹СЃР±РµРє', due: 'РЎРµРіРѕРґРЅСЏ, 18:00' },
-  { task: 'РџСЂРѕРІРµСЂРёС‚СЊ backend endpoint РґР»СЏ LiveKit token', owner: 'РђР№РґР°РЅР° РЎРµР№С‚', due: 'Р—Р°РІС‚СЂР°, 11:00' },
-  { task: 'РћР±РЅРѕРІРёС‚СЊ UI РѕС‚С‡С‘С‚Р° РїРѕСЃР»Рµ С‚РµСЃС‚РѕРІРѕР№ РІСЃС‚СЂРµС‡Рё', owner: 'Team AI', due: 'РџРѕСЃР»Рµ СЃРѕР·РІРѕРЅР°' },
+  { task: 'Подготовить список вопросов для демо клиента', owner: 'Мади Орысбек', due: 'Сегодня, 18:00' },
+  { task: 'Проверить backend endpoint для LiveKit token', owner: 'Айдана Сейт', due: 'Завтра, 11:00' },
+  { task: 'Обновить UI отчёта после тестовой встречи', owner: 'Team AI', due: 'После созвона' },
 ]
 
 const transcriptLines = [
   {
     time: '00:42',
-    speaker: 'РњР°РґРё',
-    text: 'РќР°Рј РЅСѓР¶РЅРѕ, С‡С‚РѕР±С‹ СѓС‡Р°СЃС‚РЅРёРє РјРѕРі РІРѕР№С‚Рё РІ РєРѕРјРЅР°С‚Сѓ С‚РѕР»СЊРєРѕ РїРѕ РЅР°Р·РІР°РЅРёСЋ, Р±РµР· СЂСѓС‡РЅРѕРіРѕ token.',
+    speaker: 'Мади',
+    text: 'Нам нужно, чтобы участник мог войти в комнату только по названию, без ручного token.',
   },
   {
     time: '04:18',
-    speaker: 'РђР№РґР°РЅР°',
-    text: 'РџРѕСЃР»Рµ РІСЃС‚СЂРµС‡Рё РѕС‚С‡С‘С‚ РґРѕР»Р¶РµРЅ Р±С‹СЃС‚СЂРѕ РїРѕРєР°Р·С‹РІР°С‚СЊ summary, Р·Р°РґР°С‡Рё Рё РїРѕР»РЅС‹Р№ РєРѕРЅС‚РµРєСЃС‚ СЂР°Р·РіРѕРІРѕСЂР°.',
+    speaker: 'Айдана',
+    text: 'После встречи отчёт должен быстро показывать summary, задачи и полный контекст разговора.',
   },
   {
     time: '12:05',
     speaker: 'Team AI',
-    text: 'РЇ РІС‹РґРµР»СЋ РіР»Р°РІС‹, РІРѕРїСЂРѕСЃС‹ Рё РјРµСЃС‚Р°, РіРґРµ РѕР±СЃСѓР¶РґРµРЅРёРµ Р·Р°С‚СЏРЅСѓР»РѕСЃСЊ РёР»Рё Р±С‹Р»Рѕ РѕСЃРѕР±РµРЅРЅРѕ Р°РєС‚РёРІРЅС‹Рј.',
+    text: 'Я выделю главы, вопросы и места, где обсуждение затянулось или было особенно активным.',
   },
 ]
 
 const speakerStats = [
-  { name: 'РњР°РґРё', talk: 48, sentiment: 'РџРѕР·РёС‚РёРІРЅС‹Р№', pace: '142 СЃР»РѕРІ/РјРёРЅ' },
-  { name: 'РђР№РґР°РЅР°', talk: 34, sentiment: 'РќРµР№С‚СЂР°Р»СЊРЅС‹Р№', pace: '128 СЃР»РѕРІ/РјРёРЅ' },
-  { name: 'Team AI', talk: 18, sentiment: 'Р¤РѕРєСѓСЃ', pace: '96 СЃР»РѕРІ/РјРёРЅ' },
+  { name: 'Мади', talk: 48, sentiment: 'Позитивный', pace: '142 слов/мин' },
+  { name: 'Айдана', talk: 34, sentiment: 'Нейтральный', pace: '128 слов/мин' },
+  { name: 'Team AI', talk: 18, sentiment: 'Фокус', pace: '96 слов/мин' },
 ]
 
 const highlights = [
-  { time: '03:20', title: 'Р РµС€РµРЅРёРµ РїРѕ РІС…РѕРґСѓ РІ РєРѕРјРЅР°С‚Сѓ', note: 'РќР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹ СЃС‚Р°РЅРѕРІРёС‚СЃСЏ РіР»Р°РІРЅС‹Рј СЃРїРѕСЃРѕР±РѕРј РїРѕРґРєР»СЋС‡РµРЅРёСЏ.' },
-  { time: '17:45', title: 'Р РёСЃРє РїРѕ backend', note: 'Р•СЃР»Рё backend РЅРµ Р·Р°РїСѓС‰РµРЅ, Р°РіРµРЅС‚ РґРѕР»Р¶РµРЅ СЏРІРЅРѕ РїРѕРєР°Р·Р°С‚СЊ РѕС€РёР±РєСѓ РїРѕРґРєР»СЋС‡РµРЅРёСЏ.' },
-  { time: '28:10', title: 'РЎР»РµРґСѓСЋС‰РёР№ С€Р°Рі', note: 'Р”РѕР±Р°РІРёС‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРёР№ РѕС‚С‡С‘С‚ РїРѕСЃР»Рµ Р·Р°РІРµСЂС€РµРЅРёСЏ РјРёС‚РёРЅРіР°.' },
+  { time: '03:20', title: 'Решение по входу в комнату', note: 'Название комнаты становится главным способом подключения.' },
+  { time: '17:45', title: 'Риск по backend', note: 'Если backend не запущен, агент должен явно показать ошибку подключения.' },
+  { time: '28:10', title: 'Следующий шаг', note: 'Добавить автоматический отчёт после завершения митинга.' },
 ]
 
 const chapters = [
-  { time: '00:00', title: 'РЎС‚Р°СЂС‚ Рё С†РµР»СЊ РІСЃС‚СЂРµС‡Рё', duration: '4 РјРёРЅ' },
-  { time: '04:01', title: 'LiveKit РІС…РѕРґ Рё РєРѕРјРЅР°С‚С‹', duration: '9 РјРёРЅ' },
-  { time: '13:10', title: 'РЎС‚СЂСѓРєС‚СѓСЂР° AI РѕС‚С‡С‘С‚Р°', duration: '12 РјРёРЅ' },
-  { time: '25:30', title: 'Action items Рё С„РёРЅР°Р»СЊРЅС‹Рµ СЂРµС€РµРЅРёСЏ', duration: '7 РјРёРЅ' },
+  { time: '00:00', title: 'Старт и цель встречи', duration: '4 мин' },
+  { time: '04:01', title: 'LiveKit вход и комнаты', duration: '9 мин' },
+  { time: '13:10', title: 'Структура AI отчёта', duration: '12 мин' },
+  { time: '25:30', title: 'Action items и финальные решения', duration: '7 мин' },
 ]
 
 const aiQuestions = [
-  'РљР°Рє РѕС‚РєР»СЋС‡РёС‚СЊ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєСѓСЋ РѕС‚РїСЂР°РІРєСѓ Р·Р°РјРµС‚РѕРє РІРЅРµС€РЅРёРј СѓС‡Р°СЃС‚РЅРёРєР°Рј?',
-  'РљР°Рє РїСЂРѕРІРµСЂРёС‚СЊ Рё РѕС‚СЂРµРґР°РєС‚РёСЂРѕРІР°С‚СЊ Р·Р°РјРµС‚РєРё РїРµСЂРµРґ РѕС‚РїСЂР°РІРєРѕР№?',
-  'РљР°РєРёРµ РїСЂР°РІР° РЅСѓР¶РЅС‹ РґР»СЏ Search Copilot?',
-  'РљР°РєРёРµ Р·Р°РґР°С‡Рё РїРѕСЏРІРёР»РёСЃСЊ РїРѕСЃР»Рµ РІСЃС‚СЂРµС‡Рё?',
-  'РџРµСЂРµРІРµРґРёС‚Рµ СЂРµР·СЋРјРµ РІСЃС‚СЂРµС‡Рё РЅР° СЂСѓСЃСЃРєРёР№.',
+  'Как отключить автоматическую отправку заметок внешним участникам?',
+  'Как проверить и отредактировать заметки перед отправкой?',
+  'Какие права нужны для Search Copilot?',
+  'Какие задачи появились после встречи?',
+  'Переведите резюме встречи на русский.',
 ]
 
 const reportCalendarToday = new Date(2026, 5, 12)
 
 const quickDateOptions = [
-  { id: 'all', label: 'Р’ Р»СЋР±РѕРµ РІСЂРµРјСЏ' },
-  { id: 'today', label: 'РЎРµРіРѕРґРЅСЏ', days: 1 },
-  { id: 'last7', label: 'РџРѕСЃР»РµРґРЅРёРµ 7 РґРЅРµР№', days: 7 },
-  { id: 'last30', label: 'РџРѕСЃР»РµРґРЅРёРµ 30 РґРЅРµР№', days: 30 },
-  { id: 'last90', label: 'РџРѕСЃР»РµРґРЅРёРµ 90 РґРЅРµР№', days: 90 },
-  { id: 'last6months', label: 'РџРѕСЃР»РµРґРЅРёРµ 6 РјРµСЃСЏС†РµРІ', months: 6 },
-  { id: 'last12months', label: 'РџРѕСЃР»РµРґРЅРёРµ 12 РјРµСЃСЏС†РµРІ', months: 12 },
+  { id: 'all', label: 'В любое время' },
+  { id: 'today', label: 'Сегодня', days: 1 },
+  { id: 'last7', label: 'Последние 7 дней', days: 7 },
+  { id: 'last30', label: 'Последние 30 дней', days: 30 },
+  { id: 'last90', label: 'Последние 90 дней', days: 90 },
+  { id: 'last6months', label: 'Последние 6 месяцев', months: 6 },
+  { id: 'last12months', label: 'Последние 12 месяцев', months: 12 },
 ]
 
 const typeFilterOptions = [
-  { id: 'meetings', value: 'meeting', label: 'РћС‚С‡РµС‚С‹ Рѕ РІСЃС‚СЂРµС‡Р°С…', aliases: ['meeting', 'meetings', 'google meet'] },
-  { id: 'readout', value: 'readout', label: 'РўРµРјС‹ Readout', aliases: ['readout'] },
-  { id: 'daily', value: 'daily', label: 'Р•Р¶РµРґРЅРµРІРЅС‹Рµ РѕР±Р·РѕСЂС‹', aliases: ['daily'] },
+  { id: 'meetings', value: 'meeting', label: 'Отчеты о встречах', aliases: ['meeting', 'meetings', 'google meet'] },
+  { id: 'readout', value: 'readout', label: 'Темы Readout', aliases: ['readout'] },
+  { id: 'daily', value: 'daily', label: 'Ежедневные обзоры', aliases: ['daily'] },
 ]
 
 const calendarMonthNames = [
-  'СЏРЅРІР°СЂСЊ',
-  'С„РµРІСЂР°Р»СЊ',
-  'РјР°СЂС‚',
-  'Р°РїСЂРµР»СЊ',
-  'РјР°Р№',
-  'РёСЋРЅСЊ',
-  'РёСЋР»СЊ',
-  'Р°РІРіСѓСЃС‚',
-  'СЃРµРЅС‚СЏР±СЂСЊ',
-  'РѕРєС‚СЏР±СЂСЊ',
-  'РЅРѕСЏР±СЂСЊ',
-  'РґРµРєР°Р±СЂСЊ',
+  'январь',
+  'февраль',
+  'март',
+  'апрель',
+  'май',
+  'июнь',
+  'июль',
+  'август',
+  'сентябрь',
+  'октябрь',
+  'ноябрь',
+  'декабрь',
 ]
 
-const calendarShortMonthNames = ['СЏРЅРІ.', 'С„РµРІ.', 'РјР°СЂ.', 'Р°РїСЂ.', 'РјР°СЏ', 'РёСЋРЅ.', 'РёСЋР».', 'Р°РІРі.', 'СЃРµРЅ.', 'РѕРєС‚.', 'РЅРѕСЏ.', 'РґРµРє.']
+const calendarShortMonthNames = ['янв.', 'фев.', 'мар.', 'апр.', 'мая', 'июн.', 'июл.', 'авг.', 'сен.', 'окт.', 'ноя.', 'дек.']
 const calendarWeekdays = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
 
 function normalizeDate(date) {
@@ -326,7 +328,29 @@ function formatAPIDate(date) {
   return `${year}-${month}-${day}`
 }
 
-const authSessionKey = 'alemlive-auth-session'
+function parseDurationToSeconds(value) {
+  const parts = String(value || '')
+    .split(':')
+    .map((part) => Number.parseInt(part, 10))
+    .filter((part) => Number.isFinite(part))
+
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  }
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1]
+  }
+  return 529
+}
+
+function formatPlaybackTime(seconds) {
+  const safeSeconds = Math.max(0, Math.floor(seconds || 0))
+  const minutes = Math.floor(safeSeconds / 60)
+  const remainder = String(safeSeconds % 60).padStart(2, '0')
+  return `${minutes}:${remainder}`
+}
+
+const authSessionKey = 'alemlive-auth-session-v2'
 const authVerifierKey = 'alemlive-auth-verifier'
 let currentAccessToken = ''
 
@@ -353,6 +377,12 @@ async function apiRequest(path, options = {}) {
   const payload = contentType.includes('application/json') ? await response.json().catch(() => ({})) : await response.text()
 
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined') {
+      clearAuthSession()
+      window.dispatchEvent(new CustomEvent('alemlive-auth-expired', {
+        detail: payload?.error || payload?.message || 'Сессия истекла. Войдите заново.',
+      }))
+    }
     throw new Error(payload?.error || payload?.message || 'Backend request failed')
   }
 
@@ -449,6 +479,9 @@ function cleanAuthCallbackURL() {
   url.searchParams.delete('code')
   url.searchParams.delete('state')
   url.searchParams.delete('session_state')
+  url.searchParams.delete('iss')
+  url.searchParams.delete('error')
+  url.searchParams.delete('error_description')
   window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash || '#meeting'}`)
 }
 
@@ -561,7 +594,7 @@ function getParticipantRole(participant) {
     // ignore malformed metadata
   }
 
-  return 'РЈС‡Р°СЃС‚РЅРёРє'
+  return 'Участник'
 }
 
 function ParticipantsList({ participants }) {
@@ -572,14 +605,14 @@ function ParticipantsList({ participants }) {
           <Contact size={21} />
         </span>
         <div>
-          <h2>РЈС‡Р°СЃС‚РЅРёРєРё</h2>
-          <p>РљРѕРјР°РЅРґР° РІСЃС‚СЂРµС‡Рё</p>
+          <h2>Участники</h2>
+          <p>Команда встречи</p>
         </div>
       </div>
 
       <div className="member-list">
         {participants.length === 0 ? (
-          <p className="empty-members">РџРѕРєР° РЅРёРєС‚Рѕ РЅРµ РїСЂРёСЃРѕРµРґРёРЅРёР»СЃСЏ</p>
+          <p className="empty-members">Пока никто не присоединился</p>
         ) : (
           participants.map((participant) => {
             const name = participant.name || participant.identity
@@ -609,22 +642,22 @@ function getMediaErrorMessage(error) {
   const message = error?.message || ''
 
   if (name === 'NotAllowedError' || /permission|denied|not allowed/i.test(message)) {
-    return 'Р Р°Р·СЂРµС€РёС‚Рµ РґРѕСЃС‚СѓРї Рє РєР°РјРµСЂРµ Рё РјРёРєСЂРѕС„РѕРЅСѓ РІ Р±СЂР°СѓР·РµСЂРµ'
+    return 'Разрешите доступ к камере и микрофону в браузере'
   }
 
   if (name === 'NotFoundError' || /not found|device not found/i.test(message)) {
-    return 'РљР°РјРµСЂР° РёР»Рё РјРёРєСЂРѕС„РѕРЅ РЅРµ РЅР°Р№РґРµРЅС‹'
+    return 'Камера или микрофон не найдены'
   }
 
   if (name === 'NotReadableError' || /busy|in use|could not start/i.test(message)) {
-    return 'РљР°РјРµСЂР° РёР»Рё РјРёРєСЂРѕС„РѕРЅ Р·Р°РЅСЏС‚С‹ РґСЂСѓРіРёРј РїСЂРёР»РѕР¶РµРЅРёРµРј'
+    return 'Камера или микрофон заняты другим приложением'
   }
 
   if (shouldWarnAboutMediaSecurity()) {
-    return 'РћС‚РєСЂРѕР№С‚Рµ РІСЃС‚СЂРµС‡Сѓ С‡РµСЂРµР· HTTPS РёР»Рё localhost, РёРЅР°С‡Рµ Р±СЂР°СѓР·РµСЂ РјРѕР¶РµС‚ Р±Р»РѕРєРёСЂРѕРІР°С‚СЊ РєР°РјРµСЂСѓ Рё РјРёРєСЂРѕС„РѕРЅ'
+    return 'Откройте встречу через HTTPS или localhost, иначе браузер может блокировать камеру и микрофон'
   }
 
-  return message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РІРєР»СЋС‡РёС‚СЊ РєР°РјРµСЂСѓ РёР»Рё РјРёРєСЂРѕС„РѕРЅ'
+  return message || 'Не удалось включить камеру или микрофон'
 }
 
 function shouldWarnAboutMediaSecurity() {
@@ -689,7 +722,7 @@ function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, o
         type="button"
         onClick={() => toggleLiveKitDevice('mic')}
         disabled={pendingDevice === 'mic'}
-        aria-label={isMicrophoneEnabled ? 'Р’С‹РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ' : 'Р’РєР»СЋС‡РёС‚СЊ РјРёРєСЂРѕС„РѕРЅ'}
+        aria-label={isMicrophoneEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
         aria-pressed={isMicrophoneEnabled}
       >
         {isMicrophoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
@@ -699,7 +732,7 @@ function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, o
         type="button"
         onClick={() => toggleLiveKitDevice('camera')}
         disabled={pendingDevice === 'camera'}
-        aria-label={isCameraEnabled ? 'Р’С‹РєР»СЋС‡РёС‚СЊ РєР°РјРµСЂСѓ' : 'Р’РєР»СЋС‡РёС‚СЊ РєР°РјРµСЂСѓ'}
+        aria-label={isCameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
         aria-pressed={isCameraEnabled}
       >
         {isCameraEnabled ? <Video size={18} /> : <CameraOff size={18} />}
@@ -726,7 +759,7 @@ function ConferenceChatPanel({ onClose }) {
       await send(text)
       setMessage('')
     } catch (sendError) {
-      setError(sendError?.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РїСЂР°РІРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ')
+      setError(sendError?.message || 'Не удалось отправить сообщение')
     }
   }
 
@@ -737,23 +770,23 @@ function ConferenceChatPanel({ onClose }) {
           <MessageSquareText size={21} />
         </span>
         <div>
-          <h2>Р§Р°С‚ РІСЃС‚СЂРµС‡Рё</h2>
-          <p>РЎРѕРѕР±С‰РµРЅРёСЏ LiveKit</p>
+          <h2>Чат встречи</h2>
+          <p>Сообщения LiveKit</p>
         </div>
         {onClose && (
-          <button className="icon-button conference-chat-close" type="button" onClick={onClose} aria-label="РЎРєСЂС‹С‚СЊ С‡Р°С‚">
+          <button className="icon-button conference-chat-close" type="button" onClick={onClose} aria-label="Скрыть чат">
             <ChevronRight size={18} />
           </button>
         )}
       </div>
 
-      <div className="conference-chat" role="log" aria-label="РЎРѕРѕР±С‰РµРЅРёСЏ РІСЃС‚СЂРµС‡Рё">
+      <div className="conference-chat" role="log" aria-label="Сообщения встречи">
         <div className="conference-chat-messages">
           {chatMessages.length === 0 ? (
-            <p className="conference-chat-empty">РџРѕРєР° СЃРѕРѕР±С‰РµРЅРёР№ РЅРµС‚</p>
+            <p className="conference-chat-empty">Пока сообщений нет</p>
           ) : (
             chatMessages.map((item) => {
-              const author = item.from?.name || item.from?.identity || 'РЈС‡Р°СЃС‚РЅРёРє'
+              const author = item.from?.name || item.from?.identity || 'Участник'
               const sentAt = item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
 
               return (
@@ -773,10 +806,10 @@ function ConferenceChatPanel({ onClose }) {
           <input
             value={message}
             onChange={(event) => setMessage(event.target.value)}
-            placeholder="РќР°РїРёСЃР°С‚СЊ РІ С‡Р°С‚ РІСЃС‚СЂРµС‡Рё..."
-            aria-label="РЎРѕРѕР±С‰РµРЅРёРµ РІ С‡Р°С‚ РІСЃС‚СЂРµС‡Рё"
+            placeholder="Написать в чат встречи..."
+            aria-label="Сообщение в чат встречи"
           />
-          <button className="ask-send" type="submit" disabled={isSending || !message.trim()} aria-label="РћС‚РїСЂР°РІРёС‚СЊ СЃРѕРѕР±С‰РµРЅРёРµ">
+          <button className="ask-send" type="submit" disabled={isSending || !message.trim()} aria-label="Отправить сообщение">
             {isSending ? <Loader2 className="spin-icon" size={18} /> : <Send size={18} />}
           </button>
         </form>
@@ -795,7 +828,7 @@ function App() {
   const [activeReportTab, setActiveReportTab] = useState('notes')
   const [form, setForm] = useState({
     roomName: getInitialRoomName(),
-    userName: import.meta.env.VITE_LIVEKIT_NAME ?? 'РњР°РґРё РћСЂС‹СЃР±РµРє',
+    userName: import.meta.env.VITE_LIVEKIT_NAME ?? 'Мади Орысбек',
   })
   const [meeting, setMeeting] = useState(null)
   const [entryMode, setEntryMode] = useState('create')
@@ -852,6 +885,10 @@ function App() {
   const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false)
   const [roomSettings, setRoomSettings] = useState(null)
   const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false)
+  const [reportVideoPlaying, setReportVideoPlaying] = useState(false)
+  const [reportVideoSeconds, setReportVideoSeconds] = useState(0)
+  const [reportVideoMuted, setReportVideoMuted] = useState(false)
+  const [reportVideoSpeed, setReportVideoSpeed] = useState(1)
   const copilotInputRef = useRef(null)
   const reportUploadInputRef = useRef(null)
 
@@ -870,6 +907,8 @@ function App() {
   const calendarDays = getCalendarDays(calendarMonth)
   const areAllTypeFiltersSelected = selectedTypeFilterIds.length === typeFilterOptions.length
   const visibleReports = filterReportsByType(reports.length ? reports : reportRows, selectedTypeFilterIds)
+  const reportVideoDurationSeconds = parseDurationToSeconds(selectedReport?.duration || '08:49')
+  const reportVideoProgress = Math.min(100, Math.max(0, (reportVideoSeconds / reportVideoDurationSeconds) * 100))
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
@@ -906,7 +945,13 @@ function App() {
         const callbackURL = new URL(window.location.href)
         const code = callbackURL.searchParams.get('code')
         const state = callbackURL.searchParams.get('state')
+        const callbackError = callbackURL.searchParams.get('error_description') || callbackURL.searchParams.get('error')
         const verifierPayload = JSON.parse(window.sessionStorage.getItem(authVerifierKey) || '{}')
+
+        if (callbackError) {
+          cleanAuthCallbackURL()
+          throw new Error(callbackError)
+        }
 
         if (code) {
           if (!state || state !== verifierPayload.state || !verifierPayload.verifier) {
@@ -967,6 +1012,9 @@ function App() {
   }, [])
 
   async function loginWithKeycloak() {
+    clearAuthSession()
+    setAuthSession(null)
+    setAuthError('')
     if (!authConfig.enabled || !authConfig.authorizationEndpoint || !authConfig.clientId) {
       setAuthError('Keycloak is not configured')
       return
@@ -1041,7 +1089,7 @@ function App() {
 
     loadWorkspace().catch(() => {
       if (isMounted) {
-        setWorkspaceNotice('Backend workspace РЅРµРґРѕСЃС‚СѓРїРµРЅ, РїРѕРєР°Р·Р°РЅС‹ Р»РѕРєР°Р»СЊРЅС‹Рµ РґР°РЅРЅС‹Рµ')
+        setWorkspaceNotice('Backend workspace недоступен, показаны локальные данные')
       }
     })
 
@@ -1079,7 +1127,7 @@ function App() {
       } catch (error) {
         if (isMounted) {
           setReports(reportRows)
-          setReportsError(error.message || 'РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ РѕС‚С‡С‘С‚С‹ РёР· backend')
+          setReportsError(error.message || 'Не удалось загрузить отчёты из backend')
         }
       } finally {
         if (isMounted) {
@@ -1137,6 +1185,30 @@ function App() {
       document.body.classList.remove('meeting-maximized-active')
     }
   }, [isMeetingMaximized])
+
+  useEffect(() => {
+    setReportVideoPlaying(false)
+    setReportVideoSeconds(0)
+  }, [selectedReportId])
+
+  useEffect(() => {
+    if (!reportVideoPlaying) {
+      return undefined
+    }
+
+    const timer = window.setInterval(() => {
+      setReportVideoSeconds((current) => {
+        const nextValue = current + reportVideoSpeed
+        if (nextValue >= reportVideoDurationSeconds) {
+          setReportVideoPlaying(false)
+          return reportVideoDurationSeconds
+        }
+        return nextValue
+      })
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [reportVideoDurationSeconds, reportVideoPlaying, reportVideoSpeed])
 
   function updateField(event) {
     const { name, value } = event.target
@@ -1206,15 +1278,29 @@ function App() {
       return
     }
 
-    setMeetingNotice('РЎРѕРµРґРёРЅРµРЅРёРµ СЃ РєРѕРјРЅР°С‚РѕР№ СЂР°Р·РѕСЂРІР°РЅРѕ')
+    if (meeting?.roomName && meeting?.userName) {
+      recordMeetingEvent('left')
+    }
+    setMeetingNotice('Соединение с комнатой разорвано')
   }
 
-  function recordMeetingEvent(event) {
+  useEffect(() => {
+    function handleAuthExpired(event) {
+      setAuthSession(null)
+      setAuthError(event.detail || 'Сессия истекла. Войдите заново.')
+      setAuthReady(true)
+    }
+
+    window.addEventListener('alemlive-auth-expired', handleAuthExpired)
+    return () => window.removeEventListener('alemlive-auth-expired', handleAuthExpired)
+  }, [])
+
+  function recordMeetingEvent(event, overrides = {}) {
     return apiRequest('/api/meetings/events', {
       method: 'POST',
       body: JSON.stringify({
-        roomName: meetingMeta.room,
-        userName: meetingMeta.name,
+        roomName: overrides.roomName || meetingMeta.room,
+        userName: overrides.userName || meetingMeta.name,
         event,
       }),
     }).catch(() => null)
@@ -1233,11 +1319,11 @@ function App() {
     const payload = await response.json().catch(() => ({}))
 
     if (!response.ok) {
-      throw new Error(payload.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ РїРѕР»СѓС‡РёС‚СЊ token РґР»СЏ РєРѕРјРЅР°С‚С‹')
+      throw new Error(payload.error || 'Не удалось получить token для комнаты')
     }
 
     if (!payload.serverUrl || !payload.token) {
-      throw new Error('Backend РЅРµ РІРµСЂРЅСѓР» LiveKit URL РёР»Рё token')
+      throw new Error('Backend не вернул LiveKit URL или token')
     }
 
     return payload
@@ -1255,7 +1341,7 @@ function App() {
     const nextUserName = form.userName.trim()
 
     if (!nextUserName || !nextRoomName) {
-      setJoinError('Р’РІРµРґРёС‚Рµ РёРјСЏ Рё РЅР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹')
+      setJoinError('Введите имя и название комнаты')
       return
     }
 
@@ -1283,7 +1369,10 @@ function App() {
       })
       setIsMeetingMaximized(true)
       setIsConferenceChatOpen(true)
-      recordMeetingEvent(mode === 'create' ? 'created' : 'joined')
+      recordMeetingEvent(mode === 'create' ? 'created' : 'joined', {
+        roomName: payload.roomName || nextRoomName,
+        userName: payload.userName || nextUserName,
+      })
     } catch (error) {
       setJoinError(error.message)
     } finally {
@@ -1298,8 +1387,13 @@ function App() {
 
   async function leaveMeeting() {
     manualDisconnectRef.current = true
-    await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, { method: 'POST' }).catch(() => null)
-    await recordMeetingEvent('left')
+    await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, {
+      method: 'POST',
+      body: JSON.stringify({
+        userName: meetingMeta.name,
+        event: 'left',
+      }),
+    }).catch(() => null)
     setMeeting(null)
     setIsMeetingMaximized(false)
     setMeetingNotice('')
@@ -1311,7 +1405,7 @@ function App() {
     }
 
     await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
-    setWorkspaceNotice('РЎСЃС‹Р»РєР° РєРѕРјРЅР°С‚С‹ СЃРєРѕРїРёСЂРѕРІР°РЅР°')
+    setWorkspaceNotice('Ссылка комнаты скопирована')
   }
 
   async function copyRoomName() {
@@ -1320,7 +1414,7 @@ function App() {
     }
 
     await navigator.clipboard.writeText(meetingMeta.room)
-    setWorkspaceNotice('РќР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹ СЃРєРѕРїРёСЂРѕРІР°РЅРѕ')
+    setWorkspaceNotice('Название комнаты скопировано')
   }
 
   async function copyRoomLink() {
@@ -1329,13 +1423,13 @@ function App() {
     }
 
     await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
-    setWorkspaceNotice('РЎСЃС‹Р»РєР° РЅР° РєРѕРјРЅР°С‚Сѓ СЃРєРѕРїРёСЂРѕРІР°РЅР°')
+    setWorkspaceNotice('Ссылка на комнату скопирована')
   }
 
   async function showRoomSettings() {
     const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/settings`).catch(() => null)
     if (payload) {
-      setWorkspaceNotice(`Р—Р°РїРёСЃСЊ ${payload.recording ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}, Р°РІС‚РѕРѕС‚С‡С‘С‚ ${payload.autoReport ? 'РІРєР»СЋС‡РµРЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}`)
+      setWorkspaceNotice(`Запись ${payload.recording ? 'включена' : 'выключена'}, автоотчёт ${payload.autoReport ? 'включен' : 'выключен'}`)
     }
   }
 
@@ -1347,7 +1441,7 @@ function App() {
 
     setRoomSettings(payload)
     setIsRoomSettingsOpen((current) => !current)
-    setWorkspaceNotice(`РќР°СЃС‚СЂРѕР№РєРё РєРѕРјРЅР°С‚С‹: Р·Р°РїРёСЃСЊ ${payload.recording ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}, Р°РІС‚РѕРѕС‚С‡С‘С‚ ${payload.autoReport ? 'РІРєР»СЋС‡С‘РЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}`)
+    setWorkspaceNotice(`Настройки комнаты: запись ${payload.recording ? 'включена' : 'выключена'}, автоотчёт ${payload.autoReport ? 'включён' : 'выключен'}`)
   }
 
   async function openAskAI() {
@@ -1361,7 +1455,7 @@ function App() {
     const payload = await apiRequest('/api/notifications').catch(() => null)
     if (payload) {
       setNotifications(payload)
-      setWorkspaceNotice(payload.items?.[0]?.body || 'РЈРІРµРґРѕРјР»РµРЅРёСЏ РѕР±РЅРѕРІР»РµРЅС‹')
+      setWorkspaceNotice(payload.items?.[0]?.body || 'Уведомления обновлены')
     }
   }
 
@@ -1377,7 +1471,7 @@ function App() {
     const payload = await apiRequest('/api/locales').catch(() => null)
     if (payload) {
       setLocales(payload)
-      setWorkspaceNotice(`РЇР·С‹Рє: ${payload.items?.find((item) => item.id === payload.current)?.label || payload.current}`)
+      setWorkspaceNotice(`Язык: ${payload.items?.find((item) => item.id === payload.current)?.label || payload.current}`)
     }
   }
 
@@ -1388,7 +1482,7 @@ function App() {
     setTimeFilterRange({ from: null, to: null })
     setDraftTimeFilterRange({ from: null, to: null })
     setSelectedTypeFilterIds(typeFilterOptions.map((option) => option.id))
-    setWorkspaceNotice('Р¤РёР»СЊС‚СЂС‹ СЃР±СЂРѕС€РµРЅС‹')
+    setWorkspaceNotice('Фильтры сброшены')
   }
 
   async function openReportRecording() {
@@ -1401,19 +1495,48 @@ function App() {
       if (payload.url) {
         window.open(payload.url, '_blank', 'noopener,noreferrer')
       }
-      setReportActionMessage(`Р—Р°РїРёСЃСЊ: ${payload.duration}, РјР°СЂРєРµСЂС‹ ${payload.markers?.join(', ') || 'РЅРµС‚'}`)
+      setReportActionMessage(`Запись: ${payload.duration}, маркеры ${payload.markers?.join(', ') || 'нет'}`)
     }
+  }
+
+  function toggleReportVideoPlayback() {
+    setReportVideoPlaying((current) => {
+      if (!current && reportVideoSeconds >= reportVideoDurationSeconds) {
+        setReportVideoSeconds(0)
+      }
+      return !current
+    })
+  }
+
+  function seekReportVideo(event) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    const ratio = rect.width ? (event.clientX - rect.left) / rect.width : 0
+    const nextSeconds = Math.round(Math.min(1, Math.max(0, ratio)) * reportVideoDurationSeconds)
+    setReportVideoSeconds(nextSeconds)
+  }
+
+  function toggleReportVideoMute() {
+    setReportVideoMuted((current) => !current)
+    setReportActionMessage(reportVideoMuted ? 'Звук видео включён' : 'Звук видео выключен')
+  }
+
+  function cycleReportVideoSpeed() {
+    const speeds = [1, 1.25, 1.5, 2]
+    const currentIndex = speeds.indexOf(reportVideoSpeed)
+    const nextSpeed = speeds[(currentIndex + 1) % speeds.length]
+    setReportVideoSpeed(nextSpeed)
+    setReportActionMessage(`Скорость видео: ${nextSpeed}x`)
   }
 
   function focusCopilotPanel() {
     setIsCopilotCollapsed(false)
     window.setTimeout(() => copilotInputRef.current?.focus(), 0)
-    setReportActionMessage('Copilot РѕС‚РєСЂС‹С‚ Рё РіРѕС‚РѕРІ РѕС‚РІРµС‡Р°С‚СЊ РїРѕ РѕС‚С‡С‘С‚Сѓ')
+    setReportActionMessage('Copilot открыт и готов отвечать по отчёту')
   }
 
   function collapseCopilotPanel() {
     setIsCopilotCollapsed(true)
-    setReportActionMessage('Copilot РјРѕР¶РЅРѕ СЃРІРµСЂРЅСѓС‚СЊ РЅР° СЃР»РµРґСѓСЋС‰РµРј С€Р°РіРµ UI')
+    setReportActionMessage('Copilot можно свернуть на следующем шаге UI')
   }
 
   function openReport(reportId) {
@@ -1474,10 +1597,10 @@ function App() {
       const payload = await apiRequest('/api/reports/upload', {
         method: 'POST',
         body: JSON.stringify({
-          title: 'РќРѕРІР°СЏ РІСЃС‚СЂРµС‡Р°',
+          title: 'Новая встреча',
           source: 'Upload',
           owner: meetingMeta.name,
-          folder: 'РћР±СЂР°Р±РѕС‚РєР°',
+          folder: 'Обработка',
         }),
       })
       const nextReport = payload.report
@@ -1485,7 +1608,7 @@ function App() {
         setReports((current) => [nextReport, ...current])
         setSelectedReportId(nextReport.id)
       }
-      setReportActionMessage(payload.message || 'РћС‚С‡С‘С‚ РѕС‚РїСЂР°РІР»РµРЅ РЅР° РѕР±СЂР°Р±РѕС‚РєСѓ')
+      setReportActionMessage(payload.message || 'Отчёт отправлен на обработку')
     } catch (error) {
       setReportActionMessage(error.message)
     }
@@ -1533,35 +1656,20 @@ function App() {
     const option = reportDownloadOptions.find((item) => item.id === optionId) || reportDownloadOptions[0]
     const filename = `${reportId}-${option.id}.${option.extension}`
 
-    if (option.pending) {
-      return `${option.label.replace(/\s*\(.+\)$/, '')} will be available after recording processing`
-    }
-
-    if (option.id === 'transcript') {
-      const payload = await apiRequest(`/api/reports/${reportId}/transcript`)
-      const detail = reportDetails[reportId]
-      const report = detail?.report || reports.find((item) => item.id === reportId) || selectedReport
-      const lines = payload.lines || detail?.transcriptLines || []
-      const text = [
-        report?.title || 'Meeting transcript',
-        '',
-        ...lines.map((line) => `${line.time || ''} ${line.speaker || ''}: ${line.text || ''}`.trim()),
-      ].join('\n')
-      saveTextDownload(text, filename)
-      return 'Transcript download started'
-    }
-
-    const response = await fetch(`/api/reports/${reportId}/download`, {
+    const response = await fetch(`/api/reports/${reportId}/download?format=${encodeURIComponent(option.id)}`, {
       headers: getAuthHeaders(),
     })
     if (!response.ok) {
-      const payload = await response.json().catch(() => ({}))
-      throw new Error(payload.error || 'РќРµ СѓРґР°Р»РѕСЃСЊ СЃРєР°С‡Р°С‚СЊ РѕС‚С‡С‘С‚')
+      const contentType = response.headers.get('content-type') || ''
+      const payload = contentType.includes('application/json')
+        ? await response.json().catch(() => ({}))
+        : { error: await response.text().catch(() => '') }
+      throw new Error(payload.error || payload.message || 'Не удалось скачать файл')
     }
 
     const blob = await response.blob()
     saveDownload(blob, filename)
-    return 'РЎРєР°С‡РёРІР°РЅРёРµ РёС‚РѕРіР° РІСЃС‚СЂРµС‡Рё РЅР°С‡Р°Р»РѕСЃСЊ'
+    return `Скачивание: ${option.label}`
   }
 
   async function handleReportAction(reportId, actionId) {
@@ -1577,10 +1685,10 @@ function App() {
         if (navigator.clipboard) {
           await navigator.clipboard.writeText(payload.url || `/report/${reportId}`)
         }
-        setReportActionMessage('РЎСЃС‹Р»РєР° РЅР° РѕС‚С‡С‘С‚ СЃРєРѕРїРёСЂРѕРІР°РЅР°')
+        setReportActionMessage('Ссылка на отчёт скопирована')
       } else if (actionId === 'rename') {
         const currentTitle = (reportDetails[reportId]?.report || reports.find((report) => report.id === reportId))?.title || ''
-        const title = window.prompt('РќРѕРІРѕРµ РЅР°Р·РІР°РЅРёРµ РѕС‚С‡С‘С‚Р°', currentTitle)
+        const title = window.prompt('Новое название отчёта', currentTitle)
         if (!title) {
           return
         }
@@ -1598,11 +1706,11 @@ function App() {
             },
           }))
         }
-        setReportActionMessage('РћС‚С‡С‘С‚ РїРµСЂРµРёРјРµРЅРѕРІР°РЅ')
+        setReportActionMessage('Отчёт переименован')
       } else if (actionId === 'delete') {
         await apiRequest(`/api/reports/${reportId}`, { method: 'DELETE' })
         setReports((current) => current.filter((report) => report.id !== reportId))
-        setReportActionMessage('РћС‚С‡С‘С‚ СѓРґР°Р»С‘РЅ')
+        setReportActionMessage('Отчёт удалён')
         if (selectedReportId === reportId) {
           const nextReport = reports.find((report) => report.id !== reportId)
           if (nextReport) {
@@ -1613,13 +1721,13 @@ function App() {
         }
       } else if (actionId === 'send') {
         await apiRequest(`/api/reports/${reportId}/send`, { method: 'POST' })
-        setReportActionMessage('РћС‚РїСЂР°РІРєР° РѕС‚С‡С‘С‚Р° РїРѕСЃС‚Р°РІР»РµРЅР° РІ РѕС‡РµСЂРµРґСЊ')
+        setReportActionMessage('Отправка отчёта поставлена в очередь')
       } else if (actionId === 'copy') {
         const payload = await apiRequest(`/api/reports/${reportId}/copy`)
         if (navigator.clipboard) {
           await navigator.clipboard.writeText(payload.text || '')
         }
-        setReportActionMessage('РўРµРєСЃС‚ РѕС‚С‡С‘С‚Р° СЃРєРѕРїРёСЂРѕРІР°РЅ')
+        setReportActionMessage('Текст отчёта скопирован')
       }
     } catch (error) {
       setReportActionMessage(error.message)
@@ -1633,7 +1741,7 @@ function App() {
       return
     }
 
-    const searchQuery = kind === 'search' ? window.prompt('Р§С‚Рѕ РЅР°Р№С‚Рё РІ РѕС‚С‡С‘С‚Рµ?', 'backend') : ''
+    const searchQuery = kind === 'search' ? window.prompt('Что найти в отчёте?', 'backend') : ''
     if (kind === 'search' && searchQuery === null) {
       return
     }
@@ -1651,11 +1759,22 @@ function App() {
     try {
       const payload = await apiRequest(`/api/reports/${selectedReportId}/${endpoint}`)
       if (kind === 'prompts') {
-        setReportActionMessage(`Prompts: ${(payload.prompts || []).length}`)
+        const prompts = payload.prompts || []
+        if (prompts[0]) {
+          setCopilotInput(prompts[0])
+          setIsCopilotCollapsed(false)
+          window.setTimeout(() => copilotInputRef.current?.focus(), 0)
+        }
+        setReportActionMessage(`Prompt готов: ${prompts[0] || 'нет подсказок'}`)
       } else if (kind === 'history') {
-        setReportActionMessage(`РСЃС‚РѕСЂРёСЏ С‡Р°С‚Р°: ${(payload.history || []).length}`)
+        const history = payload.history || []
+        if (history.length) {
+          setCopilotMessages(history.map((item) => ({ role: item.role || 'assistant', text: item.content || item.text || '' })))
+        }
+        setIsCopilotCollapsed(false)
+        setReportActionMessage(`История чата: ${history.length || copilotMessages.length}`)
       } else {
-        setReportActionMessage(`РќР°Р№РґРµРЅРѕ: ${(payload.results || []).length}`)
+        setReportActionMessage(`Найдено: ${(payload.results || []).length}`)
       }
     } catch (error) {
       setReportActionMessage(error.message)
@@ -1663,28 +1782,47 @@ function App() {
   }
 
   async function copyReportNotes() {
-    if (activeReportTab !== 'notes' || !selectedReportId) {
-      setReportActionMessage('РљРѕРїРёСЂРѕРІР°РЅРёРµ Р·Р°РјРµС‚РѕРє РґРѕСЃС‚СѓРїРЅРѕ С‚РѕР»СЊРєРѕ РІРѕ РІРєР»Р°РґРєРµ Р—Р°РјРµС‚РєРё')
+    if (!selectedReportId) {
       return
     }
 
     try {
-      const payload = await apiRequest(`/api/reports/${selectedReportId}/notes`)
-      const summary = payload.summary || selectedReportDetail?.summary || []
-      const items = payload.actionItems || selectedReportDetail?.actionItems || []
-      const text = [
-        selectedReport.title,
-        '',
-        ...summary.map((section) => `${section.title}\n${section.text}`),
-        '',
-        'Action items',
-        ...items.map((item) => `- ${item.title || item.task} (${item.owner || ''}, ${item.due || ''})`),
-      ].join('\n')
+      let text = selectedReport.title
+
+      if (activeReportTab === 'notes') {
+        const payload = await apiRequest(`/api/reports/${selectedReportId}/notes`)
+        const summary = payload.summary || selectedReportDetail?.summary || []
+        const items = payload.actionItems || selectedReportDetail?.actionItems || []
+        text = [
+          selectedReport.title,
+          '',
+          ...summary.map((section) => `${section.title}\n${section.text}`),
+          '',
+          'Action items',
+          ...items.map((item) => `- ${item.title || item.task} (${item.owner || ''}, ${item.due || ''})`),
+        ].join('\n')
+      } else if (activeReportTab === 'transcript') {
+        const payload = await apiRequest(`/api/reports/${selectedReportId}/transcript`)
+        const lines = payload.lines || selectedReportDetail?.transcriptLines || transcriptLines
+        text = [selectedReport.title, '', ...lines.map((line) => `${line.time || ''} ${line.speaker || ''}: ${line.text || ''}`.trim())].join('\n')
+      } else if (activeReportTab === 'deepDive') {
+        const payload = await apiRequest(`/api/reports/${selectedReportId}/deep-dive`)
+        const stats = payload.speakerStats || selectedReportDetail?.speakerStats || speakerStats
+        text = [selectedReport.title, '', ...stats.map((item) => `${item.name}: ${item.talk || item.talkTime || 0}% ${item.sentiment || ''} ${item.pace || ''}`.trim())].join('\n')
+      } else if (activeReportTab === 'highlights') {
+        const payload = await apiRequest(`/api/reports/${selectedReportId}/highlights`)
+        const items = payload.items || selectedReportDetail?.highlights || highlights
+        text = [selectedReport.title, '', ...items.map((item) => `${item.time || ''} ${item.title}: ${item.note || item.text || ''}`.trim())].join('\n')
+      } else {
+        const payload = await apiRequest(`/api/reports/${selectedReportId}/chapters`)
+        const items = payload.items || selectedReportDetail?.chapters || chapters
+        text = [selectedReport.title, '', ...items.map((item) => `${item.time || item.start || ''} ${item.title}: ${item.duration || item.text || ''}`.trim())].join('\n')
+      }
 
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(text)
       }
-      setReportActionMessage('Р—Р°РјРµС‚РєРё СЃРєРѕРїРёСЂРѕРІР°РЅС‹')
+      setReportActionMessage('Содержимое вкладки скопировано')
     } catch (error) {
       setReportActionMessage(error.message)
     }
@@ -1705,9 +1843,9 @@ function App() {
           actionItems: selectedReportDetail?.actionItems || [],
         }),
       })
-      setReportActionMessage('Р—Р°РјРµС‚РєРё РѕС‚РїСЂР°РІР»РµРЅС‹ РЅР° СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёРµ')
+      setReportActionMessage('Заметки отправлены на редактирование')
     } catch (error) {
-      setReportActionMessage(error.message || 'Backend endpoint РґР»СЏ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ Р·Р°РјРµС‚РѕРє РїРѕРєР° РЅРµРґРѕСЃС‚СѓРїРµРЅ')
+      setReportActionMessage(error.message || 'Backend endpoint для редактирования заметок пока недоступен')
     }
   }
 
@@ -1726,7 +1864,7 @@ function App() {
         method: 'POST',
         body: JSON.stringify({ message: text }),
       })
-      setCopilotMessages((current) => [...current, { role: 'assistant', text: payload.answer || 'РћС‚РІРµС‚ РїСѓСЃС‚РѕР№' }])
+      setCopilotMessages((current) => [...current, { role: 'assistant', text: payload.answer || 'Ответ пустой' }])
     } catch (error) {
       setCopilotMessages((current) => [...current, { role: 'assistant', text: error.message }])
     } finally {
@@ -1803,7 +1941,7 @@ function App() {
     return (
       <div className="type-filter-dropdown">
         <button className="type-filter-option" type="button" onClick={toggleAllTypeFilters}>
-          <span>Р’С‹Р±СЂР°С‚СЊ РІСЃРµ</span>
+          <span>Выбрать все</span>
           <span className={areAllTypeFiltersSelected ? 'type-check active' : 'type-check'}>
             {areAllTypeFiltersSelected && <Check size={16} />}
           </span>
@@ -1853,7 +1991,7 @@ function App() {
             <button className="calendar-nav-button" type="button" onClick={() => setCalendarMonth((current) => shiftMonth(current, -1))} aria-label="Previous month">
               <ChevronLeft size={18} />
             </button>
-            <strong>{calendarMonthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()} Рі.</strong>
+            <strong>{calendarMonthNames[calendarMonth.getMonth()]} {calendarMonth.getFullYear()} г.</strong>
             <button className="calendar-nav-button" type="button" onClick={() => setCalendarMonth((current) => shiftMonth(current, 1))} aria-label="Next month">
               <ChevronRight size={18} />
             </button>
@@ -1974,7 +2112,7 @@ function App() {
           </span>
           <div>
             <h2>{meetingMeta.room}</h2>
-            <p>{isConnected ? 'LiveKit conference Р·Р°РїСѓС‰РµРЅР°' : 'РћР¶РёРґР°РµС‚ РїРѕРґРєР»СЋС‡РµРЅРёСЏ'}</p>
+            <p>{isConnected ? 'LiveKit conference запущена' : 'Ожидает подключения'}</p>
           </div>
         </div>
 
@@ -1993,7 +2131,7 @@ function App() {
               className={isMeetingMaximized ? 'icon-button active' : 'icon-button'}
               type="button"
               onClick={() => setIsMeetingMaximized((current) => !current)}
-              aria-label={isMeetingMaximized ? 'РЎРІРµСЂРЅСѓС‚СЊ РІРёРґРµРѕРєРѕРЅС„РµСЂРµРЅС†РёСЋ' : 'Р Р°Р·РІРµСЂРЅСѓС‚СЊ РІРёРґРµРѕРєРѕРЅС„РµСЂРµРЅС†РёСЋ'}
+              aria-label={isMeetingMaximized ? 'Свернуть видеоконференцию' : 'Развернуть видеоконференцию'}
               aria-pressed={isMeetingMaximized}
             >
               {isMeetingMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
@@ -2004,7 +2142,7 @@ function App() {
               className={isConferenceChatOpen ? 'icon-button active' : 'icon-button'}
               type="button"
               onClick={() => setIsConferenceChatOpen((current) => !current)}
-              aria-label={isConferenceChatOpen ? 'РЎРєСЂС‹С‚СЊ С‡Р°С‚ РІСЃС‚СЂРµС‡Рё' : 'РџРѕРєР°Р·Р°С‚СЊ С‡Р°С‚ РІСЃС‚СЂРµС‡Рё'}
+              aria-label={isConferenceChatOpen ? 'Скрыть чат встречи' : 'Показать чат встречи'}
               aria-pressed={isConferenceChatOpen}
             >
               <MessageSquareText size={18} />
@@ -2019,7 +2157,7 @@ function App() {
           )}
           {isConnected && (
             <button className="danger-action" type="button" onClick={leaveMeeting}>
-              Р—Р°РІРµСЂС€РёС‚СЊ
+              Завершить
             </button>
           )}
         </div>
@@ -2031,8 +2169,8 @@ function App() {
         <section className="meeting-hero" aria-labelledby="meeting-title">
           <div>
             <span className="date-label">AlemLive</span>
-            <h1 id="meeting-title">РљРѕРјРЅР°С‚Р° РґР»СЏ СЃРѕР·РІРѕРЅР°</h1>
-            <p>РЎРѕР·РґР°Р№С‚Рµ РЅРѕРІСѓСЋ РєРѕРјРЅР°С‚Сѓ РѕРґРЅРёРј РЅР°Р¶Р°С‚РёРµРј РёР»Рё РїРѕРґРєР»СЋС‡РёС‚РµСЃСЊ РїРѕ РЅР°Р·РІР°РЅРёСЋ СѓР¶Рµ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РµР№ РєРѕРјРЅР°С‚С‹.</p>
+            <h1 id="meeting-title">Комната для созвона</h1>
+            <p>Создайте новую комнату одним нажатием или подключитесь по названию уже существующей комнаты.</p>
           </div>
 
           <div className="hero-actions">
@@ -2046,11 +2184,11 @@ function App() {
               disabled={isStarting}
             >
               {isStarting && entryMode === 'create' ? <Loader2 className="spin-icon" size={20} /> : <Sparkles size={20} />}
-              РЎРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ
+              Создать комнату
             </button>
             <button className="soft-action" type="button" onClick={() => selectEntryMode('join')}>
               <Link size={18} />
-              РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ
+              Присоединиться
             </button>
           </div>
         </section>
@@ -2064,19 +2202,19 @@ function App() {
                 </span>
                 <div>
                   <h2>LiveKit meeting</h2>
-                  <p>{isConnected ? 'РљРѕРјРЅР°С‚Р° Р°РєС‚РёРІРЅР°' : 'URL Рё token Р±СѓРґСѓС‚ РїРѕР»СѓС‡РµРЅС‹ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё'}</p>
+                  <p>{isConnected ? 'Комната активна' : 'URL и token будут получены автоматически'}</p>
                 </div>
               </div>
 
               <form className="join-form" onSubmit={joinMeeting}>
-                <div className="entry-switch" aria-label="Р’С‹Р±РµСЂРёС‚Рµ РґРµР№СЃС‚РІРёРµ">
+                <div className="entry-switch" aria-label="Выберите действие">
                   <button
                     className={entryMode === 'create' ? 'entry-option active' : 'entry-option'}
                     type="button"
                     onClick={() => selectEntryMode('create')}
                   >
                     <Sparkles size={18} />
-                    РЎРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ
+                    Создать комнату
                   </button>
                   <button
                     className={entryMode === 'join' ? 'entry-option active' : 'entry-option'}
@@ -2084,17 +2222,17 @@ function App() {
                     onClick={() => selectEntryMode('join')}
                   >
                     <Link size={18} />
-                    РџСЂРёСЃРѕРµРґРёРЅРёС‚СЊСЃСЏ
+                    Присоединиться
                   </button>
                 </div>
 
                 <label>
-                  <span>Р’Р°С€Рµ РёРјСЏ</span>
+                  <span>Ваше имя</span>
                   <input name="userName" value={form.userName} onChange={updateField} autoComplete="name" />
                 </label>
 
                 <label>
-                  <span>РќР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹</span>
+                  <span>Название комнаты</span>
                   <input
                     name="roomName"
                     value={form.roomName}
@@ -2107,7 +2245,7 @@ function App() {
                 {joinError && <p className="form-error">{joinError}</p>}
                 {shouldWarnAboutMediaSecurity() && (
                   <p className="form-warning">
-                    Р”Р»СЏ РєР°РјРµСЂС‹ Рё РјРёРєСЂРѕС„РѕРЅР° РѕС‚РєСЂРѕР№С‚Рµ РІСЃС‚СЂРµС‡Сѓ С‡РµСЂРµР· HTTPS РёР»Рё localhost.
+                    Для камеры и микрофона откройте встречу через HTTPS или localhost.
                   </p>
                 )}
                 {meetingNotice && <p className="form-error">{meetingNotice}</p>}
@@ -2115,10 +2253,10 @@ function App() {
                 <button className="join-button" type="submit" disabled={!canStart || isStarting}>
                   {isStarting ? <Loader2 className="spin-icon" size={18} /> : <Play size={18} fill="currentColor" />}
                   {isConnected
-                    ? 'РџРµСЂРµРїРѕРґРєР»СЋС‡РёС‚СЊСЃСЏ'
+                    ? 'Переподключиться'
                     : entryMode === 'create'
-                      ? 'РЎРѕР·РґР°С‚СЊ Рё РІРѕР№С‚Рё'
-                      : 'Р’РѕР№С‚Рё РїРѕ РЅР°Р·РІР°РЅРёСЋ'}
+                      ? 'Создать и войти'
+                      : 'Войти по названию'}
                 </button>
               </form>
             </section>
@@ -2130,8 +2268,8 @@ function App() {
                     <ShieldCheck size={21} />
                   </span>
                   <div>
-                    <h2>РџРµСЂРµРґ РІС…РѕРґРѕРј</h2>
-                    <p>Р’С‹Р±РµСЂРёС‚Рµ, С‡С‚Рѕ РІРєР»СЋС‡РёС‚СЊ СЃСЂР°Р·Сѓ РІ РєРѕРјРЅР°С‚Рµ</p>
+                    <h2>Перед входом</h2>
+                    <p>Выберите, что включить сразу в комнате</p>
                   </div>
                 </div>
 
@@ -2143,8 +2281,8 @@ function App() {
                     aria-pressed={devices.mic}
                   >
                     {devices.mic ? <Mic size={19} /> : <MicOff size={19} />}
-                    <span>РњРёРєСЂРѕС„РѕРЅ</span>
-                    <strong>{devices.mic ? 'РІРєР»СЋС‡РµРЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}</strong>
+                    <span>Микрофон</span>
+                    <strong>{devices.mic ? 'включен' : 'выключен'}</strong>
                   </button>
                   <button
                     className={devices.camera ? 'device-toggle active' : 'device-toggle'}
@@ -2153,8 +2291,8 @@ function App() {
                     aria-pressed={devices.camera}
                   >
                     {devices.camera ? <Video size={19} /> : <CameraOff size={19} />}
-                    <span>РљР°РјРµСЂР°</span>
-                    <strong>{devices.camera ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</strong>
+                    <span>Камера</span>
+                    <strong>{devices.camera ? 'включена' : 'выключена'}</strong>
                   </button>
                 </div>
               </section>
@@ -2177,10 +2315,10 @@ function App() {
                 {meetingToolbar}
                 {isRoomSettingsOpen && roomSettings && (
                   <div className="room-settings-panel">
-                    <span>Р—Р°РїРёСЃСЊ: {roomSettings.recording ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</span>
-                    <span>РўСЂР°РЅСЃРєСЂРёРїС†РёСЏ: {roomSettings.transcription ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</span>
-                    <span>Р“РѕСЃС‚Рё: {roomSettings.allowGuests ? 'СЂР°Р·СЂРµС€РµРЅС‹' : 'Р·Р°РїСЂРµС‰РµРЅС‹'}</span>
-                    <span>РђРІС‚РѕРѕС‚С‡С‘С‚: {roomSettings.autoReport ? 'РІРєР»СЋС‡С‘РЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}</span>
+                    <span>Запись: {roomSettings.recording ? 'включена' : 'выключена'}</span>
+                    <span>Транскрипция: {roomSettings.transcription ? 'включена' : 'выключена'}</span>
+                    <span>Гости: {roomSettings.allowGuests ? 'разрешены' : 'запрещены'}</span>
+                    <span>Автоотчёт: {roomSettings.autoReport ? 'включён' : 'выключен'}</span>
                   </div>
                 )}
 
@@ -2200,10 +2338,10 @@ function App() {
                 {meetingToolbar}
                 {isRoomSettingsOpen && roomSettings && (
                   <div className="room-settings-panel">
-                    <span>Р—Р°РїРёСЃСЊ: {roomSettings.recording ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</span>
-                    <span>РўСЂР°РЅСЃРєСЂРёРїС†РёСЏ: {roomSettings.transcription ? 'РІРєР»СЋС‡РµРЅР°' : 'РІС‹РєР»СЋС‡РµРЅР°'}</span>
-                    <span>Р“РѕСЃС‚Рё: {roomSettings.allowGuests ? 'СЂР°Р·СЂРµС€РµРЅС‹' : 'Р·Р°РїСЂРµС‰РµРЅС‹'}</span>
-                    <span>РђРІС‚РѕРѕС‚С‡С‘С‚: {roomSettings.autoReport ? 'РІРєР»СЋС‡С‘РЅ' : 'РІС‹РєР»СЋС‡РµРЅ'}</span>
+                    <span>Запись: {roomSettings.recording ? 'включена' : 'выключена'}</span>
+                    <span>Транскрипция: {roomSettings.transcription ? 'включена' : 'выключена'}</span>
+                    <span>Гости: {roomSettings.allowGuests ? 'разрешены' : 'запрещены'}</span>
+                    <span>Автоотчёт: {roomSettings.autoReport ? 'включён' : 'выключен'}</span>
                   </div>
                 )}
 
@@ -2212,11 +2350,11 @@ function App() {
                     <div className="empty-orbit">
                       <Bot size={34} />
                     </div>
-                    <h3>{entryMode === 'create' ? 'Р“РѕС‚РѕРІРѕ Рє СЃРѕР·РґР°РЅРёСЋ РєРѕРјРЅР°С‚С‹' : 'Р“РѕС‚РѕРІРѕ Рє РїРѕРґРєР»СЋС‡РµРЅРёСЋ'}</h3>
+                    <h3>{entryMode === 'create' ? 'Готово к созданию комнаты' : 'Готово к подключению'}</h3>
                     <p>
                       {entryMode === 'create'
-                        ? 'РќР°Р¶РјРёС‚Рµ СЃРѕР·РґР°С‚СЊ РєРѕРјРЅР°С‚Сѓ, Рё РїСЂРёР»РѕР¶РµРЅРёРµ СЃР°РјРѕ РїРѕР»СѓС‡РёС‚ LiveKit token С‡РµСЂРµР· backend.'
-                        : 'Р’РІРµРґРёС‚Рµ РЅР°Р·РІР°РЅРёРµ РєРѕРјРЅР°С‚С‹ Рё РІРѕР№РґРёС‚Рµ. URL Рё token РІРІРѕРґРёС‚СЊ РІСЂСѓС‡РЅСѓСЋ Р±РѕР»СЊС€Рµ РЅРµ РЅСѓР¶РЅРѕ.'}
+                        ? 'Нажмите создать комнату, и приложение само получит LiveKit token через backend.'
+                        : 'Введите название комнаты и войдите. URL и token вводить вручную больше не нужно.'}
                     </p>
                   </div>
                 </div>
@@ -2239,7 +2377,7 @@ function App() {
           <button className="back-title-button" type="button" onClick={() => switchView('meeting')} aria-label="Back to meeting">
             <ArrowLeft size={24} />
           </button>
-          <h1>РћС‚С‡С‘С‚С‹</h1>
+          <h1>Отчёты</h1>
         </div>
 
         <div className="ask-read-bar">
@@ -2248,7 +2386,7 @@ function App() {
             <span>{locales.current?.toUpperCase?.() || 'RU'}</span>
             <ChevronDown size={16} />
           </button>
-          <span>РЎРїСЂРѕСЃРёС‚Рµ Alem Рѕ С‡С‘Рј СѓРіРѕРґРЅРѕ...</span>
+          <span>Спросите Alem о чём угодно...</span>
           <button className="ask-send" type="button" onClick={openAskAI} aria-label="Send question">
             <Send size={19} />
           </button>
@@ -2256,16 +2394,16 @@ function App() {
 
         <div className="reports-subnav">
           <div className="report-mode-tabs">
-            <button className={activeReportMode === 'reports' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('reports')}>РћС‚С‡С‘С‚С‹</button>
-            <button className={activeReportMode === 'incomplete' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('incomplete')}>РќРµРїРѕР»РЅС‹Р№</button>
+            <button className={activeReportMode === 'reports' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('reports')}>Отчёты</button>
+            <button className={activeReportMode === 'incomplete' ? 'report-mode active' : 'report-mode'} type="button" onClick={() => setActiveReportMode('incomplete')}>Неполный</button>
           </div>
           <div className="last-updated">
             <RefreshCw size={16} />
-            РџРѕСЃР»РµРґРЅРµРµ РѕР±РЅРѕРІР»РµРЅРёРµ РІ 15:37
+            Последнее обновление в 15:37
           </div>
           <button className="primary-action upload-action" type="button" onClick={uploadReport}>
             <Download size={18} />
-            Р—Р°РіСЂСѓР·РёС‚СЊ
+            Загрузить
           </button>
         </div>
 
@@ -2282,12 +2420,12 @@ function App() {
             <input
               value={reportSearchText}
               onChange={(event) => setReportSearchText(event.target.value)}
-              placeholder="Р¤РёР»СЊС‚СЂ РїРѕ РЅР°Р·РІР°РЅРёСЋ РѕС‚С‡С‘С‚Р°"
+              placeholder="Фильтр по названию отчёта"
             />
           </label>
           <button className="filter-button" type="button" onClick={resetReportFilters}>
             <FileText size={17} />
-            Р’СЃРµ РѕС‚С‡С‘С‚С‹
+            Все отчёты
             <ChevronDown size={16} />
           </button>
           <div className="time-filter-wrap">
@@ -2317,7 +2455,7 @@ function App() {
               aria-expanded={isTypeFilterOpen}
             >
               <Filter size={17} />
-              РўРёРї
+              Тип
               <ChevronDown size={16} />
             </button>
             {isTypeFilterOpen && renderTypeFilterDropdown()}
@@ -2332,17 +2470,17 @@ function App() {
 
         <div className="reports-table">
           <div className="reports-table-head">
-            <span>РСЃС‚РѕС‡РЅРёРє</span>
-            <span>РћС‚С‡С‘С‚</span>
+            <span>Источник</span>
+            <span>Отчёт</span>
             <span>
-              Р”Р°С‚Р° Рё РІСЂРµРјСЏ
+              Дата и время
               <ArrowDown size={17} />
             </span>
-            <span>РџР°РїРєРё</span>
-            <span>Р’Р»Р°РґРµР»РµС†</span>
+            <span>Папки</span>
+            <span>Владелец</span>
           </div>
 
-          <div className="reports-week">{reportsLoading ? 'Р—РђР“Р РЈР—РљРђ РћРўР§РЃРўРћР’...' : visibleReports[0]?.week || 'РћРўР§РЃРўР«'}</div>
+          <div className="reports-week">{reportsLoading ? 'ЗАГРУЗКА ОТЧЁТОВ...' : visibleReports[0]?.week || 'ОТЧЁТЫ'}</div>
 
           {visibleReports.map((report) => (
             <article
@@ -2389,7 +2527,7 @@ function App() {
                     className={openReportActionsId === report.id ? 'report-actions-button active' : 'report-actions-button'}
                     type="button"
                     onClick={(event) => toggleReportActions(event, report.id)}
-                    aria-label={`Р”РµР№СЃС‚РІРёСЏ РґР»СЏ РѕС‚С‡С‘С‚Р° ${report.title}`}
+                    aria-label={`Действия для отчёта ${report.title}`}
                     aria-expanded={openReportActionsId === report.id}
                   >
                     <MoreHorizontal size={22} />
@@ -2397,10 +2535,10 @@ function App() {
                   {openReportActionsId === report.id && (
                     <span className="report-actions-menu" onClick={keepReportActionsOpen}>
                       {(reportActions[report.id] || [
-                        { id: 'share', label: 'РџРѕРґРµР»РёС‚СЊСЃСЏ', enabled: true },
-                        { id: 'download', label: 'РЎРєР°С‡Р°С‚СЊ', enabled: true },
-                        { id: 'rename', label: 'РџРµСЂРµРёРјРµРЅРѕРІР°С‚СЊ РѕС‚С‡РµС‚', enabled: true },
-                        { id: 'delete', label: 'РЈРґР°Р»РёС‚СЊ РѕС‚С‡РµС‚', enabled: true, danger: true },
+                        { id: 'share', label: 'Поделиться', enabled: true },
+                        { id: 'download', label: 'Скачать', enabled: true },
+                        { id: 'rename', label: 'Переименовать отчет', enabled: true },
+                        { id: 'delete', label: 'Удалить отчет', enabled: true, danger: true },
                       ]).map((action) => (
                         <button
                           className={action.danger ? 'report-action-item danger' : action.enabled === false ? 'report-action-item disabled' : 'report-action-item'}
@@ -2440,31 +2578,31 @@ function App() {
         <div className="detail-notes">
           <div className="score-strip">
             <div>
-              <span>РћС†РµРЅРєР° Alem</span>
+              <span>Оценка Alem</span>
               <strong>{selectedReport.score}</strong>
-              <small>РҐРћР РћРЁРћ</small>
+              <small>ХОРОШО</small>
             </div>
             <div>
-              <span>Р’РѕРІР»РµС‡С‘РЅРЅРѕСЃС‚СЊ</span>
+              <span>Вовлечённость</span>
               <strong>93</strong>
-              <small>РҐРћР РћРЁРћ</small>
+              <small>ХОРОШО</small>
             </div>
             <div>
-              <span>РќР°СЃС‚СЂРѕРµРЅРёРµ</span>
+              <span>Настроение</span>
               <strong>85</strong>
-              <small>РҐРћР РћРЁРћ</small>
+              <small>ХОРОШО</small>
             </div>
           </div>
 
           <section className="report-main-panel">
             <div className="section-kicker">
               <Sparkles size={18} />
-              РЎРІРѕРґРєР°
+              Сводка
             </div>
-            <span className="edited-pill">РћС‚СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРѕ</span>
-            <h3>{detailSummary[0]?.title || 'РљРѕРјР°РЅРґР° СЃРѕРіР»Р°СЃРѕРІР°Р»Р° РЅРѕРІС‹Р№ СЃС†РµРЅР°СЂРёР№ РІС…РѕРґР° Рё СЃС‚СЂСѓРєС‚СѓСЂСѓ AI РѕС‚С‡С‘С‚Р°'}</h3>
+            <span className="edited-pill">Отредактировано</span>
+            <h3>{detailSummary[0]?.title || 'Команда согласовала новый сценарий входа и структуру AI отчёта'}</h3>
             <p>
-              {detailSummary[0]?.text || 'Р’СЃС‚СЂРµС‡Р° Р±С‹Р»Р° РїРѕСЃРІСЏС‰РµРЅР° РЅР°СЃС‚СЂРѕР№РєРµ AlemLive Рё Р°РЅР°Р»РёС‚РёС‡РµСЃРєРѕРіРѕ РѕС‚С‡С‘С‚Р° РїРѕСЃР»Рµ СЃРѕР·РІРѕРЅР°. РЈС‡Р°СЃС‚РЅРёРєРё РґРѕРіРѕРІРѕСЂРёР»РёСЃСЊ, С‡С‚Рѕ РїРѕР»СЊР·РѕРІР°С‚РµР»СЊ РґРѕР»Р¶РµРЅ СЃРѕР·РґР°РІР°С‚СЊ РєРѕРјРЅР°С‚Сѓ Рё РїСЂРёСЃРѕРµРґРёРЅСЏС‚СЊСЃСЏ РїРѕ РЅР°Р·РІР°РЅРёСЋ, Р° URL Рё token РґРѕР»Р¶РЅС‹ РїРѕРґС‚СЏРіРёРІР°С‚СЊСЃСЏ Р°РІС‚РѕРјР°С‚РёС‡РµСЃРєРё С‡РµСЂРµР· backend. РџРѕСЃР»Рµ РІСЃС‚СЂРµС‡Рё Р°РіРµРЅС‚ РїРѕРєР°Р·С‹РІР°РµС‚ СЂРµР·СЋРјРµ, Р·Р°РґР°С‡Рё, С‚СЂР°РЅСЃРєСЂРёРїС‚, РјРµС‚СЂРёРєРё Рё РіР»Р°РІС‹.'}
+              {detailSummary[0]?.text || 'Встреча была посвящена настройке AlemLive и аналитического отчёта после созвона. Участники договорились, что пользователь должен создавать комнату и присоединяться по названию, а URL и token должны подтягиваться автоматически через backend. После встречи агент показывает резюме, задачи, транскрипт, метрики и главы.'}
             </p>
             {detailSummary.slice(1).map((section) => (
               <p key={section.title}>
@@ -2503,9 +2641,9 @@ function App() {
           <div className="transcript-tools">
             <div className="transcript-search">
               <Search size={18} />
-              <span>РџРѕРёСЃРє РїРѕ С‚СЂР°РЅСЃРєСЂРёРїС‚Сѓ: token, РєРѕРјРЅР°С‚Р°, РѕС‚С‡С‘С‚</span>
+              <span>Поиск по транскрипту: token, комната, отчёт</span>
             </div>
-            <span className="report-badge muted">{detailTranscriptLines.length} РјРѕРјРµРЅС‚РѕРІ</span>
+            <span className="report-badge muted">{detailTranscriptLines.length} моментов</span>
           </div>
           <div className="transcript-list">
             {detailTranscriptLines.map((line) => (
@@ -2530,19 +2668,19 @@ function App() {
               <TrendingUp size={20} />
               <span>Sentiment</span>
               <strong>82%</strong>
-              <p>РџРѕР·РёС‚РёРІРЅР°СЏ РґРёРЅР°РјРёРєР°</p>
+              <p>Позитивная динамика</p>
             </div>
             <div className="metric-card">
               <Zap size={20} />
               <span>Engagement</span>
               <strong>74%</strong>
-              <p>Р’С‹СЃРѕРєРѕРµ СѓС‡Р°СЃС‚РёРµ</p>
+              <p>Высокое участие</p>
             </div>
             <div className="metric-card">
               <Clock3 size={20} />
               <span>Interruptions</span>
               <strong>3</strong>
-              <p>РќРёР·РєРёР№ СѓСЂРѕРІРµРЅСЊ РїРµСЂРµР±РёРІР°РЅРёР№</p>
+              <p>Низкий уровень перебиваний</p>
             </div>
           </div>
           <div className="speaker-table">
@@ -2552,7 +2690,7 @@ function App() {
                   <strong>{speaker.name}</strong>
                   <span>{speaker.sentiment} В· {speaker.pace}</span>
                 </div>
-                <div className="talk-bar" aria-label={`${speaker.name} РіРѕРІРѕСЂРёР» ${speaker.talk || speaker.talkTime}% РІСЂРµРјРµРЅРё`}>
+                <div className="talk-bar" aria-label={`${speaker.name} говорил ${speaker.talk || speaker.talkTime}% времени`}>
                   <span style={{ width: `${speaker.talk || speaker.talkTime}%` }} />
                 </div>
                 <b>{speaker.talk || speaker.talkTime}%</b>
@@ -2623,7 +2761,7 @@ function App() {
                 </span>
                 <span>
                   <Users size={17} />
-                  {selectedReport.participantNames || 'Alison Barker, РњР°РґРё, РђР№РґР°РЅР°, +1 Р±РѕР»СЊС€Рµ'}
+                  {selectedReport.participantNames || 'Alison Barker, Мади, Айдана, +1 больше'}
                 </span>
               </div>
             </div>
@@ -2639,7 +2777,7 @@ function App() {
                 aria-expanded={isDownloadMenuOpen}
               >
                 <Download size={18} />
-                РЎРєР°С‡Р°С‚СЊ
+                Скачать
               </button>
               {isDownloadMenuOpen && (
                 <div className="download-menu" role="menu" onClick={keepDownloadMenuOpen}>
@@ -2653,11 +2791,11 @@ function App() {
             </div>
             <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'send')}>
               <Send size={18} />
-              РћС‚РїСЂР°РІРёС‚СЊ РІ...
+              Отправить в...
             </button>
             <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'share')}>
               <Share2 size={18} />
-              РџРѕРґРµР»РёС‚СЊСЃСЏ
+              Поделиться
             </button>
           </div>
         </div>
@@ -2674,20 +2812,35 @@ function App() {
                 <ExternalLink size={19} />
               </button>
               <div className="video-controls">
-                <Play size={18} fill="currentColor" />
-                <span>0:00 / 8:49</span>
-                <div className="video-timeline">
+                <button className="video-control-button" type="button" onClick={toggleReportVideoPlayback} aria-label={reportVideoPlaying ? 'Пауза' : 'Воспроизвести'}>
+                  {reportVideoPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                </button>
+                <span>{formatPlaybackTime(reportVideoSeconds)} / {formatPlaybackTime(reportVideoDurationSeconds)}</span>
+                <button
+                  className="video-timeline"
+                  type="button"
+                  onClick={seekReportVideo}
+                  style={{ '--video-progress': `${reportVideoProgress}%` }}
+                  aria-label="Перемотать видео"
+                >
                   {[18, 32, 48, 65, 82].map((left) => (
                     <i style={{ left: `${left}%` }} key={left} />
                   ))}
-                </div>
-                <Volume2 size={18} />
-                <Settings size={18} />
+                </button>
+                <button className="video-control-button" type="button" onClick={toggleReportVideoMute} aria-label={reportVideoMuted ? 'Включить звук' : 'Выключить звук'}>
+                  {reportVideoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                </button>
+                <button className="video-control-button speed-button" type="button" onClick={cycleReportVideoSpeed} aria-label="Скорость видео">
+                  {reportVideoSpeed}x
+                </button>
+                <button className="video-control-button" type="button" onClick={openReportRecording} aria-label="Настройки записи">
+                  <Settings size={18} />
+                </button>
               </div>
             </div>
 
             <div className="detail-tabs">
-              <div className="detail-tab-list" role="tablist" aria-label="Р Р°Р·РґРµР»С‹ РѕС‚С‡С‘С‚Р°">
+              <div className="detail-tab-list" role="tablist" aria-label="Разделы отчёта">
                 {reportTabs.map(({ id, label, icon: Icon }) => (
                   <button
                     className={activeReportTab === id ? 'detail-tab active' : 'detail-tab'}
@@ -2707,15 +2860,14 @@ function App() {
               </div>
 
               <div className="detail-tab-tools">
-                <button className="detail-tool-button" type="button" onClick={() => runReportLookup('search')} aria-label="РџРѕРёСЃРє РїРѕ РѕС‚С‡С‘С‚Сѓ">
+                <button className="detail-tool-button" type="button" onClick={() => runReportLookup('search')} aria-label="Поиск по отчёту">
                   <Search size={21} />
                 </button>
                 <button
                   className="detail-tool-button"
                   type="button"
                   onClick={copyReportNotes}
-                  disabled={activeReportTab !== 'notes'}
-                  aria-label="РљРѕРїРёСЂРѕРІР°С‚СЊ Р·Р°РјРµС‚РєРё"
+                  aria-label="Скопировать текущую вкладку"
                 >
                   <Copy size={21} />
                 </button>
@@ -2724,7 +2876,7 @@ function App() {
                     className={isDetailActionsOpen ? 'detail-tool-button active' : 'detail-tool-button'}
                     type="button"
                     onClick={() => setIsDetailActionsOpen((current) => !current)}
-                    aria-label="Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Рµ РґРµР№СЃС‚РІРёСЏ"
+                    aria-label="Дополнительные действия"
                     aria-expanded={isDetailActionsOpen}
                   >
                     <MoreHorizontal size={22} />
@@ -2733,7 +2885,7 @@ function App() {
                     <div className="detail-more-menu">
                       <button className="detail-more-item" type="button" onClick={editReportNotes}>
                         <Edit3 size={18} />
-                        Р РµРґР°РєС‚РёСЂРѕРІР°С‚СЊ Р·Р°РјРµС‚РєРё
+                        Редактировать заметки
                       </button>
                     </div>
                   )}
@@ -2793,7 +2945,7 @@ function App() {
                 ref={copilotInputRef}
                 value={copilotInput}
                 onChange={(event) => setCopilotInput(event.target.value)}
-                placeholder="РЎРїСЂРѕСЃРёС‚Рµ Alem Рѕ С‡С‘Рј СѓРіРѕРґРЅРѕ..."
+                placeholder="Спросите Alem о чём угодно..."
               />
               <button className="ask-send" type="submit" aria-label="Ask Alem" disabled={isCopilotSending}>
                 <Send size={18} />
@@ -2815,12 +2967,12 @@ function App() {
             <Lock size={22} />
           </span>
           <h1>AlemLive</h1>
-          <p>{authReady ? 'Р’РѕР№РґРёС‚Рµ С‡РµСЂРµР· Keycloak, С‡С‚РѕР±С‹ РїСЂРѕРґРѕР»Р¶РёС‚СЊ.' : 'РџСЂРѕРІРµСЂСЏРµРј Р°РІС‚РѕСЂРёР·Р°С†РёСЋ...'}</p>
+          <p>{authReady ? 'Войдите через Keycloak, чтобы продолжить.' : 'Проверяем авторизацию...'}</p>
           {authError && <p className="auth-error">{authError}</p>}
           {authReady && (
             <button className="primary-action" type="button" onClick={loginWithKeycloak}>
               <Lock size={18} />
-              Login with Keycloak
+              Войти через Keycloak
             </button>
           )}
         </section>

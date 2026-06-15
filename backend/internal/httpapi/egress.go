@@ -165,8 +165,9 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 	}
 
 	now := s.clock().UTC()
+	reportID := s.latestReportIDForRoom(roomName)
 	report := reportRow{
-		ID:               "egress-" + sanitizeReportID(firstNonEmpty(state.EgressID, now.Format("20060102150405"))),
+		ID:               firstNonEmpty(reportID, "egress-"+sanitizeReportID(firstNonEmpty(state.EgressID, now.Format("20060102150405")))),
 		Title:            "Recording - " + roomName,
 		Source:           "LiveKit",
 		Type:             "recording",
@@ -186,7 +187,20 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 		CreatedAt:        now.Format(time.RFC3339),
 		OccurredAt:       now,
 	}
-	s.storeReport(reportDetailFromAnalysis(report, analysis))
+	if existing, ok := s.reportDetailForUpdate(report.ID); ok {
+		report = existing.Report
+		report.Score = 90
+		report.Status = "ready"
+		report.ProcessingState = "ready"
+		report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
+		if report.Title == "" {
+			report.Title = "Recording - " + roomName
+		}
+	}
+	detail := reportDetailFromAnalysis(report, analysis)
+	detail.RecordingURL = recordingURL
+	detail.RoomName = roomName
+	s.storeReport(detail)
 }
 
 func firstRecordingURL(state livekitservice.EgressState, info *lkproto.EgressInfo) string {

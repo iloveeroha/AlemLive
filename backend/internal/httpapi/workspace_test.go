@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -107,5 +108,57 @@ func TestDevicePreferenceAndMeetingEvent(t *testing.T) {
 	handler.ServeHTTP(eventResponse, httptest.NewRequest(http.MethodPost, "/api/meetings/events", eventBody))
 	if eventResponse.Code != http.StatusOK {
 		t.Fatalf("expected event status 200, got %d: %s", eventResponse.Code, eventResponse.Body.String())
+	}
+}
+
+func TestMeetingEventPersistsConferenceReport(t *testing.T) {
+	storagePath := filepath.Join(t.TempDir(), "reports.json")
+	cfg := config.Config{TokenTTL: time.Hour, ReportsStoragePath: storagePath}
+	handler := NewServer(cfg)
+
+	createdBody := bytes.NewBufferString(`{"roomName":"save-room","userName":"Madi","event":"created"}`)
+	createdResponse := httptest.NewRecorder()
+	handler.ServeHTTP(createdResponse, httptest.NewRequest(http.MethodPost, "/api/meetings/events", createdBody))
+	if createdResponse.Code != http.StatusOK {
+		t.Fatalf("expected created status 200, got %d: %s", createdResponse.Code, createdResponse.Body.String())
+	}
+
+	var createdPayload struct {
+		ReportID string `json:"reportId"`
+	}
+	if err := json.Unmarshal(createdResponse.Body.Bytes(), &createdPayload); err != nil {
+		t.Fatalf("decode created response: %v", err)
+	}
+	if createdPayload.ReportID == "" {
+		t.Fatal("expected report id for created conference")
+	}
+
+	leftBody := bytes.NewBufferString(`{"roomName":"save-room","userName":"Madi","event":"left"}`)
+	leftResponse := httptest.NewRecorder()
+	handler.ServeHTTP(leftResponse, httptest.NewRequest(http.MethodPost, "/api/meetings/events", leftBody))
+	if leftResponse.Code != http.StatusOK {
+		t.Fatalf("expected left status 200, got %d: %s", leftResponse.Code, leftResponse.Body.String())
+	}
+
+	reloadedHandler := NewServer(cfg)
+	reportsRecorder := httptest.NewRecorder()
+	reloadedHandler.ServeHTTP(reportsRecorder, httptest.NewRequest(http.MethodGet, "/api/reports", nil))
+	if reportsRecorder.Code != http.StatusOK {
+		t.Fatalf("expected reports status 200, got %d: %s", reportsRecorder.Code, reportsRecorder.Body.String())
+	}
+
+	var reports reportsResponse
+	if err := json.Unmarshal(reportsRecorder.Body.Bytes(), &reports); err != nil {
+		t.Fatalf("decode reports: %v", err)
+	}
+	found := false
+	for _, report := range reports.Reports {
+		if report.ID == createdPayload.ReportID && report.ProcessingState == "saved" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected persisted saved report %s, got %#v", createdPayload.ReportID, reports.Reports)
 	}
 }

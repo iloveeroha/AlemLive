@@ -26,6 +26,9 @@ services:
       KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/certs"
       KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
       KEYCLOAK_CLIENT_ID: "alemlive"
+      REPORTS_STORAGE_PATH: "/app/data/reports.json"
+    volumes:
+      - ./backend/data:/app/data
     ports:
       - "8088:8080"
     depends_on:

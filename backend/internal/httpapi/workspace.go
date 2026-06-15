@@ -106,6 +106,11 @@ func (s *Server) meetingEvent(w http.ResponseWriter, r *http.Request) {
 		"status":   "recorded",
 		"at":       s.clock().UTC().Format(time.RFC3339),
 	}
+	conference := s.recordConferenceEvent(roomName, userName, event, s.clock())
+	if conference.ConferenceSaved {
+		response["conference"] = conference
+		response["reportId"] = conference.ReportID
+	}
 	switch strings.ToLower(event) {
 	case "created", "joined":
 		if state, err := s.startRoomRecording(r.Context(), roomName); err == nil {
@@ -115,11 +120,15 @@ func (s *Server) meetingEvent(w http.ResponseWriter, r *http.Request) {
 			response["recordingStatus"] = "not_started"
 		}
 	case "left", "ended":
-		if state, err := s.stopRoomRecording(r.Context(), roomName); err == nil {
-			response["recording"] = state
-			response["recordingStatus"] = "stopped"
+		if conference.RecordingShouldStop {
+			if state, err := s.stopRoomRecording(r.Context(), roomName); err == nil {
+				response["recording"] = state
+				response["recordingStatus"] = "stopped"
+			} else {
+				response["recordingStatus"] = "not_stopped"
+			}
 		} else {
-			response["recordingStatus"] = "not_stopped"
+			response["recordingStatus"] = "still_active"
 		}
 	}
 	writeJSON(w, http.StatusOK, response)
@@ -195,16 +204,30 @@ func (s *Server) roomAction(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w, http.MethodPost)
 			return
 		}
+		var req meetingEventRequest
+		if r.Body != nil {
+			_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req)
+		}
+		userName := strings.TrimSpace(firstNonEmpty(req.UserName, "Guest"))
+		conference := s.recordConferenceEvent(roomName, userName, "left", s.clock())
 		response := map[string]any{
 			"roomName": roomName,
 			"status":   "left",
 			"at":       s.clock().UTC().Format(time.RFC3339),
 		}
-		if state, err := s.stopRoomRecording(r.Context(), roomName); err == nil {
-			response["recording"] = state
-			response["recordingStatus"] = "stopped"
+		if conference.ConferenceSaved {
+			response["conference"] = conference
+			response["reportId"] = conference.ReportID
+		}
+		if conference.RecordingShouldStop {
+			if state, err := s.stopRoomRecording(r.Context(), roomName); err == nil {
+				response["recording"] = state
+				response["recordingStatus"] = "stopped"
+			} else {
+				response["recordingStatus"] = "not_stopped"
+			}
 		} else {
-			response["recordingStatus"] = "not_stopped"
+			response["recordingStatus"] = "still_active"
 		}
 		writeJSON(w, http.StatusOK, response)
 	default:

@@ -15,6 +15,7 @@ const (
 	defaultLLMModel        = "moonshotai/Kimi-K2.6"
 	defaultSTTModel        = "whisper-1"
 	defaultLLMTimeout      = 60
+	defaultReportsStorage  = "data/reports.json"
 )
 
 type Config struct {
@@ -48,6 +49,7 @@ type Config struct {
 	STTAPIKey                  string
 	STTModel                   string
 	LLMTimeout                 time.Duration
+	ReportsStoragePath         string
 }
 
 func Load() Config {
@@ -86,6 +88,7 @@ func Load() Config {
 		STTAPIKey:                  strings.TrimSpace(env("STT_API_KEY", os.Getenv("LLM_API_KEY"))),
 		STTModel:                   env("STT_MODEL", defaultSTTModel),
 		LLMTimeout:                 time.Duration(envInt("LLM_TIMEOUT_SECONDS", defaultLLMTimeout)) * time.Second,
+		ReportsStoragePath:         strings.TrimSpace(env("REPORTS_STORAGE_PATH", defaultReportsStorage)),
 	}
 }
 

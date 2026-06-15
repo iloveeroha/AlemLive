@@ -47,6 +47,7 @@ The backend listens on `http://localhost:8080` by default. Vite proxies `/api` t
 - `STT_API_KEY` defaults to `LLM_API_KEY`.
 - `STT_MODEL` defaults to `whisper-1`.
 - `LLM_TIMEOUT_SECONDS` defaults to `60`.
+- `REPORTS_STORAGE_PATH` defaults to `data/reports.json` and stores generated meeting reports between backend restarts.
 
 Keep `LIVEKIT_API_SECRET`, `LLM_API_KEY`, and `STT_API_KEY` only on the backend. Never expose them through Vite environment variables or browser code.
 

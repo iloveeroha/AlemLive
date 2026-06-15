@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"sort"
 	"strconv"
@@ -67,6 +68,8 @@ type reportDetailResponse struct {
 	Highlights      []highlight        `json:"highlights"`
 	Chapters        []chapter          `json:"chapters"`
 	AIQuestions     []string           `json:"aiQuestions"`
+	RecordingURL    string             `json:"recordingUrl,omitempty"`
+	RoomName        string             `json:"roomName,omitempty"`
 }
 
 type reportActionItem struct {
@@ -343,6 +346,7 @@ func reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) report
 			"What action items appeared after the meeting?",
 			"Summarize this meeting in Russian.",
 		},
+		RoomName: analysis.RoomName,
 	}
 }
 
@@ -365,6 +369,10 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 		s.generatedReports = append([]reportRow{detail.Report}, s.generatedReports...)
 	}
 	s.generatedReportStore[detail.Report.ID] = detail
+	if detail.RoomName != "" {
+		s.latestRoomReports[detail.RoomName] = detail.Report.ID
+	}
+	s.saveReportsLocked()
 }
 
 func (s *Server) allReports() []reportRow {
@@ -530,7 +538,7 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w, http.MethodGet)
 			return
 		}
-		s.downloadReport(w, detail)
+		s.downloadReport(w, r, detail)
 	case "share":
 		if r.Method != http.MethodPost {
 			methodNotAllowed(w, http.MethodPost)
@@ -687,8 +695,26 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 	writeJSON(w, http.StatusOK, aiChatResponse{Answer: answer})
 }
 
-func (s *Server) downloadReport(w http.ResponseWriter, detail reportDetailResponse) {
-	filename := detail.Report.ID + ".txt"
+func (s *Server) downloadReport(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
+	format := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("format")))
+	if format == "" {
+		format = "summary"
+	}
+
+	switch format {
+	case "summary":
+		downloadReportSummary(w, detail)
+	case "transcript":
+		downloadReportTranscript(w, detail)
+	case "trailer", "highlights", "video":
+		s.downloadReportVideo(w, r, detail, format)
+	default:
+		writeError(w, http.StatusBadRequest, "Unsupported download format")
+	}
+}
+
+func downloadReportSummary(w http.ResponseWriter, detail reportDetailResponse) {
+	filename := detail.Report.ID + "-summary.txt"
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	w.WriteHeader(http.StatusOK)
@@ -701,6 +727,56 @@ func (s *Server) downloadReport(w http.ResponseWriter, detail reportDetailRespon
 	for _, item := range detail.ActionItems {
 		fmt.Fprintf(w, "- %s (%s, %s)\n", item.Title, item.Owner, item.Due)
 	}
+}
+
+func downloadReportTranscript(w http.ResponseWriter, detail reportDetailResponse) {
+	filename := detail.Report.ID + "-transcript.txt"
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	w.WriteHeader(http.StatusOK)
+
+	fmt.Fprintf(w, "%s\n\n", detail.Report.Title)
+	for _, line := range detail.TranscriptLines {
+		fmt.Fprintf(w, "%s %s: %s\n", line.Time, line.Speaker, line.Text)
+	}
+}
+
+func (s *Server) downloadReportVideo(w http.ResponseWriter, r *http.Request, detail reportDetailResponse, format string) {
+	if detail.RecordingURL == "" {
+		writeError(w, http.StatusNotFound, "Видео встречи пока недоступно: запись появится после обработки LiveKit Egress")
+		return
+	}
+
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, detail.RecordingURL, nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not create recording download request")
+		return
+	}
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "Could not download meeting recording")
+		return
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		writeError(w, http.StatusBadGateway, "Meeting recording storage returned an error")
+		return
+	}
+
+	contentType := response.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "video/mp4"
+	}
+	filename := fmt.Sprintf("%s-%s.mp4", detail.Report.ID, format)
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	if response.ContentLength > 0 {
+		w.Header().Set("Content-Length", strconv.FormatInt(response.ContentLength, 10))
+	}
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(w, response.Body)
 }
 
 func searchReportDetail(detail reportDetailResponse, query string) []reportSearchResult {

@@ -1,5 +1,6 @@
 # Backend
 backend/.env
+backend/data/
 
 # Frontend
 frontend/node_modules

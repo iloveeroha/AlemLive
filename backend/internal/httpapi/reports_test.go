@@ -172,6 +172,23 @@ func TestReportDownload(t *testing.T) {
 	if !strings.Contains(response.Body.String(), "Action items") {
 		t.Fatalf("download body is incomplete: %s", response.Body.String())
 	}
+
+	transcriptRequest := httptest.NewRequest(http.MethodGet, "/api/reports/read-intro/download?format=transcript", nil)
+	transcriptResponse := httptest.NewRecorder()
+	handler.ServeHTTP(transcriptResponse, transcriptRequest)
+	if transcriptResponse.Code != http.StatusOK {
+		t.Fatalf("expected transcript status 200, got %d: %s", transcriptResponse.Code, transcriptResponse.Body.String())
+	}
+	if !strings.Contains(transcriptResponse.Body.String(), "00:") {
+		t.Fatalf("transcript download is incomplete: %s", transcriptResponse.Body.String())
+	}
+
+	videoRequest := httptest.NewRequest(http.MethodGet, "/api/reports/read-intro/download?format=video", nil)
+	videoResponse := httptest.NewRecorder()
+	handler.ServeHTTP(videoResponse, videoRequest)
+	if videoResponse.Code != http.StatusNotFound {
+		t.Fatalf("expected video status 404 without recording, got %d: %s", videoResponse.Code, videoResponse.Body.String())
+	}
 }
 
 func TestReportShare(t *testing.T) {

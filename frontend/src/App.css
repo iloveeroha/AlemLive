@@ -2534,19 +2534,44 @@ body.meeting-maximized-active {
   font-weight: 900;
 }
 
+.video-control-button {
+  display: inline-grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  color: #ffffff;
+  background: transparent;
+  font: inherit;
+}
+
+.video-control-button:hover {
+  color: #dce8ff;
+}
+
+.speed-button {
+  min-width: 38px;
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .video-timeline {
   position: relative;
   flex: 1 1 auto;
   height: 6px;
+  padding: 0;
+  border: 0;
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.34);
+  cursor: pointer;
 }
 
 .video-timeline::before {
   content: '';
   position: absolute;
   inset: 0 auto 0 0;
-  width: 12%;
+  width: var(--video-progress, 0%);
   border-radius: inherit;
   background: #e04574;
 }
