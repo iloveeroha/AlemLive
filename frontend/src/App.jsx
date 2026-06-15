@@ -68,6 +68,14 @@ const reportTabs = [
   { id: 'chapters', label: 'Главы', icon: ListChecks },
 ]
 
+const reportDownloadOptions = [
+  { id: 'summary', label: 'Итог встречи (.txt)', extension: 'txt' },
+  { id: 'transcript', label: 'Стенограмма встречи (.txt)', extension: 'txt' },
+  { id: 'trailer', label: 'Трейлер встречи (.mp4)', extension: 'mp4', pending: true },
+  { id: 'highlights', label: 'Основные моменты встречи (.mp4)', extension: 'mp4', pending: true },
+  { id: 'video', label: 'Видео встречи (.mp4)', extension: 'mp4', pending: true },
+]
+
 const reportRows = [
   {
     id: 'read-intro',
@@ -335,6 +343,21 @@ async function apiRequest(path, options = {}) {
   }
 
   return payload
+}
+
+function saveDownload(blob, filename) {
+  const url = window.URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  window.URL.revokeObjectURL(url)
+}
+
+function saveTextDownload(text, filename) {
+  saveDownload(new Blob([text], { type: 'text/plain;charset=utf-8' }), filename)
 }
 
 function getSelectedTypeValues(selectedTypeIds) {
@@ -726,6 +749,7 @@ function App() {
   const [copilotInput, setCopilotInput] = useState('')
   const [copilotMessages, setCopilotMessages] = useState([])
   const [isCopilotSending, setIsCopilotSending] = useState(false)
+  const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false)
   const [isDetailActionsOpen, setIsDetailActionsOpen] = useState(false)
   const [isMeetingMaximized, setIsMeetingMaximized] = useState(false)
   const [isConferenceChatOpen, setIsConferenceChatOpen] = useState(true)
@@ -1168,6 +1192,7 @@ function App() {
 
   function openReport(reportId) {
     setOpenReportActionsId('')
+    setIsDownloadMenuOpen(false)
     setSelectedReportId(reportId)
     setActiveReportTab('notes')
     setActiveView('reportDetail')
@@ -1195,6 +1220,21 @@ function App() {
     event.stopPropagation()
   }
 
+  function toggleDownloadMenu(event) {
+    event.stopPropagation()
+    setIsDownloadMenuOpen((current) => !current)
+    setIsDetailActionsOpen(false)
+  }
+
+  function keepDownloadMenuOpen(event) {
+    event.stopPropagation()
+  }
+
+  function selectDownloadOption(reportId, optionId) {
+    setIsDownloadMenuOpen(false)
+    handleReportAction(reportId, `download:${optionId}`)
+  }
+
   async function uploadReport() {
     setReportActionMessage('')
 
@@ -1219,7 +1259,28 @@ function App() {
     }
   }
 
-  async function downloadReport(reportId) {
+  async function downloadReport(reportId, optionId = 'summary') {
+    const option = reportDownloadOptions.find((item) => item.id === optionId) || reportDownloadOptions[0]
+    const filename = `${reportId}-${option.id}.${option.extension}`
+
+    if (option.pending) {
+      return `${option.label.replace(/\s*\(.+\)$/, '')} будет доступно после обработки записи`
+    }
+
+    if (option.id === 'transcript') {
+      const payload = await apiRequest(`/api/reports/${reportId}/transcript`)
+      const detail = reportDetails[reportId]
+      const report = detail?.report || reports.find((item) => item.id === reportId) || selectedReport
+      const lines = payload.lines || detail?.transcriptLines || []
+      const text = [
+        report?.title || 'Стенограмма встречи',
+        '',
+        ...lines.map((line) => `${line.time || ''} ${line.speaker || ''}: ${line.text || ''}`.trim()),
+      ].join('\n')
+      saveTextDownload(text, filename)
+      return 'Скачивание стенограммы началось'
+    }
+
     const response = await fetch(`/api/reports/${reportId}/download`)
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}))
@@ -1227,23 +1288,18 @@ function App() {
     }
 
     const blob = await response.blob()
-    const url = window.URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${reportId}.txt`
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    window.URL.revokeObjectURL(url)
+    saveDownload(blob, filename)
+    return 'Скачивание итога встречи началось'
   }
 
   async function handleReportAction(reportId, actionId) {
     setReportActionMessage('')
+    setIsDownloadMenuOpen(false)
 
     try {
-      if (actionId === 'download') {
-        await downloadReport(reportId)
-        setReportActionMessage('Скачивание отчёта началось')
+      if (actionId === 'download' || actionId.startsWith('download:')) {
+        const message = await downloadReport(reportId, actionId.split(':')[1] || 'summary')
+        setReportActionMessage(message)
       } else if (actionId === 'share') {
         const payload = await apiRequest(`/api/reports/${reportId}/share`, { method: 'POST' })
         if (navigator.clipboard) {
@@ -1407,6 +1463,8 @@ function App() {
   }
 
   function switchView(view) {
+    setIsDownloadMenuOpen(false)
+    setIsDetailActionsOpen(false)
     setActiveView(view)
     if (typeof window !== 'undefined') {
       window.history.replaceState(null, '', view === 'reports' ? '#reports' : '#meeting')
@@ -2280,10 +2338,27 @@ function App() {
           </div>
 
           <div className="detail-actions">
-            <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'download')}>
-              <Download size={18} />
-              Скачать
-            </button>
+            <div className="download-menu-wrap">
+              <button
+                className={isDownloadMenuOpen ? 'soft-action download-menu-button active' : 'soft-action download-menu-button'}
+                type="button"
+                onClick={toggleDownloadMenu}
+                aria-haspopup="menu"
+                aria-expanded={isDownloadMenuOpen}
+              >
+                <Download size={18} />
+                Скачать
+              </button>
+              {isDownloadMenuOpen && (
+                <div className="download-menu" role="menu" onClick={keepDownloadMenuOpen}>
+                  {reportDownloadOptions.map((option) => (
+                    <button className="download-menu-item" type="button" role="menuitem" key={option.id} onClick={() => selectDownloadOption(selectedReport.id, option.id)}>
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <button className="soft-action" type="button" onClick={() => handleReportAction(selectedReport.id, 'send')}>
               <Send size={18} />
               Отправить в...
