@@ -28,7 +28,7 @@ $env:LIVEKIT_API_KEY="your_key"
 $env:LIVEKIT_API_SECRET="your_secret"
 $env:LLM_API_KEY="your_llm_key"
 $env:LLM_MODEL="moonshotai/Kimi-K2.6"
-$env:STT_MODEL="whisper-1"
+$env:STT_MODEL="openai/whisper-large-v3-turbo"
 go run ./cmd/server
 ```
 
@@ -45,9 +45,11 @@ The backend listens on `http://localhost:8080` by default. Vite proxies `/api` t
 - `LLM_MODEL` defaults to `moonshotai/Kimi-K2.6`.
 - `STT_BASE_URL` defaults to `LLM_BASE_URL` and must expose OpenAI-compatible `/v1/audio/transcriptions`.
 - `STT_API_KEY` defaults to `LLM_API_KEY`.
-- `STT_MODEL` defaults to `whisper-1`.
+- `STT_MODEL` defaults to `openai/whisper-large-v3-turbo` for the NITEC OpenAI-compatible gateway.
+- `STT_TIMEOUT_SECONDS` defaults to `900` for longer audio/video transcription jobs.
 - `LLM_TIMEOUT_SECONDS` defaults to `60`.
 - `REPORTS_STORAGE_PATH` defaults to `data/reports.json` and stores generated meeting reports between backend restarts.
+- `RECORDINGS_STORAGE_PATH` defaults to `data/recordings` and stores uploaded meeting audio/video files for report playback.
 
 Keep `LIVEKIT_API_SECRET`, `LLM_API_KEY`, and `STT_API_KEY` only on the backend. Never expose them through Vite environment variables or browser code.
 

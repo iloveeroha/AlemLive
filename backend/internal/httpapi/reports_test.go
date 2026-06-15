@@ -3,6 +3,7 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -374,6 +375,116 @@ func TestReportUpload(t *testing.T) {
 	}
 	if payload.Report.Title != "Demo upload" || payload.Report.ProcessingState != "processing" {
 		t.Fatalf("unexpected upload response: %#v", payload)
+	}
+}
+
+func TestReportRecordingUploadRunsInBackground(t *testing.T) {
+	sttServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/audio/transcriptions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
+			t.Fatalf("unexpected authorization header: %s", got)
+		}
+		if err := r.ParseMultipartForm(1024 * 1024); err != nil {
+			t.Fatalf("parse multipart: %v", err)
+		}
+		if r.FormValue("model") != "openai/whisper-large-v3-turbo" {
+			t.Fatalf("unexpected model: %s", r.FormValue("model"))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"text": "Команда обсудила загрузку записи и фоновую обработку отчета.",
+			"segments": []map[string]any{
+				{"id": 1, "start": 0, "end": 3, "text": "Команда обсудила загрузку записи."},
+				{"id": 2, "start": 3, "end": 6, "text": "Фоновая обработка отчета работает."},
+			},
+		})
+	}))
+	defer sttServer.Close()
+
+	handler := NewServer(config.Config{
+		TokenTTL:              time.Hour,
+		STTBaseURL:            sttServer.URL,
+		STTAPIKey:             "test-key",
+		STTModel:              "openai/whisper-large-v3-turbo",
+		STTTimeout:            time.Second,
+		LLMTimeout:            time.Second,
+		LLMBaseURL:            "",
+		LLMAPIKey:             "",
+		LLMModel:              "",
+		RecordingsStoragePath: t.TempDir(),
+	})
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("roomName", "alem-meeting"); err != nil {
+		t.Fatalf("write roomName: %v", err)
+	}
+	if err := writer.WriteField("title", "Async upload"); err != nil {
+		t.Fatalf("write title: %v", err)
+	}
+	file, err := writer.CreateFormFile("file", "meeting.webm")
+	if err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+	if _, err := file.Write([]byte("fake audio")); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/reports/upload", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var uploadPayload struct {
+		Report reportRow `json:"report"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &uploadPayload); err != nil {
+		t.Fatalf("decode upload response: %v", err)
+	}
+	if uploadPayload.Report.ProcessingState != "processing" {
+		t.Fatalf("expected processing report, got %#v", uploadPayload.Report)
+	}
+
+	streamResponse := httptest.NewRecorder()
+	handler.ServeHTTP(streamResponse, httptest.NewRequest(http.MethodGet, "/api/reports/"+uploadPayload.Report.ID+"/recording/stream", nil))
+	if streamResponse.Code != http.StatusOK {
+		t.Fatalf("expected stream status 200, got %d: %s", streamResponse.Code, streamResponse.Body.String())
+	}
+	if streamResponse.Body.String() != "fake audio" {
+		t.Fatalf("unexpected stream body: %q", streamResponse.Body.String())
+	}
+
+	var detail reportDetailResponse
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		detailResponse := httptest.NewRecorder()
+		handler.ServeHTTP(detailResponse, httptest.NewRequest(http.MethodGet, "/api/reports/"+uploadPayload.Report.ID, nil))
+		if detailResponse.Code != http.StatusOK {
+			t.Fatalf("expected detail status 200, got %d: %s", detailResponse.Code, detailResponse.Body.String())
+		}
+		if err := json.Unmarshal(detailResponse.Body.Bytes(), &detail); err != nil {
+			t.Fatalf("decode detail response: %v", err)
+		}
+		if detail.Report.ProcessingState == "ready" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if detail.Report.ProcessingState != "ready" {
+		t.Fatalf("expected ready report after background job, got %#v", detail.Report)
+	}
+	if len(detail.TranscriptLines) == 0 || len(detail.Summary) == 0 {
+		t.Fatalf("expected transcript and summary, got %#v", detail)
 	}
 }
 

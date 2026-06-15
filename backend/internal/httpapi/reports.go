@@ -1,11 +1,16 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
+	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -69,6 +74,8 @@ type reportDetailResponse struct {
 	Chapters        []chapter          `json:"chapters"`
 	AIQuestions     []string           `json:"aiQuestions"`
 	RecordingURL    string             `json:"recordingUrl,omitempty"`
+	RecordingFile   string             `json:"recordingFile,omitempty"`
+	RecordingType   string             `json:"recordingType,omitempty"`
 	RoomName        string             `json:"roomName,omitempty"`
 }
 
@@ -234,64 +241,224 @@ func (s *Server) reportRecordingUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roomName, transcription, err := s.readTranscriptionInput(w, r)
+	input, err := s.readRecordingUploadInput(w, r, strings.TrimSpace(r.URL.Query().Get("roomName")))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	transcriptText := truncateRunes(strings.TrimSpace(transcription.Text), maxTranscriptRunes)
-	lines := transcriptLinesFromTranscription(transcription)
-	if len(lines) == 0 {
-		lines = transcriptLinesFromText(transcriptText)
-	}
-
-	analysis, err := s.generateMeetingAnalysisFromTranscript(r.Context(), roomName, transcriptText, lines)
-	if err != nil {
-		analysis = fallbackAnalysisFromTranscript(roomName, transcriptText, lines, s.clock())
-	}
-
 	now := s.clock().UTC()
-	owner := strings.TrimSpace(firstNonEmpty(r.FormValue("owner"), "Team AI"))
-	source := strings.TrimSpace(firstNonEmpty(r.FormValue("source"), "Upload"))
-	folder := strings.TrimSpace(firstNonEmpty(r.FormValue("folder"), "Processed"))
-	title := strings.TrimSpace(firstNonEmpty(r.FormValue("title"), roomName, "Uploaded meeting"))
+	owner := strings.TrimSpace(firstNonEmpty(input.Owner, "Team AI"))
+	source := strings.TrimSpace(firstNonEmpty(input.Source, "Upload"))
+	folder := strings.TrimSpace(firstNonEmpty(input.Folder, "Processed"))
+	title := strings.TrimSpace(firstNonEmpty(input.Title, input.RoomName, "Uploaded meeting"))
 	initial := strings.ToUpper(firstRune(owner))
 	if initial == "" {
 		initial = "A"
 	}
 
 	report := reportRow{
-		ID:               "uploaded-" + now.Format("20060102150405"),
+		ID:               fmt.Sprintf("uploaded-%s-%09d", now.Format("20060102150405"), now.Nanosecond()),
 		Title:            title,
 		Source:           source,
 		Type:             reportTypeFromSource(source),
 		Date:             now.Format("02.01.2006"),
 		Time:             now.Format("15:04"),
-		Participants:     parsePositiveInt(r.FormValue("participants"), 0),
-		ParticipantNames: firstNonEmpty(r.FormValue("participantNames"), owner),
-		Score:            90,
+		Participants:     parsePositiveInt(input.Participants, 0),
+		ParticipantNames: firstNonEmpty(input.ParticipantNames, owner),
+		Score:            0,
 		Folder:           folder,
 		Owner:            owner,
 		OwnerInitial:     initial,
 		ThumbnailTone:    "mint",
 		Week:             "Uploads",
-		Duration:         formatTranscriptTime(float64(max(30, len(lines)*30))),
-		Status:           "ready",
-		ProcessingState:  "ready",
+		Duration:         "00:00",
+		Status:           "processing",
+		ProcessingState:  "processing",
 		CreatedAt:        now.Format(time.RFC3339),
 		OccurredAt:       now,
 	}
 
-	detail := reportDetailFromAnalysis(report, analysis)
+	recordingFile, recordingType, err := s.saveUploadedRecording(report.ID, input)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not save uploaded recording")
+		return
+	}
+
+	detail := processingReportDetail(report, input.RoomName)
+	if recordingFile != "" {
+		detail.RecordingFile = recordingFile
+		detail.RecordingType = recordingType
+		detail.RecordingURL = "/api/reports/" + report.ID + "/recording/stream"
+	}
 	s.storeReport(detail)
-	writeJSON(w, http.StatusOK, map[string]any{
-		"report":         report,
-		"detail":         detail,
-		"analysis":       analysis,
-		"transcriptText": transcriptText,
-		"message":        "Recording transcribed and analyzed",
+	go s.processUploadedRecording(report.ID, input)
+
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"report":  report,
+		"detail":  detail,
+		"status":  "processing",
+		"message": "Видео загружено. STT и AI-анализ выполняются в фоне.",
 	})
+}
+
+func (s *Server) saveUploadedRecording(reportID string, input recordingUploadInput) (string, string, error) {
+	if strings.TrimSpace(s.cfg.RecordingsStoragePath) == "" {
+		return "", "", nil
+	}
+
+	extension := strings.ToLower(filepath.Ext(input.FileName))
+	switch extension {
+	case ".mp4", ".webm", ".mov", ".m4v", ".ogg", ".ogv", ".mp3", ".m4a", ".wav":
+	default:
+		switch {
+		case strings.Contains(input.ContentType, "webm"):
+			extension = ".webm"
+		case strings.Contains(input.ContentType, "ogg"):
+			extension = ".ogg"
+		case strings.Contains(input.ContentType, "mpeg"):
+			extension = ".mp3"
+		case strings.Contains(input.ContentType, "wav"):
+			extension = ".wav"
+		default:
+			extension = ".mp4"
+		}
+	}
+
+	fileName := reportID + extension
+	if err := os.MkdirAll(s.cfg.RecordingsStoragePath, 0o755); err != nil {
+		return "", "", err
+	}
+	path := filepath.Join(s.cfg.RecordingsStoragePath, fileName)
+	if err := os.WriteFile(path, input.Data, 0o600); err != nil {
+		return "", "", err
+	}
+
+	contentType := strings.TrimSpace(input.ContentType)
+	if contentType == "" {
+		contentType = recordingContentType(fileName)
+	}
+	return fileName, contentType, nil
+}
+
+func recordingContentType(fileName string) string {
+	switch strings.ToLower(filepath.Ext(fileName)) {
+	case ".mp4", ".m4v", ".mov":
+		return "video/mp4"
+	case ".webm":
+		return "video/webm"
+	case ".ogg", ".ogv":
+		return "video/ogg"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".m4a":
+		return "audio/mp4"
+	case ".wav":
+		return "audio/wav"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func processingReportDetail(report reportRow, roomName string) reportDetailResponse {
+	return reportDetailResponse{
+		Report: report,
+		Summary: []summarySection{
+			{Title: "Обработка встречи", Text: "Видео загружено. Backend выполняет speech-to-text и AI-анализ в фоне."},
+		},
+		ActionItems:     []reportActionItem{},
+		TranscriptLines: []reportTranscript{},
+		Transcript:      []reportTranscript{},
+		SpeakerStats:    []speakerStat{},
+		Highlights:      []highlight{},
+		Chapters:        []chapter{},
+		AIQuestions: []string{
+			"Когда будет готово резюме?",
+			"Какие задачи появились после встречи?",
+		},
+		RoomName: roomName,
+	}
+}
+
+func (s *Server) processUploadedRecording(reportID string, input recordingUploadInput) {
+	timeout := s.cfg.STTTimeout + s.cfg.LLMTimeout + time.Minute
+	if timeout <= time.Minute {
+		timeout = 20 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	transcription, err := s.transcribeRecording(ctx, input)
+	if err != nil {
+		s.markUploadedReportFailed(reportID, err)
+		return
+	}
+
+	transcriptText := truncateRunes(strings.TrimSpace(transcription.Text), maxTranscriptRunes)
+	if transcriptText == "" {
+		s.markUploadedReportFailed(reportID, errors.New("transcript is empty"))
+		return
+	}
+
+	lines := transcriptLinesFromTranscription(transcription)
+	if len(lines) == 0 {
+		lines = transcriptLinesFromText(transcriptText)
+	}
+
+	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, input.RoomName, transcriptText, lines)
+	if err != nil {
+		analysis = fallbackAnalysisFromTranscript(input.RoomName, transcriptText, lines, s.clock())
+	}
+
+	detail, ok := s.reportDetailByID(reportID)
+	if !ok {
+		return
+	}
+	report := detail.Report
+	report.Score = 90
+	report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
+	report.Status = "ready"
+	report.ProcessingState = "ready"
+
+	readyDetail := reportDetailFromAnalysis(report, analysis)
+	readyDetail.RecordingURL = detail.RecordingURL
+	readyDetail.RecordingFile = detail.RecordingFile
+	readyDetail.RecordingType = detail.RecordingType
+	s.storeReport(readyDetail)
+}
+
+func (s *Server) markUploadedReportFailed(reportID string, err error) {
+	detail, ok := s.reportDetailByID(reportID)
+	if !ok {
+		return
+	}
+
+	detail.Report.Status = "failed"
+	detail.Report.ProcessingState = "failed"
+	detail.Report.Score = 0
+	detail.Summary = []summarySection{
+		{Title: "Ошибка обработки", Text: reportProcessingErrorMessage(err)},
+	}
+	detail.ActionItems = []reportActionItem{}
+	detail.TranscriptLines = []reportTranscript{}
+	detail.Transcript = []reportTranscript{}
+	detail.SpeakerStats = []speakerStat{}
+	detail.Highlights = []highlight{}
+	detail.Chapters = []chapter{}
+
+	s.storeReport(detail)
+}
+
+func reportProcessingErrorMessage(err error) string {
+	if err == nil {
+		return "STT service error: unknown error"
+	}
+
+	var apiErr *llm.APIError
+	if errors.As(err, &apiErr) {
+		return "STT service error: " + apiErr.Message
+	}
+	return "STT service error: " + err.Error()
 }
 
 func reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) reportDetailResponse {
@@ -342,9 +509,9 @@ func reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) report
 		Highlights:      analysis.Highlights,
 		Chapters:        analysis.Chapters,
 		AIQuestions: []string{
-			"What were the key decisions?",
-			"What action items appeared after the meeting?",
-			"Summarize this meeting in Russian.",
+			"Какие решения приняли на встрече?",
+			"Какие задачи появились после встречи?",
+			"Кратко перескажи встречу на русском.",
 		},
 		RoomName: analysis.RoomName,
 	}
@@ -456,13 +623,14 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if subAction == "stream" {
-			s.streamReportRecording(w, detail)
+			s.streamReportRecording(w, r, detail)
 			return
 		}
+		recordingURL := firstNonEmpty(detail.RecordingURL, "/api/reports/"+detail.Report.ID+"/recording/stream")
 		writeJSON(w, http.StatusOK, map[string]any{
 			"reportId": detail.Report.ID,
 			"duration": detail.Report.Duration,
-			"url":      "/api/reports/" + detail.Report.ID + "/recording/stream",
+			"url":      recordingURL,
 			"markers":  []string{"00:42", "04:18", "12:05"},
 		})
 	case "tabs":
@@ -603,7 +771,16 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) streamReportRecording(w http.ResponseWriter, detail reportDetailResponse) {
+func (s *Server) streamReportRecording(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
+	if detail.RecordingFile != "" {
+		s.serveStoredRecording(w, r, detail, false)
+		return
+	}
+	if detail.RecordingURL != "" {
+		http.Redirect(w, r, detail.RecordingURL, http.StatusTemporaryRedirect)
+		return
+	}
+
 	title := html.EscapeString(detail.Report.Title)
 	duration := html.EscapeString(detail.Report.Duration)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -617,6 +794,36 @@ func (s *Server) streamReportRecording(w http.ResponseWriter, detail reportDetai
 <p>Когда появится реальное storage/CDN, этот endpoint можно заменить на redirect или video stream.</p>
 </body>
 </html>`, title, title, duration)
+}
+
+func (s *Server) serveStoredRecording(w http.ResponseWriter, r *http.Request, detail reportDetailResponse, attachment bool) {
+	fileName := filepath.Base(detail.RecordingFile)
+	if fileName == "." || fileName == string(filepath.Separator) || fileName == "" {
+		writeError(w, http.StatusNotFound, "Видео встречи пока недоступно")
+		return
+	}
+
+	path := filepath.Join(s.cfg.RecordingsStoragePath, fileName)
+	file, err := os.Open(path)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "Видео встречи пока недоступно")
+		return
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		writeError(w, http.StatusNotFound, "Видео встречи пока недоступно")
+		return
+	}
+
+	contentType := firstNonEmpty(detail.RecordingType, recordingContentType(fileName))
+	w.Header().Set("Content-Type", contentType)
+	if attachment {
+		downloadName := detail.Report.ID + filepath.Ext(fileName)
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", downloadName))
+	}
+	http.ServeContent(w, r, fileName, stat.ModTime(), file)
 }
 
 func (s *Server) renameReport(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
@@ -669,7 +876,7 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 
 	contextText := truncateRunes(firstNonEmpty(req.Context, reportDetailContext(detail)), maxChatContextRunes)
 	if s.ai == nil || !s.ai.Configured() {
-		writeJSON(w, http.StatusOK, aiChatResponse{Answer: fallbackReportAnswer(detail, message)})
+		writeJSON(w, http.StatusOK, aiChatResponse{Answer: fallbackReportAnswerSafe(detail, message)})
 		return
 	}
 
@@ -688,7 +895,8 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 		MaxTokens:   700,
 	})
 	if err != nil {
-		writeError(w, http.StatusBadGateway, "AI service is unavailable")
+		log.Printf("report chat AI fallback for report %s: %v", detail.Report.ID, err)
+		writeJSON(w, http.StatusOK, aiChatResponse{Answer: fallbackReportAnswerSafe(detail, message)})
 		return
 	}
 
@@ -742,6 +950,11 @@ func downloadReportTranscript(w http.ResponseWriter, detail reportDetailResponse
 }
 
 func (s *Server) downloadReportVideo(w http.ResponseWriter, r *http.Request, detail reportDetailResponse, format string) {
+	if detail.RecordingFile != "" {
+		s.serveStoredRecording(w, r, detail, true)
+		return
+	}
+
 	if detail.RecordingURL == "" {
 		writeError(w, http.StatusNotFound, "Видео встречи пока недоступно: запись появится после обработки LiveKit Egress")
 		return
@@ -1263,6 +1476,53 @@ func fallbackReportAnswer(detail reportDetailResponse, message string) string {
 			}
 		}
 		return strings.TrimSpace(b.String())
+	}
+	return "Короткое резюме: " + detail.Summary[0].Text
+}
+
+func fallbackReportAnswerSafe(detail reportDetailResponse, message string) string {
+	message = strings.ToLower(message)
+	if strings.Contains(message, "зада") || strings.Contains(message, "action") || strings.Contains(message, "todo") {
+		if len(detail.ActionItems) == 0 {
+			return "В отчете пока нет найденных задач."
+		}
+		var b strings.Builder
+		b.WriteString("Задачи после встречи:\n")
+		for _, item := range detail.ActionItems {
+			b.WriteString("- ")
+			b.WriteString(firstNonEmpty(item.Title, item.Task, "Задача"))
+			if item.Owner != "" {
+				b.WriteString(" — ")
+				b.WriteString(item.Owner)
+			}
+			if item.Due != "" {
+				b.WriteString(", ")
+				b.WriteString(item.Due)
+			}
+			b.WriteString("\n")
+		}
+		return strings.TrimSpace(b.String())
+	}
+	if strings.Contains(message, "решен") || strings.Contains(message, "decision") {
+		var b strings.Builder
+		for _, item := range detail.Highlights {
+			if strings.EqualFold(item.Type, "Decision") {
+				b.WriteString("- ")
+				b.WriteString(item.Title)
+				if item.Text != "" {
+					b.WriteString(": ")
+					b.WriteString(item.Text)
+				}
+				b.WriteString("\n")
+			}
+		}
+		if strings.TrimSpace(b.String()) == "" {
+			return "В отчете пока нет явно выделенных решений."
+		}
+		return "Ключевые решения:\n" + strings.TrimSpace(b.String())
+	}
+	if len(detail.Summary) == 0 {
+		return "Отчет еще обрабатывается или не содержит сводку."
 	}
 	return "Короткое резюме: " + detail.Summary[0].Text
 }

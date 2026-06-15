@@ -2226,6 +2226,17 @@ body.meeting-maximized-active {
   background: #e8fbf6;
 }
 
+.state-pill.processing,
+.state-pill.recording {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.state-pill.failed {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
 .date-cell {
   display: grid;
   align-content: center;
@@ -2476,6 +2487,24 @@ body.meeting-maximized-active {
     radial-gradient(circle at 50% 35%, rgba(255, 255, 255, 0.85), transparent 14%),
     linear-gradient(135deg, #cfd8df, #8797a8);
   overflow: hidden;
+}
+
+.report-video-frame {
+  position: relative;
+  width: min(970px, 100%);
+  aspect-ratio: 16 / 6.6;
+  margin: 0 auto 18px;
+  border-radius: 10px;
+  background: #050608;
+  overflow: hidden;
+}
+
+.report-video-player {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #050608;
+  object-fit: contain;
 }
 
 .video-player-mock::after {

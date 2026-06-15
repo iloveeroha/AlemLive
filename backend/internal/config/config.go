@@ -13,9 +13,11 @@ const (
 	defaultTokenTTLMinutes = 120
 	defaultLLMBaseURL      = "https://llm.nitec.kz"
 	defaultLLMModel        = "moonshotai/Kimi-K2.6"
-	defaultSTTModel        = "whisper-1"
+	defaultSTTModel        = "openai/whisper-large-v3-turbo"
 	defaultLLMTimeout      = 60
+	defaultSTTTimeout      = 900
 	defaultReportsStorage  = "data/reports.json"
+	defaultRecordingsDir   = "data/recordings"
 )
 
 type Config struct {
@@ -49,7 +51,9 @@ type Config struct {
 	STTAPIKey                  string
 	STTModel                   string
 	LLMTimeout                 time.Duration
+	STTTimeout                 time.Duration
 	ReportsStoragePath         string
+	RecordingsStoragePath      string
 }
 
 func Load() Config {
@@ -88,7 +92,9 @@ func Load() Config {
 		STTAPIKey:                  strings.TrimSpace(env("STT_API_KEY", os.Getenv("LLM_API_KEY"))),
 		STTModel:                   env("STT_MODEL", defaultSTTModel),
 		LLMTimeout:                 time.Duration(envInt("LLM_TIMEOUT_SECONDS", defaultLLMTimeout)) * time.Second,
+		STTTimeout:                 time.Duration(envInt("STT_TIMEOUT_SECONDS", defaultSTTTimeout)) * time.Second,
 		ReportsStoragePath:         strings.TrimSpace(env("REPORTS_STORAGE_PATH", defaultReportsStorage)),
+		RecordingsStoragePath:      strings.TrimSpace(env("RECORDINGS_STORAGE_PATH", defaultRecordingsDir)),
 	}
 }
 

@@ -59,6 +59,9 @@ func normalizeLoadedReport(detail *reportDetailResponse) {
 	if detail.Transcript == nil {
 		detail.Transcript = detail.TranscriptLines
 	}
+	if detail.RecordingFile != "" && detail.RecordingURL == "" && detail.Report.ID != "" {
+		detail.RecordingURL = "/api/reports/" + detail.Report.ID + "/recording/stream"
+	}
 }
 
 func (s *Server) saveReportsLocked() {

@@ -350,6 +350,20 @@ function formatPlaybackTime(seconds) {
   return `${minutes}:${remainder}`
 }
 
+function reportProcessingLabel(report) {
+  const state = report?.processingState || report?.status || ''
+  if (state === 'processing') {
+    return 'Обрабатывается'
+  }
+  if (state === 'recording') {
+    return 'Запись'
+  }
+  if (state === 'failed') {
+    return 'Ошибка'
+  }
+  return ''
+}
+
 const authSessionKey = 'alemlive-auth-session-v2'
 const authVerifierKey = 'alemlive-auth-verifier'
 let currentAccessToken = ''
@@ -358,18 +372,39 @@ function setCurrentAccessToken(token) {
   currentAccessToken = token || ''
 }
 
+function getCurrentAccessToken() {
+  if (currentAccessToken) {
+    return currentAccessToken
+  }
+
+  const session = loadAuthSession()
+  if (session?.accessToken) {
+    setCurrentAccessToken(session.accessToken)
+    return session.accessToken
+  }
+
+  return ''
+}
+
 function getAuthHeaders() {
-  return currentAccessToken ? { Authorization: `Bearer ${currentAccessToken}` } : {}
+  const token = getCurrentAccessToken()
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
 async function apiRequest(path, options = {}) {
+  const { requireAuth = false, ...requestOptions } = options
+  const authHeaders = getAuthHeaders()
+  if (requireAuth && !authHeaders.Authorization) {
+    throw new Error('Сессия Keycloak не найдена. Войдите заново и повторите загрузку.')
+  }
+
   const isFormDataBody = typeof FormData !== 'undefined' && options.body instanceof FormData
   const response = await fetch(path, {
-    ...options,
+    ...requestOptions,
     headers: {
-      ...(!isFormDataBody && options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...getAuthHeaders(),
-      ...options.headers,
+      ...(!isFormDataBody && requestOptions.body ? { 'Content-Type': 'application/json' } : {}),
+      ...authHeaders,
+      ...requestOptions.headers,
     },
   })
 
@@ -380,10 +415,16 @@ async function apiRequest(path, options = {}) {
     if (response.status === 401 && typeof window !== 'undefined') {
       clearAuthSession()
       window.dispatchEvent(new CustomEvent('alemlive-auth-expired', {
-        detail: payload?.error || payload?.message || 'Сессия истекла. Войдите заново.',
+        detail: payload?.error === 'Missing bearer token'
+          ? 'Сессия Keycloak не найдена. Войдите заново.'
+          : payload?.error || payload?.message || 'Сессия истекла. Войдите заново.',
       }))
     }
-    throw new Error(payload?.error || payload?.message || 'Backend request failed')
+    const fallbackMessage = response.status === 413
+      ? 'Файл слишком большой для загрузки'
+      : `Backend request failed (${response.status})`
+    const textMessage = typeof payload === 'string' ? payload.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() : ''
+    throw new Error(payload?.error || payload?.message || textMessage || fallbackMessage)
   }
 
   return payload
@@ -870,6 +911,7 @@ function App() {
   const [reportActions, setReportActions] = useState({})
   const [reportsError, setReportsError] = useState('')
   const [reportsLoading, setReportsLoading] = useState(false)
+  const [reportsRefreshKey, setReportsRefreshKey] = useState(0)
   const [activeReportMode, setActiveReportMode] = useState('reports')
   const [reportSearchText, setReportSearchText] = useState('')
   const [workspaceNotice, setWorkspaceNotice] = useState('')
@@ -909,6 +951,8 @@ function App() {
   const visibleReports = filterReportsByType(reports.length ? reports : reportRows, selectedTypeFilterIds)
   const reportVideoDurationSeconds = parseDurationToSeconds(selectedReport?.duration || '08:49')
   const reportVideoProgress = Math.min(100, Math.max(0, (reportVideoSeconds / reportVideoDurationSeconds) * 100))
+  const hasProcessingReports = reports.some((report) => ['processing', 'recording'].includes(report.processingState || report.status))
+  const selectedReportRecordingUrl = selectedReportDetail?.recordingUrl || ''
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
@@ -1141,7 +1185,7 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [activeReportMode, reportSearchText, selectedReportId, selectedTypeFilterIds, timeFilterMode, timeFilterRange])
+  }, [activeReportMode, reportSearchText, reportsRefreshKey, selectedReportId, selectedTypeFilterIds, timeFilterMode, timeFilterRange])
 
   useEffect(() => {
     if (!selectedReportId) {
@@ -1174,6 +1218,25 @@ function App() {
       isMounted = false
     }
   }, [selectedReportId])
+
+  useEffect(() => {
+    if (!hasProcessingReports) {
+      return undefined
+    }
+
+    const timer = window.setInterval(() => {
+      setReportsRefreshKey((current) => current + 1)
+      if (selectedReportId) {
+        apiRequest(`/api/reports/${selectedReportId}`)
+          .then((payload) => {
+            setReportDetails((current) => ({ ...current, [selectedReportId]: payload }))
+          })
+          .catch(() => {})
+      }
+    }, 5000)
+
+    return () => window.clearInterval(timer)
+  }, [hasProcessingReports, selectedReportId])
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -1596,6 +1659,7 @@ function App() {
     try {
       const payload = await apiRequest('/api/reports/upload', {
         method: 'POST',
+        requireAuth: true,
         body: JSON.stringify({
           title: 'Новая встреча',
           source: 'Upload',
@@ -1607,6 +1671,7 @@ function App() {
       if (nextReport) {
         setReports((current) => [nextReport, ...current])
         setSelectedReportId(nextReport.id)
+        setReportsRefreshKey((current) => current + 1)
       }
       setReportActionMessage(payload.message || 'Отчёт отправлен на обработку')
     } catch (error) {
@@ -1633,12 +1698,14 @@ function App() {
 
       const payload = await apiRequest('/api/reports/upload', {
         method: 'POST',
+        requireAuth: true,
         body,
       })
       const nextReport = payload.report
       if (nextReport) {
         setReports((current) => [nextReport, ...current.filter((report) => report.id !== nextReport.id)])
         setSelectedReportId(nextReport.id)
+        setReportsRefreshKey((current) => current + 1)
       }
       if (payload.detail && nextReport?.id) {
         setReportDetails((current) => ({ ...current, [nextReport.id]: payload.detail }))
@@ -2506,6 +2573,11 @@ function App() {
                     <Sparkles size={13} />
                     {report.score}
                   </small>
+                  {reportProcessingLabel(report) && (
+                    <small className={`state-pill ${report.processingState || report.status}`}>
+                      {reportProcessingLabel(report)}
+                    </small>
+                  )}
                 </span>
               </span>
 
@@ -2804,40 +2876,57 @@ function App() {
 
         <div className="report-detail-layout">
           <div className="report-recording-column">
-            <div className="video-player-mock">
-              <div className="video-person">
-                <span>{selectedReport.ownerInitial}</span>
-              </div>
-              <button className="video-pop-button" type="button" onClick={openReportRecording} aria-label="Expand video">
-                <ExternalLink size={19} />
-              </button>
-              <div className="video-controls">
-                <button className="video-control-button" type="button" onClick={toggleReportVideoPlayback} aria-label={reportVideoPlaying ? 'Пауза' : 'Воспроизвести'}>
-                  {reportVideoPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-                </button>
-                <span>{formatPlaybackTime(reportVideoSeconds)} / {formatPlaybackTime(reportVideoDurationSeconds)}</span>
-                <button
-                  className="video-timeline"
-                  type="button"
-                  onClick={seekReportVideo}
-                  style={{ '--video-progress': `${reportVideoProgress}%` }}
-                  aria-label="Перемотать видео"
+            {selectedReportRecordingUrl ? (
+              <div className="report-video-frame">
+                <video
+                  className="report-video-player"
+                  key={selectedReportRecordingUrl}
+                  src={selectedReportRecordingUrl}
+                  controls
+                  preload="metadata"
                 >
-                  {[18, 32, 48, 65, 82].map((left) => (
-                    <i style={{ left: `${left}%` }} key={left} />
-                  ))}
-                </button>
-                <button className="video-control-button" type="button" onClick={toggleReportVideoMute} aria-label={reportVideoMuted ? 'Включить звук' : 'Выключить звук'}>
-                  {reportVideoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                </button>
-                <button className="video-control-button speed-button" type="button" onClick={cycleReportVideoSpeed} aria-label="Скорость видео">
-                  {reportVideoSpeed}x
-                </button>
-                <button className="video-control-button" type="button" onClick={openReportRecording} aria-label="Настройки записи">
-                  <Settings size={18} />
+                  Ваш браузер не поддерживает просмотр видео.
+                </video>
+                <button className="video-pop-button" type="button" onClick={openReportRecording} aria-label="Открыть видео">
+                  <ExternalLink size={19} />
                 </button>
               </div>
-            </div>
+            ) : (
+              <div className="video-player-mock">
+                <div className="video-person">
+                  <span>{selectedReport.ownerInitial}</span>
+                </div>
+                <button className="video-pop-button" type="button" onClick={openReportRecording} aria-label="Expand video">
+                  <ExternalLink size={19} />
+                </button>
+                <div className="video-controls">
+                  <button className="video-control-button" type="button" onClick={toggleReportVideoPlayback} aria-label={reportVideoPlaying ? 'Пауза' : 'Воспроизвести'}>
+                    {reportVideoPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                  </button>
+                  <span>{formatPlaybackTime(reportVideoSeconds)} / {formatPlaybackTime(reportVideoDurationSeconds)}</span>
+                  <button
+                    className="video-timeline"
+                    type="button"
+                    onClick={seekReportVideo}
+                    style={{ '--video-progress': `${reportVideoProgress}%` }}
+                    aria-label="Перемотать видео"
+                  >
+                    {[18, 32, 48, 65, 82].map((left) => (
+                      <i style={{ left: `${left}%` }} key={left} />
+                    ))}
+                  </button>
+                  <button className="video-control-button" type="button" onClick={toggleReportVideoMute} aria-label={reportVideoMuted ? 'Включить звук' : 'Выключить звук'}>
+                    {reportVideoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                  </button>
+                  <button className="video-control-button speed-button" type="button" onClick={cycleReportVideoSpeed} aria-label="Скорость видео">
+                    {reportVideoSpeed}x
+                  </button>
+                  <button className="video-control-button" type="button" onClick={openReportRecording} aria-label="Настройки записи">
+                    <Settings size={18} />
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="detail-tabs">
               <div className="detail-tab-list" role="tablist" aria-label="Разделы отчёта">

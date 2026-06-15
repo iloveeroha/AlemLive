@@ -89,6 +89,9 @@ func (s *Server) withAuth(next http.Handler) http.Handler {
 }
 
 func isPublicPath(path string) bool {
+	if strings.HasPrefix(path, "/api/reports/") && strings.HasSuffix(path, "/recording/stream") {
+		return true
+	}
 	return path == "/healthz" || path == "/api/config" || path == "/api/auth/config" || path == "/api/auth/token" || path == "/api/livekit/webhook"
 }
 

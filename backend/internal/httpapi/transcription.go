@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -15,7 +16,7 @@ import (
 )
 
 const (
-	maxRecordingUploadBytes = 50 << 20
+	maxRecordingUploadBytes = 500 << 20
 	maxTranscriptRunes      = 60000
 )
 
@@ -34,6 +35,20 @@ type meetingTranscriptionResponse struct {
 	Model          string           `json:"model,omitempty"`
 }
 
+type recordingUploadInput struct {
+	RoomName         string
+	FileName         string
+	ContentType      string
+	Data             []byte
+	Language         string
+	Title            string
+	Source           string
+	Owner            string
+	Folder           string
+	Participants     string
+	ParticipantNames string
+}
+
 func (s *Server) meetingTranscription(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w, http.MethodPost)
@@ -47,7 +62,12 @@ func (s *Server) meetingTranscription(w http.ResponseWriter, r *http.Request) {
 
 	roomName, transcription, err := s.readTranscriptionInput(w, r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		var apiErr *llm.APIError
+		if errors.As(err, &apiErr) {
+			writeError(w, http.StatusBadGateway, "STT service error: "+apiErr.Message)
+			return
+		}
+		writeError(w, http.StatusBadGateway, "STT service error: "+err.Error())
 		return
 	}
 
@@ -82,37 +102,16 @@ func (s *Server) readTranscriptionInput(w http.ResponseWriter, r *http.Request) 
 	contentType := r.Header.Get("Content-Type")
 
 	if strings.HasPrefix(contentType, "multipart/form-data") {
-		r.Body = http.MaxBytesReader(w, r.Body, maxRecordingUploadBytes)
-		if err := r.ParseMultipartForm(8 << 20); err != nil {
-			return "", llm.Transcription{}, fmt.Errorf("invalid multipart body")
-		}
-		roomName = firstNonEmpty(roomName, r.FormValue("roomName"), "alem-meeting")
-		roomName, err := validateField("roomName", roomName)
+		input, err := s.readRecordingUploadInput(w, r, roomName)
 		if err != nil {
 			return "", llm.Transcription{}, err
 		}
 
-		file, header, err := firstUploadedFile(r.MultipartForm)
+		transcription, err := s.transcribeRecording(r.Context(), input)
 		if err != nil {
-			return "", llm.Transcription{}, err
+			return "", llm.Transcription{}, fmt.Errorf("speech-to-text service is unavailable: %w", err)
 		}
-		defer file.Close()
-
-		data, err := readLimited(file, maxRecordingUploadBytes)
-		if err != nil {
-			return "", llm.Transcription{}, err
-		}
-
-		language := strings.TrimSpace(firstNonEmpty(r.FormValue("language"), "ru"))
-		transcription, err := s.stt.Transcribe(r.Context(), header.Filename, header.Header.Get("Content-Type"), data, llm.TranscriptionOptions{
-			Model:          s.cfg.STTModel,
-			Language:       language,
-			ResponseFormat: "verbose_json",
-		})
-		if err != nil {
-			return "", llm.Transcription{}, fmt.Errorf("speech-to-text service is unavailable")
-		}
-		return roomName, transcription, nil
+		return input.RoomName, transcription, nil
 	}
 
 	var req meetingTranscriptionRequest
@@ -126,6 +125,55 @@ func (s *Server) readTranscriptionInput(w http.ResponseWriter, r *http.Request) 
 		return "", llm.Transcription{}, err
 	}
 	return roomName, llm.Transcription{Text: req.TranscriptText}, nil
+}
+
+func (s *Server) readRecordingUploadInput(w http.ResponseWriter, r *http.Request, defaultRoomName string) (recordingUploadInput, error) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRecordingUploadBytes)
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		return recordingUploadInput{}, fmt.Errorf("invalid multipart body or file is larger than 500MB")
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+
+	roomName := firstNonEmpty(defaultRoomName, r.FormValue("roomName"), "alem-meeting")
+	roomName, err := validateField("roomName", roomName)
+	if err != nil {
+		return recordingUploadInput{}, err
+	}
+
+	file, header, err := firstUploadedFile(r.MultipartForm)
+	if err != nil {
+		return recordingUploadInput{}, err
+	}
+	defer file.Close()
+
+	data, err := readLimited(file, maxRecordingUploadBytes)
+	if err != nil {
+		return recordingUploadInput{}, err
+	}
+
+	return recordingUploadInput{
+		RoomName:         roomName,
+		FileName:         header.Filename,
+		ContentType:      header.Header.Get("Content-Type"),
+		Data:             data,
+		Language:         strings.TrimSpace(firstNonEmpty(r.FormValue("language"), "ru")),
+		Title:            strings.TrimSpace(r.FormValue("title")),
+		Source:           strings.TrimSpace(r.FormValue("source")),
+		Owner:            strings.TrimSpace(r.FormValue("owner")),
+		Folder:           strings.TrimSpace(r.FormValue("folder")),
+		Participants:     strings.TrimSpace(r.FormValue("participants")),
+		ParticipantNames: strings.TrimSpace(r.FormValue("participantNames")),
+	}, nil
+}
+
+func (s *Server) transcribeRecording(ctx context.Context, input recordingUploadInput) (llm.Transcription, error) {
+	return s.stt.Transcribe(ctx, input.FileName, input.ContentType, input.Data, llm.TranscriptionOptions{
+		Model:          s.cfg.STTModel,
+		Language:       firstNonEmpty(input.Language, "ru"),
+		ResponseFormat: "verbose_json",
+	})
 }
 
 func firstUploadedFile(form *multipart.Form) (multipart.File, *multipart.FileHeader, error) {

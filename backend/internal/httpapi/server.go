@@ -110,11 +110,15 @@ func NewServer(cfg config.Config) http.Handler {
 	sttBaseURL := firstNonEmpty(cfg.STTBaseURL, cfg.LLMBaseURL)
 	sttAPIKey := firstNonEmpty(cfg.STTAPIKey, cfg.LLMAPIKey)
 	sttModel := firstNonEmpty(cfg.STTModel, "whisper-1")
+	sttTimeout := cfg.STTTimeout
+	if sttTimeout <= 0 {
+		sttTimeout = cfg.LLMTimeout
+	}
 	server := &Server{
 		cfg:                  cfg,
 		clock:                time.Now,
 		ai:                   llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, cfg.LLMTimeout),
-		stt:                  llm.New(sttBaseURL, sttAPIKey, sttModel, cfg.LLMTimeout),
+		stt:                  llm.New(sttBaseURL, sttAPIKey, sttModel, sttTimeout),
 		egress:               livekit.NewEgressManager(egressConfigFromAppConfig(cfg)),
 		mux:                  http.NewServeMux(),
 		generatedReportStore: map[string]reportDetailResponse{},
@@ -124,6 +128,7 @@ func NewServer(cfg config.Config) http.Handler {
 	server.cfg.STTBaseURL = sttBaseURL
 	server.cfg.STTAPIKey = sttAPIKey
 	server.cfg.STTModel = sttModel
+	server.cfg.STTTimeout = sttTimeout
 	server.loadReports()
 
 	server.routes()

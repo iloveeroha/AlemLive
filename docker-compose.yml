@@ -27,6 +27,7 @@ services:
       KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
       KEYCLOAK_CLIENT_ID: "alemlive"
       REPORTS_STORAGE_PATH: "/app/data/reports.json"
+      RECORDINGS_STORAGE_PATH: "/app/data/recordings"
     volumes:
       - ./backend/data:/app/data
     ports:
