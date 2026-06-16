@@ -154,7 +154,7 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, s.processingTimeout())
 	defer cancel()
 
 	fileName, contentType, data, err := downloadRecording(ctx, downloadURL)
@@ -254,12 +254,20 @@ func (s *Server) markEgressReportFailed(reportID string, err error) {
 	if !ok {
 		return
 	}
-	detail.Report.Status = "failed"
-	detail.Report.ProcessingState = "failed"
+	detail.Report.Status = "ready"
+	detail.Report.ProcessingState = "ready"
 	detail.Summary = []summarySection{
 		{Title: "Recording captured", Text: "Meeting video is available, but transcript/AI processing failed: " + reportProcessingErrorMessage(err)},
 	}
 	s.storeReport(detail)
+}
+
+func (s *Server) processingTimeout() time.Duration {
+	timeout := s.cfg.STTTimeout + s.cfg.LLMTimeout + time.Minute
+	if timeout <= time.Minute {
+		return 20 * time.Minute
+	}
+	return timeout
 }
 
 func (s *Server) firstRecordingDownloadURL(state livekitservice.EgressState, info *lkproto.EgressInfo) string {

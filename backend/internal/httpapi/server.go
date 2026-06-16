@@ -3,7 +3,9 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -182,7 +184,7 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"livekitUrl":             firstNonEmpty(s.cfg.LiveKitPublicURL, s.cfg.LiveKitURL),
+		"livekitUrl":             s.publicLiveKitURL(r),
 		"tokenEndpoint":          "/api/livekit/token",
 		"livekitWebhookEndpoint": "/api/livekit/webhook",
 		"egressEnabled":          s.egress != nil && s.egress.Configured(),
@@ -301,12 +303,72 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, tokenResponse{
-		ServerURL: firstNonEmpty(s.cfg.LiveKitPublicURL, s.cfg.LiveKitURL),
+		ServerURL: s.publicLiveKitURL(r),
 		Token:     token,
 		RoomName:  room,
 		UserName:  identity,
 		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
 	})
+}
+
+func (s *Server) publicLiveKitURL(r *http.Request) string {
+	explicitURL := strings.TrimSpace(s.cfg.LiveKitPublicURL)
+	if explicitURL != "" && !isLoopbackURL(explicitURL) {
+		return explicitURL
+	}
+
+	host := forwardedHost(r)
+	if host == "" {
+		return firstNonEmpty(explicitURL, s.cfg.LiveKitURL)
+	}
+
+	scheme := "ws"
+	if requestScheme(r) == "https" {
+		scheme = "wss"
+	}
+
+	return scheme + "://" + host + "/livekit"
+}
+
+func forwardedHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	forwardedHost := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Host"), ",")[0])
+	if forwardedHost != "" {
+		return forwardedHost
+	}
+	return strings.TrimSpace(r.Host)
+}
+
+func requestScheme(r *http.Request) string {
+	if r == nil {
+		return "http"
+	}
+	if proto := strings.ToLower(strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0])); proto != "" {
+		return proto
+	}
+	if r.TLS != nil {
+		return "https"
+	}
+	return "http"
+}
+
+func isLoopbackURL(raw string) bool {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	return isLoopbackHost(parsed.Hostname())
+}
+
+func isLoopbackHost(host string) bool {
+	host = strings.Trim(strings.ToLower(strings.TrimSpace(host)), "[]")
+	if host == "localhost" || host == "::1" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func (s *Server) askAI(w http.ResponseWriter, r *http.Request) {

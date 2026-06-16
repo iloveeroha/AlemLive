@@ -7,6 +7,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': 'http://localhost:8080',
+      '/livekit': {
+        target: 'ws://localhost:7880',
+        ws: true,
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/livekit/, '') || '/',
+      },
     },
   },
 })

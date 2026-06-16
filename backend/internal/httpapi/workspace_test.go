@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/iloveeroha/AlemLive/backend/internal/config"
+	livekitservice "github.com/iloveeroha/AlemLive/backend/internal/livekit"
 )
 
 func TestWorkspaceUtilityEndpoints(t *testing.T) {
@@ -160,6 +161,44 @@ func TestMeetingEventPersistsConferenceReport(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected persisted saved report %s, got %#v", createdPayload.ReportID, reports.Reports)
+	}
+}
+
+func TestConferenceFinalStatusWaitsForEgressProcessing(t *testing.T) {
+	server := &Server{
+		egress: livekitservice.NewEgressManager(livekitservice.EgressConfig{
+			Enabled:   true,
+			ServerURL: "ws://livekit:7880",
+			APIKey:    "key",
+			APISecret: "secret",
+			S3: livekitservice.S3Config{
+				Bucket: "alemlive-recordings",
+				Region: "us-east-1",
+			},
+		}),
+		generatedReportStore: map[string]reportDetailResponse{},
+		deletedReportIDs:     map[string]struct{}{},
+		activeMeetings:       map[string]meetingSession{},
+		latestRoomReports:    map[string]string{},
+	}
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+
+	created := server.recordConferenceEvent("egress-room", "Madi", "created", now)
+	if created.ReportID == "" {
+		t.Fatal("expected report id")
+	}
+
+	left := server.recordConferenceEvent("egress-room", "Madi", "left", now.Add(time.Minute))
+	if left.ConferenceStatus != "processing" {
+		t.Fatalf("expected processing final status while egress is configured, got %#v", left)
+	}
+
+	detail, ok := server.reportDetailByID(created.ReportID)
+	if !ok {
+		t.Fatal("expected conference report detail")
+	}
+	if detail.Report.ProcessingState != "processing" {
+		t.Fatalf("expected persisted processing report, got %#v", detail.Report)
 	}
 }
 

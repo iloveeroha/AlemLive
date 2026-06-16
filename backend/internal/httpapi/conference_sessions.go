@@ -60,13 +60,14 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 		delete(session.Participants, userName)
 		if len(session.Participants) == 0 {
 			delete(s.activeMeetings, roomName)
-			s.updateConferenceReportLocked(session, now, "saved")
+			finalStatus := s.finalConferenceStatus()
+			s.updateConferenceReportLocked(session, now, finalStatus)
 			return conferenceEventResult{
 				ReportID:             session.ReportID,
 				Participants:         0,
 				RecordingShouldStop:  true,
 				ConferenceSaved:      true,
-				ConferenceStatus:     "saved",
+				ConferenceStatus:     finalStatus,
 				ConferenceReportPath: "/api/reports/" + session.ReportID,
 			}
 		}
@@ -74,13 +75,14 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 		s.updateConferenceReportLocked(session, now, "recording")
 	case "ended":
 		delete(s.activeMeetings, roomName)
-		s.updateConferenceReportLocked(session, now, "saved")
+		finalStatus := s.finalConferenceStatus()
+		s.updateConferenceReportLocked(session, now, finalStatus)
 		return conferenceEventResult{
 			ReportID:             session.ReportID,
 			Participants:         len(session.Participants),
 			RecordingShouldStop:  true,
 			ConferenceSaved:      true,
-			ConferenceStatus:     "saved",
+			ConferenceStatus:     finalStatus,
 			ConferenceReportPath: "/api/reports/" + session.ReportID,
 		}
 	}
@@ -92,6 +94,13 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 		ConferenceStatus:     "recording",
 		ConferenceReportPath: "/api/reports/" + session.ReportID,
 	}
+}
+
+func (s *Server) finalConferenceStatus() string {
+	if s.egress != nil && s.egress.Configured() {
+		return "processing"
+	}
+	return "saved"
 }
 
 func (s *Server) newMeetingSessionLocked(roomName, userName string, now time.Time) meetingSession {

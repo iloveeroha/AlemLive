@@ -18,7 +18,7 @@ RUN apk add --no-cache openssl \
     -keyout /etc/nginx/certs/alemlive.key \
     -out /etc/nginx/certs/alemlive.crt \
     -subj "/CN=localhost" \
-    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:10.111.171.190,IP:10.111.163.152"
+    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1,IP:10.111.171.190,IP:10.111.163.152,IP:10.111.186.181"
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html

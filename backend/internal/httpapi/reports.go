@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"html"
 	"io"
 	"log"
 	"net/http"
@@ -859,21 +858,6 @@ func (s *Server) streamReportRecording(w http.ResponseWriter, r *http.Request, d
 	}
 
 	writeError(w, http.StatusNotFound, "Recording is not available for this report yet")
-	return
-
-	title := html.EscapeString(detail.Report.Title)
-	duration := html.EscapeString(detail.Report.Duration)
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	fmt.Fprintf(w, `<!doctype html>
-<html lang="ru">
-<head><meta charset="utf-8"><title>%s</title></head>
-<body style="font-family: system-ui, sans-serif; margin: 32px; background: #0f172a; color: white;">
-<h1>%s</h1>
-<p>Запись встречи пока хранится как backend-заглушка. Длительность: %s.</p>
-<p>Когда появится реальное storage/CDN, этот endpoint можно заменить на redirect или video stream.</p>
-</body>
-</html>`, title, title, duration)
 }
 
 func reportPlaybackMarkers(detail reportDetailResponse) []string {

@@ -49,7 +49,7 @@ func TestCreateLiveKitToken(t *testing.T) {
 func TestConfigReturnsPublicLiveKitURL(t *testing.T) {
 	handler := NewServer(config.Config{
 		LiveKitURL:       "ws://livekit:7880",
-		LiveKitPublicURL: "ws://localhost:7880",
+		LiveKitPublicURL: "wss://livekit.example",
 		TokenTTL:         time.Hour,
 	})
 	request := httptest.NewRequest(http.MethodGet, "/api/config", nil)
@@ -65,8 +65,38 @@ func TestConfigReturnsPublicLiveKitURL(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["livekitUrl"] != "ws://localhost:7880" {
+	if payload["livekitUrl"] != "wss://livekit.example" {
 		t.Fatalf("unexpected livekitUrl: %#v", payload)
+	}
+}
+
+func TestLiveKitURLUsesForwardedHostWhenPublicURLIsLocalhost(t *testing.T) {
+	handler := NewServer(config.Config{
+		LiveKitURL:       "ws://livekit:7880",
+		LiveKitPublicURL: "ws://localhost:7880",
+		LiveKitAPIKey:    "key",
+		LiveKitSecret:    "secret",
+		TokenTTL:         time.Hour,
+	})
+
+	body := bytes.NewBufferString(`{"roomName":"alem-meeting","userName":"Madi"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/livekit/token", body)
+	request.Host = "10.111.186.181:5174"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["serverUrl"] != "wss://10.111.186.181:5174/livekit" {
+		t.Fatalf("unexpected serverUrl: %#v", payload)
 	}
 }
 
