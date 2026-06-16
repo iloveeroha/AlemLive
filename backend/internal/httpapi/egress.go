@@ -159,7 +159,7 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 		lines = transcriptLinesFromText(transcriptText)
 	}
 	roomName := firstNonEmpty(state.RoomName, info.GetRoomName(), "alem-meeting")
-	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, roomName, transcriptText, lines)
+	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, roomName, "", transcriptText, lines)
 	if err != nil {
 		analysis = fallbackAnalysisFromTranscript(roomName, transcriptText, lines, s.clock())
 	}

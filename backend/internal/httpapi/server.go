@@ -26,6 +26,7 @@ type Server struct {
 	reportsMu            sync.Mutex
 	generatedReports     []reportRow
 	generatedReportStore map[string]reportDetailResponse
+	deletedReportIDs     map[string]struct{}
 	activeMeetings       map[string]meetingSession
 	latestRoomReports    map[string]string
 }
@@ -70,9 +71,11 @@ type actionItem struct {
 }
 
 type transcriptLine struct {
-	Time    string `json:"time"`
-	Speaker string `json:"speaker"`
-	Text    string `json:"text"`
+	Time    string  `json:"time"`
+	Speaker string  `json:"speaker"`
+	Text    string  `json:"text"`
+	Start   float64 `json:"-"`
+	End     float64 `json:"-"`
 }
 
 type meetingInsights struct {
@@ -122,6 +125,7 @@ func NewServer(cfg config.Config) http.Handler {
 		egress:               livekit.NewEgressManager(egressConfigFromAppConfig(cfg)),
 		mux:                  http.NewServeMux(),
 		generatedReportStore: map[string]reportDetailResponse{},
+		deletedReportIDs:     map[string]struct{}{},
 		activeMeetings:       map[string]meetingSession{},
 		latestRoomReports:    map[string]string{},
 	}

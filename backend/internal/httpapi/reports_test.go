@@ -6,6 +6,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -220,6 +221,18 @@ func TestReportRenameDeleteAndSend(t *testing.T) {
 	if rename.Code != http.StatusOK {
 		t.Fatalf("expected rename status 200, got %d: %s", rename.Code, rename.Body.String())
 	}
+	renamedDetail := httptest.NewRecorder()
+	handler.ServeHTTP(renamedDetail, httptest.NewRequest(http.MethodGet, "/api/reports/read-intro", nil))
+	if renamedDetail.Code != http.StatusOK {
+		t.Fatalf("expected renamed detail status 200, got %d: %s", renamedDetail.Code, renamedDetail.Body.String())
+	}
+	var renamedPayload reportDetailResponse
+	if err := json.Unmarshal(renamedDetail.Body.Bytes(), &renamedPayload); err != nil {
+		t.Fatalf("decode renamed detail: %v", err)
+	}
+	if renamedPayload.Report.Title != "Renamed report" {
+		t.Fatalf("rename was not persisted: %#v", renamedPayload.Report)
+	}
 
 	send := httptest.NewRecorder()
 	handler.ServeHTTP(send, httptest.NewRequest(http.MethodPost, "/api/reports/read-intro/send", nil))
@@ -231,6 +244,30 @@ func TestReportRenameDeleteAndSend(t *testing.T) {
 	handler.ServeHTTP(deleted, httptest.NewRequest(http.MethodDelete, "/api/reports/read-intro", nil))
 	if deleted.Code != http.StatusOK {
 		t.Fatalf("expected delete status 200, got %d: %s", deleted.Code, deleted.Body.String())
+	}
+	deletedDetail := httptest.NewRecorder()
+	handler.ServeHTTP(deletedDetail, httptest.NewRequest(http.MethodGet, "/api/reports/read-intro", nil))
+	if deletedDetail.Code != http.StatusNotFound {
+		t.Fatalf("expected deleted detail status 404, got %d: %s", deletedDetail.Code, deletedDetail.Body.String())
+	}
+}
+
+func TestReportDeletePersistsDemoTombstone(t *testing.T) {
+	storagePath := filepath.Join(t.TempDir(), "reports.json")
+	cfg := config.Config{TokenTTL: time.Hour, ReportsStoragePath: storagePath}
+	handler := NewServer(cfg)
+
+	deleted := httptest.NewRecorder()
+	handler.ServeHTTP(deleted, httptest.NewRequest(http.MethodDelete, "/api/reports/read-intro", nil))
+	if deleted.Code != http.StatusOK {
+		t.Fatalf("expected delete status 200, got %d: %s", deleted.Code, deleted.Body.String())
+	}
+
+	reloadedHandler := NewServer(cfg)
+	detail := httptest.NewRecorder()
+	reloadedHandler.ServeHTTP(detail, httptest.NewRequest(http.MethodGet, "/api/reports/read-intro", nil))
+	if detail.Code != http.StatusNotFound {
+		t.Fatalf("expected deleted demo report to stay hidden, got %d: %s", detail.Code, detail.Body.String())
 	}
 }
 
@@ -292,6 +329,22 @@ func TestReportNotesPatch(t *testing.T) {
 	}
 	if payload["status"] != "saved" {
 		t.Fatalf("unexpected notes response: %#v", payload)
+	}
+
+	getNotes := httptest.NewRecorder()
+	handler.ServeHTTP(getNotes, httptest.NewRequest(http.MethodGet, "/api/reports/read-intro/notes", nil))
+	if getNotes.Code != http.StatusOK {
+		t.Fatalf("expected notes status 200, got %d: %s", getNotes.Code, getNotes.Body.String())
+	}
+	var notesPayload struct {
+		Summary     []summarySection   `json:"summary"`
+		ActionItems []reportActionItem `json:"actionItems"`
+	}
+	if err := json.Unmarshal(getNotes.Body.Bytes(), &notesPayload); err != nil {
+		t.Fatalf("decode notes response: %v", err)
+	}
+	if len(notesPayload.Summary) != 1 || notesPayload.Summary[0].Title != "Updated" {
+		t.Fatalf("notes patch was not persisted: %#v", notesPayload)
 	}
 }
 
@@ -389,7 +442,7 @@ func TestReportRecordingUploadRunsInBackground(t *testing.T) {
 		if err := r.ParseMultipartForm(1024 * 1024); err != nil {
 			t.Fatalf("parse multipart: %v", err)
 		}
-		if r.FormValue("model") != "openai/whisper-large-v3-turbo" {
+		if r.FormValue("model") != "openai/whisper-large-v3" {
 			t.Fatalf("unexpected model: %s", r.FormValue("model"))
 		}
 		writeJSON(w, http.StatusOK, map[string]any{
@@ -406,7 +459,7 @@ func TestReportRecordingUploadRunsInBackground(t *testing.T) {
 		TokenTTL:              time.Hour,
 		STTBaseURL:            sttServer.URL,
 		STTAPIKey:             "test-key",
-		STTModel:              "openai/whisper-large-v3-turbo",
+		STTModel:              "openai/whisper-large-v3",
 		STTTimeout:            time.Second,
 		LLMTimeout:            time.Second,
 		LLMBaseURL:            "",

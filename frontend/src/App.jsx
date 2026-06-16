@@ -216,6 +216,7 @@ const quickDateOptions = [
 
 const typeFilterOptions = [
   { id: 'meetings', value: 'meeting', label: 'Отчеты о встречах', aliases: ['meeting', 'meetings', 'google meet'] },
+  { id: 'uploads', value: 'upload', label: 'Загрузки', aliases: ['upload'] },
   { id: 'readout', value: 'readout', label: 'Темы Readout', aliases: ['readout'] },
   { id: 'daily', value: 'daily', label: 'Ежедневные обзоры', aliases: ['daily'] },
 ]
@@ -350,6 +351,39 @@ function formatPlaybackTime(seconds) {
   return `${minutes}:${remainder}`
 }
 
+function getReportLocalDate(report) {
+  if (!report?.createdAt) {
+    return report?.date || ''
+  }
+
+  const date = new Date(report.createdAt)
+  if (Number.isNaN(date.getTime())) {
+    return report?.date || ''
+  }
+
+  return date.toLocaleDateString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+function getReportLocalTime(report) {
+  if (!report?.createdAt) {
+    return report?.time || ''
+  }
+
+  const date = new Date(report.createdAt)
+  if (Number.isNaN(date.getTime())) {
+    return report?.time || ''
+  }
+
+  return date.toLocaleTimeString('ru-RU', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 function reportProcessingLabel(report) {
   const state = report?.processingState || report?.status || ''
   if (state === 'processing') {
@@ -439,10 +473,6 @@ function saveDownload(blob, filename) {
   link.click()
   link.remove()
   window.URL.revokeObjectURL(url)
-}
-
-function saveTextDownload(text, filename) {
-  saveDownload(new Blob([text], { type: 'text/plain;charset=utf-8' }), filename)
 }
 
 function loadAuthSession() {
@@ -587,8 +617,7 @@ function getInitialReportId() {
     return ''
   }
 
-  const [, reportId] = window.location.hash.match(/^#report\/(.+)$/) || []
-  return reportId || ''
+  return getHashRoute(window.location.hash).reportId
 }
 
 function getInitialView(initialReportId) {
@@ -596,11 +625,21 @@ function getInitialView(initialReportId) {
     return 'reportDetail'
   }
 
-  if (typeof window !== 'undefined' && window.location.hash === '#meeting') {
-    return 'meeting'
+  return typeof window === 'undefined' ? 'reports' : getHashRoute(window.location.hash).view
+}
+
+function getHashRoute(hash) {
+  const normalizedHash = String(hash || '').trim()
+  const [, reportId] = normalizedHash.match(/^#report\/(.+)$/) || []
+  if (reportId) {
+    return { view: 'reportDetail', reportId }
   }
 
-  return 'reports'
+  if (normalizedHash === '#meeting') {
+    return { view: 'meeting', reportId: '' }
+  }
+
+  return { view: 'reports', reportId: '' }
 }
 
 function getInitialRoomName() {
@@ -954,6 +993,18 @@ function App() {
   const hasProcessingReports = reports.some((report) => ['processing', 'recording'].includes(report.processingState || report.status))
   const selectedReportRecordingUrl = selectedReportDetail?.recordingUrl || ''
 
+  function syncViewFromHash() {
+    if (typeof window === 'undefined') {
+      return
+    }
+
+    const route = getHashRoute(window.location.hash)
+    setActiveView(route.view)
+    if (route.reportId) {
+      setSelectedReportId(route.reportId)
+    }
+  }
+
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
     const name = meeting?.userName || form.userName || profile?.name || 'Guest'
@@ -968,6 +1019,15 @@ function App() {
   useEffect(() => {
     setCurrentAccessToken(authSession?.accessToken || '')
   }, [authSession])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return undefined
+    }
+
+    window.addEventListener('hashchange', syncViewFromHash)
+    return () => window.removeEventListener('hashchange', syncViewFromHash)
+  }, [])
 
   useEffect(() => {
     let isMounted = true
@@ -1025,6 +1085,7 @@ function App() {
           saveAuthSession(nextSession)
           setAuthSession(nextSession)
           cleanAuthCallbackURL()
+          syncViewFromHash()
           setAuthReady(true)
           return
         }
@@ -1143,6 +1204,10 @@ function App() {
   }, [authReady, isAuthenticated])
 
   useEffect(() => {
+    if (!authReady || !isAuthenticated || activeView === 'meeting') {
+      return undefined
+    }
+
     let isMounted = true
     const query = buildReportsQuery({
       search: reportSearchText,
@@ -1165,7 +1230,7 @@ function App() {
         const nextReports = payload.reports || payload.items || []
         setReports(nextReports.length ? nextReports : [])
         setReportFilters(payload.filters || null)
-        if (nextReports.length && !nextReports.some((report) => report.id === selectedReportId)) {
+        if (nextReports.length && (!selectedReportId || (activeView === 'reports' && !nextReports.some((report) => report.id === selectedReportId)))) {
           setSelectedReportId(nextReports[0].id)
         }
       } catch (error) {
@@ -1185,10 +1250,10 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [activeReportMode, reportSearchText, reportsRefreshKey, selectedReportId, selectedTypeFilterIds, timeFilterMode, timeFilterRange])
+  }, [activeReportMode, activeView, authReady, isAuthenticated, reportSearchText, reportsRefreshKey, selectedReportId, selectedTypeFilterIds, timeFilterMode, timeFilterRange])
 
   useEffect(() => {
-    if (!selectedReportId) {
+    if (!authReady || !isAuthenticated || activeView === 'meeting' || !selectedReportId) {
       return undefined
     }
 
@@ -1217,10 +1282,10 @@ function App() {
     return () => {
       isMounted = false
     }
-  }, [selectedReportId])
+  }, [activeView, authReady, isAuthenticated, selectedReportId])
 
   useEffect(() => {
-    if (!hasProcessingReports) {
+    if (!authReady || !isAuthenticated || !hasProcessingReports) {
       return undefined
     }
 
@@ -1236,7 +1301,7 @@ function App() {
     }, 5000)
 
     return () => window.clearInterval(timer)
-  }, [hasProcessingReports, selectedReportId])
+  }, [authReady, hasProcessingReports, isAuthenticated, selectedReportId])
 
   useEffect(() => {
     if (typeof document === 'undefined') {
@@ -1462,15 +1527,6 @@ function App() {
     setMeetingNotice('')
   }
 
-  async function copyRoom() {
-    if (!navigator.clipboard) {
-      return
-    }
-
-    await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
-    setWorkspaceNotice('Ссылка комнаты скопирована')
-  }
-
   async function copyRoomName() {
     if (!navigator.clipboard) {
       return
@@ -1487,13 +1543,6 @@ function App() {
 
     await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
     setWorkspaceNotice('Ссылка на комнату скопирована')
-  }
-
-  async function showRoomSettings() {
-    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/settings`).catch(() => null)
-    if (payload) {
-      setWorkspaceNotice(`Запись ${payload.recording ? 'включена' : 'выключена'}, автоотчёт ${payload.autoReport ? 'включен' : 'выключен'}`)
-    }
   }
 
   async function openRoomSettings() {
@@ -1671,6 +1720,7 @@ function App() {
       if (nextReport) {
         setReports((current) => [nextReport, ...current])
         setSelectedReportId(nextReport.id)
+        setActiveReportMode('reports')
         setReportsRefreshKey((current) => current + 1)
       }
       setReportActionMessage(payload.message || 'Отчёт отправлен на обработку')
@@ -1705,6 +1755,7 @@ function App() {
       if (nextReport) {
         setReports((current) => [nextReport, ...current.filter((report) => report.id !== nextReport.id)])
         setSelectedReportId(nextReport.id)
+        setActiveReportMode('reports')
         setReportsRefreshKey((current) => current + 1)
       }
       if (payload.detail && nextReport?.id) {
@@ -2582,8 +2633,8 @@ function App() {
               </span>
 
               <span className="date-cell">
-                <strong>{report.date}</strong>
-                <small>{report.time}</small>
+                <strong>{getReportLocalDate(report)}</strong>
+                <small>{getReportLocalTime(report)}</small>
               </span>
 
               <span className="folder-pill">
@@ -2821,11 +2872,11 @@ function App() {
               <div className="detail-meta">
                 <span>
                   <CalendarDays size={17} />
-                  {selectedReport.date}
+                  {getReportLocalDate(selectedReport)}
                 </span>
                 <span>
                   <Clock3 size={17} />
-                  {selectedReport.time}
+                  {getReportLocalTime(selectedReport)}
                 </span>
                 <span>
                   <Video size={17} />
@@ -2833,7 +2884,7 @@ function App() {
                 </span>
                 <span>
                   <Users size={17} />
-                  {selectedReport.participantNames || 'Alison Barker, Мади, Айдана, +1 больше'}
+                  {selectedReport.participantNames || 'Мади, Айдана, Елиас, +1 больше'}
                 </span>
               </div>
             </div>

@@ -20,6 +20,7 @@ const (
 	defaultTemperature = 0.3
 	defaultMaxTokens   = 700
 	maxErrorBodyBytes  = 4096
+	maxResponseBytes   = 2 << 20
 	maxAttempts        = 3
 )
 
@@ -54,10 +55,11 @@ type Transcription struct {
 }
 
 type TranscriptionSegment struct {
-	ID    int     `json:"id,omitempty"`
-	Start float64 `json:"start"`
-	End   float64 `json:"end"`
-	Text  string  `json:"text"`
+	ID      int     `json:"id,omitempty"`
+	Start   float64 `json:"start"`
+	End     float64 `json:"end"`
+	Text    string  `json:"text"`
+	Speaker string  `json:"speaker,omitempty"`
 }
 
 type APIError struct {
@@ -92,10 +94,13 @@ type chatCompletionResponse struct {
 type transcriptionResponse struct {
 	Text     string `json:"text"`
 	Segments []struct {
-		ID    int     `json:"id,omitempty"`
-		Start float64 `json:"start"`
-		End   float64 `json:"end"`
-		Text  string  `json:"text"`
+		ID           int     `json:"id,omitempty"`
+		Start        float64 `json:"start"`
+		End          float64 `json:"end"`
+		Text         string  `json:"text"`
+		Speaker      string  `json:"speaker"`
+		SpeakerLabel string  `json:"speaker_label"`
+		Label        string  `json:"label"`
 	} `json:"segments,omitempty"`
 	Error *struct {
 		Message string `json:"message"`
@@ -265,14 +270,24 @@ func (c *Client) Transcribe(ctx context.Context, fileName, contentType string, d
 			continue
 		}
 		result.Segments = append(result.Segments, TranscriptionSegment{
-			ID:    segment.ID,
-			Start: segment.Start,
-			End:   segment.End,
-			Text:  strings.TrimSpace(segment.Text),
+			ID:      segment.ID,
+			Start:   segment.Start,
+			End:     segment.End,
+			Text:    strings.TrimSpace(segment.Text),
+			Speaker: firstNonEmpty(segment.Speaker, segment.SpeakerLabel, segment.Label),
 		})
 	}
 
 	return result, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
 
 func escapeMultipartFileName(fileName string) string {
@@ -293,7 +308,7 @@ func (c *Client) doChat(ctx context.Context, body []byte) (string, error) {
 	}
 	defer resp.Body.Close()
 
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
 	}

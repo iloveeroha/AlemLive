@@ -8,6 +8,8 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -24,6 +26,7 @@ type meetingTranscriptionRequest struct {
 	RoomName       string `json:"roomName"`
 	TranscriptText string `json:"transcriptText"`
 	Language       string `json:"language"`
+	Participants   string `json:"participants"`
 }
 
 type meetingTranscriptionResponse struct {
@@ -60,7 +63,7 @@ func (s *Server) meetingTranscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	roomName, transcription, err := s.readTranscriptionInput(w, r)
+	input, transcription, err := s.readTranscriptionInput(w, r)
 	if err != nil {
 		var apiErr *llm.APIError
 		if errors.As(err, &apiErr) {
@@ -70,6 +73,7 @@ func (s *Server) meetingTranscription(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "STT service error: "+err.Error())
 		return
 	}
+	roomName := input.RoomName
 
 	transcriptText := truncateRunes(strings.TrimSpace(transcription.Text), maxTranscriptRunes)
 	if transcriptText == "" {
@@ -82,7 +86,7 @@ func (s *Server) meetingTranscription(w http.ResponseWriter, r *http.Request) {
 		lines = transcriptLinesFromText(transcriptText)
 	}
 
-	analysis, err := s.generateMeetingAnalysisFromTranscript(r.Context(), roomName, transcriptText, lines)
+	analysis, err := s.generateMeetingAnalysisFromTranscript(r.Context(), roomName, input.ParticipantNames, transcriptText, lines)
 	if err != nil || s.ai == nil || !s.ai.Configured() {
 		analysis = fallbackAnalysisFromTranscript(roomName, transcriptText, lines, s.clock())
 	}
@@ -97,34 +101,38 @@ func (s *Server) meetingTranscription(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) readTranscriptionInput(w http.ResponseWriter, r *http.Request) (string, llm.Transcription, error) {
+func (s *Server) readTranscriptionInput(w http.ResponseWriter, r *http.Request) (recordingUploadInput, llm.Transcription, error) {
 	roomName := strings.TrimSpace(r.URL.Query().Get("roomName"))
 	contentType := r.Header.Get("Content-Type")
 
 	if strings.HasPrefix(contentType, "multipart/form-data") {
 		input, err := s.readRecordingUploadInput(w, r, roomName)
 		if err != nil {
-			return "", llm.Transcription{}, err
+			return recordingUploadInput{}, llm.Transcription{}, err
 		}
 
 		transcription, err := s.transcribeRecording(r.Context(), input)
 		if err != nil {
-			return "", llm.Transcription{}, fmt.Errorf("speech-to-text service is unavailable: %w", err)
+			return recordingUploadInput{}, llm.Transcription{}, fmt.Errorf("speech-to-text service is unavailable: %w", err)
 		}
-		return input.RoomName, transcription, nil
+		return input, transcription, nil
 	}
 
 	var req meetingTranscriptionRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512*1024))
 	if err := decoder.Decode(&req); err != nil {
-		return "", llm.Transcription{}, fmt.Errorf("invalid JSON body")
+		return recordingUploadInput{}, llm.Transcription{}, fmt.Errorf("invalid JSON body")
 	}
 	roomName = firstNonEmpty(roomName, req.RoomName, "alem-meeting")
 	roomName, err := validateField("roomName", roomName)
 	if err != nil {
-		return "", llm.Transcription{}, err
+		return recordingUploadInput{}, llm.Transcription{}, err
 	}
-	return roomName, llm.Transcription{Text: req.TranscriptText}, nil
+	return recordingUploadInput{
+		RoomName:         roomName,
+		Language:         strings.TrimSpace(req.Language),
+		ParticipantNames: strings.TrimSpace(req.Participants),
+	}, llm.Transcription{Text: req.TranscriptText}, nil
 }
 
 func (s *Server) readRecordingUploadInput(w http.ResponseWriter, r *http.Request, defaultRoomName string) (recordingUploadInput, error) {
@@ -208,7 +216,7 @@ func readLimited(reader io.Reader, limit int64) ([]byte, error) {
 	return data, nil
 }
 
-func (s *Server) generateMeetingAnalysisFromTranscript(ctx context.Context, roomName, transcriptText string, lines []transcriptLine) (meetingAnalysis, error) {
+func (s *Server) generateMeetingAnalysisFromTranscript(ctx context.Context, roomName, participants, transcriptText string, lines []transcriptLine) (meetingAnalysis, error) {
 	if s.ai == nil || !s.ai.Configured() {
 		return meetingAnalysis{}, llm.ErrNotConfigured
 	}
@@ -233,9 +241,9 @@ Schema:
 }
 Use Russian for user-facing text. Preserve roomName.`
 
-	contextText := transcriptAnalysisContext(roomName, transcriptText, lines)
+	contextText := transcriptAnalysisContext(roomName, participants, transcriptText, lines)
 	answer, err := s.ai.Chat(ctx, []llm.Message{
-		{Role: "system", Content: "You are a meeting analytics engine. Return only JSON that matches the requested schema."},
+		{Role: "system", Content: "You are a meeting analytics engine. Return only JSON that matches the requested schema. Preserve speaker labels from the transcript. Use participant names only when the transcript clearly identifies the speaker."},
 		{Role: "user", Content: prompt + "\n\n" + contextText},
 	}, llm.ChatOptions{
 		Temperature: 0.2,
@@ -258,16 +266,37 @@ Use Russian for user-facing text. Preserve roomName.`
 	if len(analysis.Transcript) == 0 {
 		analysis.Transcript = lines
 	}
+	analysis.Transcript = normalizeTranscriptSpeakers(analysis.Transcript)
+	if len(analysis.Insights.TalkTime) == 0 || hasOnlyGenericSpeakerStats(analysis.Insights.TalkTime) {
+		analysis.Insights.TalkTime = speakerTalkTime(analysis.Transcript)
+	}
 	if err := validateAnalysis(analysis); err != nil {
 		return meetingAnalysis{}, err
 	}
 	return analysis, nil
 }
 
-func transcriptAnalysisContext(roomName, transcriptText string, lines []transcriptLine) string {
+func hasOnlyGenericSpeakerStats(values []metricValue) bool {
+	if len(values) == 0 {
+		return true
+	}
+	for _, value := range values {
+		if strings.TrimSpace(value.Label) != "" && !strings.EqualFold(strings.TrimSpace(value.Label), "Speaker") {
+			return false
+		}
+	}
+	return true
+}
+
+func transcriptAnalysisContext(roomName, participants, transcriptText string, lines []transcriptLine) string {
 	var b strings.Builder
 	b.WriteString("Room: ")
 	b.WriteString(roomName)
+	if strings.TrimSpace(participants) != "" {
+		b.WriteString("\nKnown participants: ")
+		b.WriteString(strings.TrimSpace(participants))
+	}
+	b.WriteString("\nSpeaker policy: keep Speaker/Speaker N labels unless the transcript explicitly identifies a speaker by name.")
 	b.WriteString("\n\nTranscript lines:\n")
 	for _, line := range lines {
 		b.WriteString(line.Time)
@@ -292,30 +321,76 @@ func transcriptLinesFromTranscription(transcription llm.Transcription) []transcr
 		}
 		lines = append(lines, transcriptLine{
 			Time:    formatTranscriptTime(segment.Start),
-			Speaker: "Speaker",
+			Speaker: normalizeSpeakerLabel(segment.Speaker),
 			Text:    text,
+			Start:   segment.Start,
+			End:     segment.End,
 		})
 		if i >= 199 {
 			break
 		}
 	}
-	return lines
+	return normalizeTranscriptSpeakers(lines)
 }
 
 func transcriptLinesFromText(text string) []transcriptLine {
 	parts := splitTranscriptText(text)
 	lines := make([]transcriptLine, 0, len(parts))
+	start := 0.0
 	for i, part := range parts {
 		lines = append(lines, transcriptLine{
 			Time:    formatTranscriptTime(float64(i * 30)),
 			Speaker: "Speaker",
 			Text:    part,
+			Start:   start,
+			End:     start + 30,
 		})
+		start += 30
 		if i >= 199 {
 			break
 		}
 	}
-	return lines
+	return normalizeTranscriptSpeakers(lines)
+}
+
+var genericSpeakerPattern = regexp.MustCompile(`(?i)^speaker[_\s-]*(\d+)$`)
+
+func isGenericSpeakerName(speaker string) bool {
+	speaker = strings.TrimSpace(speaker)
+	if speaker == "" || strings.EqualFold(speaker, "Speaker") {
+		return true
+	}
+	return genericSpeakerPattern.MatchString(speaker)
+}
+
+func normalizeTranscriptSpeakers(lines []transcriptLine) []transcriptLine {
+	out := make([]transcriptLine, len(lines))
+	for i, line := range lines {
+		line.Speaker = normalizeSpeakerLabel(line.Speaker)
+		out[i] = line
+	}
+	return out
+}
+
+func normalizeSpeakerLabel(speaker string) string {
+	speaker = strings.TrimSpace(speaker)
+	if speaker == "" {
+		return "Speaker"
+	}
+
+	if matches := genericSpeakerPattern.FindStringSubmatch(speaker); len(matches) == 2 {
+		rawNumber := strings.TrimSpace(matches[1])
+		if n, err := strconv.Atoi(rawNumber); err == nil {
+			if strings.HasPrefix(rawNumber, "0") || len(rawNumber) > 1 {
+				n++
+			} else if n == 0 {
+				n = 1
+			}
+			return fmt.Sprintf("Speaker %d", n)
+		}
+	}
+
+	return speaker
 }
 
 func splitTranscriptText(text string) []string {
@@ -348,23 +423,22 @@ func fallbackAnalysisFromTranscript(roomName, transcriptText string, lines []tra
 	if len(lines) == 0 {
 		lines = transcriptLinesFromText(transcriptText)
 	}
-	firstText := truncateRunes(strings.TrimSpace(transcriptText), 600)
+	lines = normalizeTranscriptSpeakers(lines)
 	wordCount := len(strings.Fields(transcriptText))
+	summary := fallbackSummarySections(transcriptText)
+	actions := fallbackActionItems(transcriptText)
+	highlights := fallbackHighlights(transcriptText)
+	chapters := fallbackChapters(lines)
+	talkTime := speakerTalkTime(lines)
 	return meetingAnalysis{
 		RoomName:    roomName,
 		GeneratedAt: now.UTC().Format(time.RFC3339),
-		Summary: []summarySection{
-			{Title: "Transcript captured", Text: firstNonEmpty(firstText, "Audio was transcribed successfully.")},
-		},
-		ActionItems: []actionItem{
-			{Task: "Review generated transcript and confirm action items", Owner: "Team", Due: "After meeting", Priority: "Medium"},
-		},
-		Transcript: lines,
+		Summary:     summary,
+		ActionItems: actions,
+		Transcript:  lines,
 		Insights: meetingInsights{
-			Sentiment: "Needs review",
-			TalkTime: []metricValue{
-				{Label: "Speaker", Value: 100, Unit: "%"},
-			},
+			Sentiment: "РРЅС„РѕСЂРјР°С†РёРѕРЅРЅР°СЏ РІСЃС‚СЂРµС‡Р°",
+			TalkTime:  talkTime,
 			SpeechRate: []metricValue{
 				{Label: "Average", Value: estimatedSpeechRate(wordCount, len(lines)), Unit: "wpm"},
 			},
@@ -376,13 +450,64 @@ func fallbackAnalysisFromTranscript(roomName, transcriptText string, lines []tra
 				{Label: "Words", Value: wordCount, Unit: "items"},
 			},
 		},
-		Highlights: []highlight{
-			{Time: "00:00", Title: "Transcript ready", Text: "Speech-to-text completed. AI review is recommended for final highlights.", Type: "Action"},
-		},
-		Chapters: []chapter{
-			{Start: "00:00", End: formatTranscriptTime(float64(max(30, len(lines)*30))), Title: "Conversation", Text: "Automatically transcribed meeting conversation."},
-		},
+		Highlights: highlights,
+		Chapters:   chapters,
 	}
+}
+
+func fallbackSummarySections(transcriptText string) []summarySection {
+	firstText := truncateRunes(strings.TrimSpace(transcriptText), 600)
+	return []summarySection{
+		{Title: "Transcript captured", Text: firstNonEmpty(firstText, "Audio was transcribed. AI analysis is unavailable, so the transcript needs manual review.")},
+	}
+}
+
+func fallbackActionItems(transcriptText string) []actionItem {
+	_ = transcriptText
+	return []actionItem{
+		{Task: "Review transcript and confirm action items", Owner: "Team", Due: "After meeting", Priority: "Medium"},
+	}
+}
+
+func fallbackHighlights(transcriptText string) []highlight {
+	_ = transcriptText
+	return []highlight{
+		{Time: "00:00", Title: "Transcript ready", Text: "Speech-to-text completed. AI review is recommended for final highlights.", Type: "Action"},
+	}
+}
+
+func fallbackChapters(lines []transcriptLine) []chapter {
+	end := formatTranscriptTime(float64(max(30, len(lines)*30)))
+	return []chapter{
+		{Start: "00:00", End: end, Title: "Conversation", Text: "Automatically transcribed meeting conversation."},
+	}
+}
+
+func speakerTalkTime(lines []transcriptLine) []metricValue {
+	counts := map[string]int{}
+	order := make([]string, 0)
+	total := 0
+	for _, line := range lines {
+		speaker := firstNonEmpty(strings.TrimSpace(line.Speaker), "Speaker")
+		if _, ok := counts[speaker]; !ok {
+			order = append(order, speaker)
+		}
+		counts[speaker]++
+		total++
+	}
+	if total == 0 {
+		return []metricValue{{Label: "Speaker", Value: 100, Unit: "%"}}
+	}
+
+	result := make([]metricValue, 0, len(counts))
+	for _, speaker := range order {
+		count := counts[speaker]
+		if count == 0 {
+			continue
+		}
+		result = append(result, metricValue{Label: speaker, Value: max(1, count*100/total), Unit: "%"})
+	}
+	return result
 }
 
 func estimatedSpeechRate(wordCount, lineCount int) int {

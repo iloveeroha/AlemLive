@@ -405,8 +405,9 @@ func (s *Server) processUploadedRecording(reportID string, input recordingUpload
 		lines = transcriptLinesFromText(transcriptText)
 	}
 
-	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, input.RoomName, transcriptText, lines)
+	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, input.RoomName, input.ParticipantNames, transcriptText, lines)
 	if err != nil {
+		log.Printf("meeting analysis fallback for report %s: %v", reportID, err)
 		analysis = fallbackAnalysisFromTranscript(input.RoomName, transcriptText, lines, s.clock())
 	}
 
@@ -524,6 +525,11 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 	s.reportsMu.Lock()
 	defer s.reportsMu.Unlock()
 
+	if s.deletedReportIDs == nil {
+		s.deletedReportIDs = map[string]struct{}{}
+	}
+	delete(s.deletedReportIDs, detail.Report.ID)
+
 	replaced := false
 	for i, row := range s.generatedReports {
 		if row.ID == detail.Report.ID {
@@ -543,26 +549,83 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 }
 
 func (s *Server) allReports() []reportRow {
-	rows := demoReports()
+	demoRows := demoReports()
 	s.reportsMu.Lock()
 	defer s.reportsMu.Unlock()
-	if len(s.generatedReports) == 0 {
-		return rows
+
+	out := make([]reportRow, 0, len(s.generatedReports)+len(demoRows))
+	seen := make(map[string]struct{}, len(s.generatedReports))
+	for _, row := range s.generatedReports {
+		if _, deleted := s.deletedReportIDs[row.ID]; deleted {
+			continue
+		}
+		out = append(out, row)
+		seen[row.ID] = struct{}{}
 	}
-	out := make([]reportRow, 0, len(s.generatedReports)+len(rows))
-	out = append(out, s.generatedReports...)
-	out = append(out, rows...)
+	for _, row := range demoRows {
+		if _, deleted := s.deletedReportIDs[row.ID]; deleted {
+			continue
+		}
+		if _, ok := seen[row.ID]; ok {
+			continue
+		}
+		out = append(out, row)
+	}
 	return out
 }
 
 func (s *Server) reportDetailByID(id string) (reportDetailResponse, bool) {
 	s.reportsMu.Lock()
+	if _, deleted := s.deletedReportIDs[id]; deleted {
+		s.reportsMu.Unlock()
+		return reportDetailResponse{}, false
+	}
 	if detail, ok := s.generatedReportStore[id]; ok {
 		s.reportsMu.Unlock()
 		return detail, true
 	}
 	s.reportsMu.Unlock()
 	return demoReportDetail(id, s.clock())
+}
+
+func (s *Server) deleteReport(id string) bool {
+	s.reportsMu.Lock()
+	defer s.reportsMu.Unlock()
+
+	found := false
+	if _, ok := s.generatedReportStore[id]; ok {
+		found = true
+		delete(s.generatedReportStore, id)
+	}
+
+	keptReports := s.generatedReports[:0]
+	for _, row := range s.generatedReports {
+		if row.ID == id {
+			found = true
+			continue
+		}
+		keptReports = append(keptReports, row)
+	}
+	s.generatedReports = keptReports
+
+	if _, ok := demoReportDetail(id, s.clock()); ok {
+		found = true
+		if s.deletedReportIDs == nil {
+			s.deletedReportIDs = map[string]struct{}{}
+		}
+		s.deletedReportIDs[id] = struct{}{}
+	}
+
+	for roomName, reportID := range s.latestRoomReports {
+		if reportID == id {
+			delete(s.latestRoomReports, roomName)
+		}
+	}
+
+	if found {
+		s.saveReportsLocked()
+	}
+	return found
 }
 
 func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
@@ -597,6 +660,10 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 		case http.MethodPatch:
 			s.renameReport(w, r, detail)
 		case http.MethodDelete:
+			if !s.deleteReport(detail.Report.ID) {
+				writeError(w, http.StatusNotFound, "Report not found")
+				return
+			}
 			writeJSON(w, http.StatusOK, map[string]string{
 				"id":      detail.Report.ID,
 				"status":  "deleted",
@@ -631,7 +698,7 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			"reportId": detail.Report.ID,
 			"duration": detail.Report.Duration,
 			"url":      recordingURL,
-			"markers":  []string{"00:42", "04:18", "12:05"},
+			"markers":  reportPlaybackMarkers(detail),
 		})
 	case "tabs":
 		if r.Method != http.MethodGet {
@@ -659,6 +726,9 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			if payload.ActionItems == nil {
 				payload.ActionItems = detail.ActionItems
 			}
+			detail.Summary = payload.Summary
+			detail.ActionItems = payload.ActionItems
+			s.storeReport(detail)
 			writeJSON(w, http.StatusOK, map[string]any{
 				"reportId":     detail.Report.ID,
 				"summary":      payload.Summary,
@@ -796,6 +866,33 @@ func (s *Server) streamReportRecording(w http.ResponseWriter, r *http.Request, d
 </html>`, title, title, duration)
 }
 
+func reportPlaybackMarkers(detail reportDetailResponse) []string {
+	seen := map[string]struct{}{}
+	markers := make([]string, 0, len(detail.Highlights)+len(detail.Chapters))
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		markers = append(markers, value)
+	}
+
+	for _, item := range detail.Highlights {
+		add(item.Time)
+	}
+	for _, chapter := range detail.Chapters {
+		add(firstNonEmpty(chapter.Time, chapter.Start))
+	}
+	if len(markers) == 0 {
+		add("00:00")
+	}
+	return markers
+}
+
 func (s *Server) serveStoredRecording(w http.ResponseWriter, r *http.Request, detail reportDetailResponse, attachment bool) {
 	fileName := filepath.Base(detail.RecordingFile)
 	if fileName == "." || fileName == string(filepath.Separator) || fileName == "" {
@@ -845,6 +942,7 @@ func (s *Server) renameReport(w http.ResponseWriter, r *http.Request, detail rep
 	}
 
 	detail.Report.Title = title
+	s.storeReport(detail)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"report": detail.Report,
 		"status": "renamed",
@@ -1270,11 +1368,11 @@ func uniqueReportValues(rows []reportRow, pick func(reportRow) string) []string 
 
 func demoReports() []reportRow {
 	return []reportRow{
-		newDemoReport("read-intro", "Ввод в Alem AI - Пример отчёта", "Google Meet", "2026-01-02T02:00:00Z", "02:00 - 03:45", 4, "Alison Barker, Мади, Айдана, +1 больше", 89, "Образцы отчётов", "Мади", "М", "teal", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "01:45", "needs_review"),
-		newDemoReport("meeting-usage", "Использование отчёта собрания - Пример отчёта", "Google Meet", "2026-01-02T01:00:00Z", "01:00 - 01:04", 4, "Alison Barker, Мади, Айдана, +1 больше", 89, "Образцы отчётов", "Айдана", "А", "blue", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "00:04", "needs_review"),
-		newDemoReport("copilot-search", "Используйте Copilot для поиска - Пример отчёта", "Google Meet", "2026-01-02T00:00:00Z", "00:00 - 00:07", 4, "Alison Barker, Мади, Айдана, +1 больше", 88, "Образцы отчётов", "Елиас", "Е", "violet", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "00:07", "needs_review"),
-		newDemoReport("mobile-guide", "Руководство по использованию настольного и мобильного приложения", "Google Meet", "2026-01-01T23:00:00Z", "23:00 - 23:04", 5, "Alison Barker, Мади, Айдана, Kelsey, +1 больше", 92, "Образцы отчётов", "Келси", "К", "green", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "00:04", "ready"),
-		newDemoReport("real-cases", "Исследуйте реальные случаи использования - Пример отчёта", "Google Meet", "2026-01-01T22:00:00Z", "22:00 - 22:08", 4, "Alison Barker, Мади, Айдана, Сара", 87, "Образцы отчётов", "Сара", "С", "rose", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "00:08", "needs_review"),
+		newDemoReport("read-intro", "Ввод в Alem AI - Пример отчёта", "Google Meet", "2026-01-02T02:00:00Z", "02:00 - 03:45", 4, "Мади, Айдана, Елиас, +1 больше", 89, "Образцы отчётов", "Мади", "М", "teal", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "01:45", "needs_review"),
+		newDemoReport("meeting-usage", "Использование отчёта собрания - Пример отчёта", "Google Meet", "2026-01-02T01:00:00Z", "01:00 - 01:04", 4, "Мади, Айдана, Елиас, +1 больше", 89, "Образцы отчётов", "Айдана", "А", "blue", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "00:04", "needs_review"),
+		newDemoReport("copilot-search", "Используйте Copilot для поиска - Пример отчёта", "Google Meet", "2026-01-02T00:00:00Z", "00:00 - 00:07", 4, "Мади, Айдана, Елиас, +1 больше", 88, "Образцы отчётов", "Елиас", "Е", "violet", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "00:07", "needs_review"),
+		newDemoReport("mobile-guide", "Руководство по использованию настольного и мобильного приложения", "Google Meet", "2026-01-01T23:00:00Z", "23:00 - 23:04", 5, "Мади, Айдана, Келси, +2 больше", 92, "Образцы отчётов", "Келси", "К", "green", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "00:04", "ready"),
+		newDemoReport("real-cases", "Исследуйте реальные случаи использования - Пример отчёта", "Google Meet", "2026-01-01T22:00:00Z", "22:00 - 22:08", 4, "Мади, Айдана, Елиас, Сара", 87, "Образцы отчётов", "Сара", "С", "rose", "НЕДЕЛЯ С 29 ДЕК.-4 ЯНВ., 2025", "00:08", "needs_review"),
 	}
 }
 
@@ -1328,7 +1426,7 @@ func demoReportDetail(id string, now time.Time) (reportDetailResponse, bool) {
 		{ID: "report-ui", Title: "Обновить UI отчёта после тестовой встречи", Task: "Обновить UI отчёта после тестовой встречи", Owner: "Team AI", Due: "После созвона", Priority: "Medium", Status: "open"},
 	}
 	transcript := []reportTranscript{
-		{ID: "t1", Time: "00:00", Speaker: "Alison Barker", Text: "Давайте зафиксируем, какие блоки должен показывать отчёт после встречи."},
+		{ID: "t1", Time: "00:00", Speaker: "Мади", Text: "Давайте зафиксируем, какие блоки должен показывать отчёт после встречи."},
 		{ID: "t2", Time: "04:12", Speaker: "Мади Орысбек", Text: "Пользователь создаёт комнату, присоединяется по названию, а URL и token приходят через backend."},
 		{ID: "t3", Time: "09:45", Speaker: "Айдана Сейт", Text: "После созвона агент должен показать резюме, задачи, транскрипт, метрики и главы."},
 		{ID: "t4", Time: "18:20", Speaker: "Team AI", Text: "Чат справа должен отвечать по контексту выбранного отчёта."},

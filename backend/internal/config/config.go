@@ -13,7 +13,7 @@ const (
 	defaultTokenTTLMinutes = 120
 	defaultLLMBaseURL      = "https://llm.nitec.kz"
 	defaultLLMModel        = "moonshotai/Kimi-K2.6"
-	defaultSTTModel        = "openai/whisper-large-v3-turbo"
+	defaultSTTModel        = "openai/whisper-large-v3"
 	defaultLLMTimeout      = 60
 	defaultSTTTimeout      = 900
 	defaultReportsStorage  = "data/reports.json"
