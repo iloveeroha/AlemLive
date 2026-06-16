@@ -67,7 +67,7 @@ services:
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
       KC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
-      KC_HOSTNAME: "http://localhost:8080"
+      KC_HOSTNAME: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}"
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
     ports:
@@ -84,7 +84,7 @@ services:
     environment:
       PORT: "8080"
       ALLOWED_ORIGINS: "http://localhost:5173,https://localhost:5174"
-      KEYCLOAK_ISSUER_URL: "http://localhost:8080/realms/alemlive"
+      KEYCLOAK_ISSUER_URL: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}/realms/alemlive"
       KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/certs"
       KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
       KEYCLOAK_CLIENT_ID: "alemlive"
@@ -128,6 +128,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        APP_HOST: "${APP_HOST:-127.0.0.1}"
     ports:
       - "5173:80"
       - "5174:443"
