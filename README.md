@@ -1,58 +1,60 @@
 # AlemLive
 
-Видеоконференции на LiveKit с Go-бэкендом и React/Vite фронтендом.
+Видеоконференции на LiveKit с Go backend, React/Vite frontend, AI-отчётами и автоматической записью встреч.
 
 ## Структура
 
-```
-AlemLive-Project/
-├── backend/    Go API: LiveKit токены, /api/meetings/analysis, /api/ask-ai
-├── frontend/   React + Vite (LiveKit room UI)
-├── livekit/    конфиг локального LiveKit-сервера для разработки
-├── docker-compose.yml          frontend + backend
-└── docker-compose.livekit.yml  локальный LiveKit-сервер
+```text
+AlemLive/
+├── backend/                  Go API: LiveKit tokens, отчёты, AI/STT
+├── frontend/                 React + Vite UI
+├── livekit/                  конфиги LiveKit server и LiveKit Egress
+├── keycloak/                 realm import для локальной авторизации
+├── docker-compose.yml        весь локальный стек
+└── docker-compose.livekit.yml только LiveKit + Redis + MinIO + Egress
 ```
 
-## Docker (весь стек)
+## Запуск всего стека
 
 ```powershell
 Copy-Item backend/.env.example backend/.env
-# Заполните backend/.env своими LiveKit Cloud значениями
 docker compose up -d --build
 ```
 
-Приложение будет доступно на `http://localhost:5173`, nginx проксирует `/api` на backend.
+Основной compose поднимает frontend, backend, Keycloak, LiveKit, Redis, MinIO и LiveKit Egress.
 
-Остановить:
+Локальные адреса:
 
-```powershell
-docker compose down
-```
+- Frontend: `http://localhost:5173` или `https://localhost:5174`
+- Backend: `http://localhost:8088`
+- Keycloak: `http://localhost:8080`
+- LiveKit: `ws://localhost:7880`
+- MinIO console: `http://localhost:9001` (`alemlive` / `alemlive-secret`)
+- Записи: `http://localhost:9000/alemlive-recordings/...`
 
-## Локальная разработка
+После завершения встречи LiveKit Egress пишет MP4 в bucket `alemlive-recordings`, backend получает webhook, запускает STT/AI обработку и обновляет отчёт.
 
-Backend:
+## Тестирование по локальной сети
 
-```powershell
-cd backend
-Copy-Item .env.example .env
-go run ./cmd/server
-```
-
-Frontend (в другом терминале):
+Если к встрече подключается друг с другого компьютера, запусти stack с адресом твоего ПК:
 
 ```powershell
-cd frontend
-npm install
-npm run dev
+$env:LIVEKIT_NODE_IP="YOUR_LAN_IP"
+$env:LIVEKIT_PUBLIC_URL="ws://YOUR_LAN_IP:7880"
+$env:LIVEKIT_EGRESS_PUBLIC_BASE_URL="http://YOUR_LAN_IP:9000/alemlive-recordings"
+docker compose up -d --build
 ```
 
-Vite проксирует `/api` на `http://localhost:8080`.
+Также frontend нужно открывать по HTTPS или localhost, иначе браузер может блокировать камеру и микрофон.
 
-## Локальный LiveKit (опционально)
+## Отдельный LiveKit stack
 
 ```powershell
 docker compose -f docker-compose.livekit.yml up -d
 ```
 
-Локальный LiveKit слушает `ws://localhost:7880`, креды для разработки: `devkey` / `devsecret-local-change-me-32-chars`.
+Он поднимает только LiveKit, Redis, MinIO и Egress. Для backend, запущенного на хосте через `go run`, укажи webhook вроде `http://host.docker.internal:8080/api/livekit/webhook`.
+
+## Важно про LiveKit Cloud
+
+Локальный MinIO не доступен из LiveKit Cloud. Если используешь Cloud-проект вместо локального LiveKit, нужен публичный S3-compatible storage или публично доступный MinIO endpoint.

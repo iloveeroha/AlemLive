@@ -39,8 +39,16 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 
 	session, ok := s.activeMeetings[roomName]
 	if !ok {
+		if resumed, resumedOK := s.resumeMeetingSessionLocked(roomName, userName, now); resumedOK {
+			session = resumed
+			ok = true
+		}
+	}
+	if !ok {
+		if event == "left" || event == "ended" {
+			return conferenceEventResult{}
+		}
 		session = s.newMeetingSessionLocked(roomName, userName, now)
-		ok = true
 	}
 
 	switch event {
@@ -87,21 +95,8 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 }
 
 func (s *Server) newMeetingSessionLocked(roomName, userName string, now time.Time) meetingSession {
-	if reportID := s.latestRoomReports[roomName]; reportID != "" {
-		if detail, ok := s.generatedReportStore[reportID]; ok && detail.Report.ProcessingState == "recording" {
-			participants := participantsFromReport(detail.Report.ParticipantNames)
-			participants[userName] = struct{}{}
-			startedAt := detail.Report.OccurredAt
-			if startedAt.IsZero() {
-				startedAt = now
-			}
-			return meetingSession{
-				ReportID:     reportID,
-				RoomName:     roomName,
-				StartedAt:    startedAt,
-				Participants: participants,
-			}
-		}
+	if session, ok := s.resumeMeetingSessionLocked(roomName, userName, now); ok {
+		return session
 	}
 
 	reportID := fmt.Sprintf("meeting-%s-%s", sanitizeReportID(roomName), now.UTC().Format("20060102-150405"))
@@ -152,6 +147,30 @@ func (s *Server) newMeetingSessionLocked(roomName, userName string, now time.Tim
 		StartedAt:    now,
 		Participants: map[string]struct{}{userName: struct{}{}},
 	}
+}
+
+func (s *Server) resumeMeetingSessionLocked(roomName, userName string, now time.Time) (meetingSession, bool) {
+	reportID := s.latestRoomReports[roomName]
+	if reportID == "" {
+		return meetingSession{}, false
+	}
+	detail, ok := s.generatedReportStore[reportID]
+	if !ok || detail.Report.ProcessingState != "recording" {
+		return meetingSession{}, false
+	}
+
+	participants := participantsFromReport(detail.Report.ParticipantNames)
+	participants[userName] = struct{}{}
+	startedAt := detail.Report.OccurredAt
+	if startedAt.IsZero() {
+		startedAt = now
+	}
+	return meetingSession{
+		ReportID:     reportID,
+		RoomName:     roomName,
+		StartedAt:    startedAt,
+		Participants: participants,
+	}, true
 }
 
 func (s *Server) updateConferenceReportLocked(session meetingSession, now time.Time, status string) {

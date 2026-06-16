@@ -2507,6 +2507,35 @@ body.meeting-maximized-active {
   object-fit: contain;
 }
 
+.video-player-empty {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 12px;
+  width: min(970px, 100%);
+  min-height: 260px;
+  aspect-ratio: 16 / 6.6;
+  margin: 0 auto 18px;
+  padding: 28px;
+  border: 1px solid #dce6f4;
+  border-radius: 10px;
+  color: #59677c;
+  background: linear-gradient(135deg, #f8fbff, #edf4fb);
+  text-align: center;
+}
+
+.video-player-empty h3 {
+  margin: 0;
+  color: #152033;
+  font-size: 22px;
+}
+
+.video-player-empty p {
+  max-width: 560px;
+  margin: 0;
+  line-height: 1.55;
+}
+
 .video-player-mock::after {
   content: '';
   position: absolute;

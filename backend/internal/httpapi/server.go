@@ -182,7 +182,7 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"livekitUrl":             s.cfg.LiveKitURL,
+		"livekitUrl":             firstNonEmpty(s.cfg.LiveKitPublicURL, s.cfg.LiveKitURL),
 		"tokenEndpoint":          "/api/livekit/token",
 		"livekitWebhookEndpoint": "/api/livekit/webhook",
 		"egressEnabled":          s.egress != nil && s.egress.Configured(),
@@ -301,7 +301,7 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, tokenResponse{
-		ServerURL: s.cfg.LiveKitURL,
+		ServerURL: firstNonEmpty(s.cfg.LiveKitPublicURL, s.cfg.LiveKitURL),
 		Token:     token,
 		RoomName:  room,
 		UserName:  identity,

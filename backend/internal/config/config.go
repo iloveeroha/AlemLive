@@ -23,6 +23,7 @@ const (
 type Config struct {
 	Port                       string
 	LiveKitURL                 string
+	LiveKitPublicURL           string
 	LiveKitAPIKey              string
 	LiveKitSecret              string
 	LiveKitEgressEnabled       bool
@@ -64,6 +65,7 @@ func Load() Config {
 	return Config{
 		Port:                       env("PORT", defaultPort),
 		LiveKitURL:                 strings.TrimSpace(os.Getenv("LIVEKIT_URL")),
+		LiveKitPublicURL:           strings.TrimSpace(os.Getenv("LIVEKIT_PUBLIC_URL")),
 		LiveKitAPIKey:              strings.TrimSpace(os.Getenv("LIVEKIT_API_KEY")),
 		LiveKitSecret:              strings.TrimSpace(os.Getenv("LIVEKIT_API_SECRET")),
 		LiveKitEgressEnabled:       envBool("LIVEKIT_EGRESS_ENABLED", false),

@@ -693,13 +693,20 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			s.streamReportRecording(w, r, detail)
 			return
 		}
-		recordingURL := firstNonEmpty(detail.RecordingURL, "/api/reports/"+detail.Report.ID+"/recording/stream")
-		writeJSON(w, http.StatusOK, map[string]any{
-			"reportId": detail.Report.ID,
-			"duration": detail.Report.Duration,
-			"url":      recordingURL,
-			"markers":  reportPlaybackMarkers(detail),
-		})
+		recordingAvailable := detail.RecordingFile != "" || detail.RecordingURL != ""
+		payload := map[string]any{
+			"reportId":  detail.Report.ID,
+			"duration":  detail.Report.Duration,
+			"available": recordingAvailable,
+			"markers":   reportPlaybackMarkers(detail),
+		}
+		if recordingAvailable {
+			payload["url"] = firstNonEmpty(detail.RecordingURL, "/api/reports/"+detail.Report.ID+"/recording/stream")
+		} else {
+			payload["status"] = "missing"
+			payload["message"] = "Recording is not available for this report yet"
+		}
+		writeJSON(w, http.StatusOK, payload)
 	case "tabs":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -850,6 +857,9 @@ func (s *Server) streamReportRecording(w http.ResponseWriter, r *http.Request, d
 		http.Redirect(w, r, detail.RecordingURL, http.StatusTemporaryRedirect)
 		return
 	}
+
+	writeError(w, http.StatusNotFound, "Recording is not available for this report yet")
+	return
 
 	title := html.EscapeString(detail.Report.Title)
 	duration := html.EscapeString(detail.Report.Duration)

@@ -16,10 +16,11 @@ import (
 
 func TestCreateLiveKitToken(t *testing.T) {
 	handler := NewServer(config.Config{
-		LiveKitURL:    "wss://alem-livekit.example",
-		LiveKitAPIKey: "key",
-		LiveKitSecret: "secret",
-		TokenTTL:      time.Hour,
+		LiveKitURL:       "ws://livekit:7880",
+		LiveKitPublicURL: "wss://alem-livekit.example",
+		LiveKitAPIKey:    "key",
+		LiveKitSecret:    "secret",
+		TokenTTL:         time.Hour,
 	})
 
 	body := bytes.NewBufferString(`{"roomName":"alem-meeting","userName":"Madi"}`)
@@ -42,6 +43,30 @@ func TestCreateLiveKitToken(t *testing.T) {
 	}
 	if payload["token"] == "" {
 		t.Fatal("token should not be empty")
+	}
+}
+
+func TestConfigReturnsPublicLiveKitURL(t *testing.T) {
+	handler := NewServer(config.Config{
+		LiveKitURL:       "ws://livekit:7880",
+		LiveKitPublicURL: "ws://localhost:7880",
+		TokenTTL:         time.Hour,
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["livekitUrl"] != "ws://localhost:7880" {
+		t.Fatalf("unexpected livekitUrl: %#v", payload)
 	}
 }
 

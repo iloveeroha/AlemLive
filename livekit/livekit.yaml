@@ -12,5 +12,8 @@ rtc:
 keys:
   devkey: devsecret-local-change-me-32-chars
 
+redis:
+  address: redis:6379
+
 logging:
   level: info

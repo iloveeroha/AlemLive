@@ -1,85 +1,52 @@
 # AlemLive Backend
 
-Go API for issuing short-lived LiveKit access tokens and AI-backed meeting assistance for the AlemLive React app.
+Go API для LiveKit токенов, Keycloak auth, AI-чата, STT и отчётов после встреч.
 
-## Start Local LiveKit
-
-From the repository root:
+## Локальный запуск
 
 ```powershell
-docker compose -f docker-compose.livekit.yml up -d
-```
-
-The local dev LiveKit server listens at `ws://localhost:7880` and uses `devkey` / `devsecret-local-change-me-32-chars`.
-
-## Run Locally
-
-```powershell
-cd backend
 Copy-Item .env.example .env
 go run ./cmd/server
 ```
 
-PowerShell can also pass variables for one session:
+Backend слушает `http://localhost:8080`. В полном Docker stack он доступен с хоста на `http://localhost:8088`.
+
+## LiveKit + Egress + MinIO
+
+В полном `docker compose up -d --build` backend уже получает рабочие значения:
+
+- `LIVEKIT_URL=ws://livekit:7880` для backend и Egress внутри Docker.
+- `LIVEKIT_PUBLIC_URL=ws://localhost:7880` для браузера.
+- `LIVEKIT_EGRESS_ENABLED=true`.
+- `LIVEKIT_EGRESS_AUDIO_ONLY=false`, чтобы сохранялся MP4 с видео, а не только аудио.
+- `LIVEKIT_EGRESS_PUBLIC_BASE_URL=http://localhost:9000/alemlive-recordings`.
+- `LIVEKIT_S3_ENDPOINT=http://minio:9000`.
+- `LIVEKIT_S3_BUCKET=alemlive-recordings`.
+
+Если backend запускается через `go run`, а LiveKit/Egress/MinIO в Docker, используй host-reachable адреса:
 
 ```powershell
-$env:LIVEKIT_URL="wss://your-project.livekit.cloud"
-$env:LIVEKIT_API_KEY="your_key"
-$env:LIVEKIT_API_SECRET="your_secret"
-$env:LLM_API_KEY="your_llm_key"
-$env:LLM_MODEL="moonshotai/Kimi-K2.6"
-$env:STT_MODEL="openai/whisper-large-v3"
+$env:LIVEKIT_URL="ws://localhost:7880"
+$env:LIVEKIT_PUBLIC_URL="ws://localhost:7880"
+$env:LIVEKIT_EGRESS_WEBHOOK_URL="http://host.docker.internal:8080/api/livekit/webhook"
+$env:LIVEKIT_S3_ENDPOINT="http://localhost:9000"
 go run ./cmd/server
 ```
 
-The backend listens on `http://localhost:8080` by default. Vite proxies `/api` to this backend during development.
+## AI/STT
 
-## Configuration
-
-- `PORT` defaults to `8080`.
-- `LIVEKIT_URL`, `LIVEKIT_API_KEY`, and `LIVEKIT_API_SECRET` configure LiveKit token issuing.
-- `TOKEN_TTL_MINUTES` defaults to `120`.
-- `ALLOWED_ORIGINS` is a comma-separated CORS allowlist.
 - `LLM_BASE_URL` defaults to `https://llm.nitec.kz`.
-- `LLM_API_KEY` enables AI chat and AI meeting analysis.
+- `LLM_API_KEY` enables AI chat and report analysis.
 - `LLM_MODEL` defaults to `moonshotai/Kimi-K2.6`.
-- `STT_BASE_URL` defaults to `LLM_BASE_URL` and must expose OpenAI-compatible `/v1/audio/transcriptions`.
+- `STT_BASE_URL` defaults to `LLM_BASE_URL`.
 - `STT_API_KEY` defaults to `LLM_API_KEY`.
-- `STT_MODEL` defaults to `openai/whisper-large-v3` for the NITEC OpenAI-compatible gateway.
-- `STT_TIMEOUT_SECONDS` defaults to `900` for longer audio/video transcription jobs.
-- `LLM_TIMEOUT_SECONDS` defaults to `60`.
-- `REPORTS_STORAGE_PATH` defaults to `data/reports.json` and stores generated meeting reports between backend restarts.
-- `RECORDINGS_STORAGE_PATH` defaults to `data/recordings` and stores uploaded meeting audio/video files for report playback.
+- `STT_MODEL` defaults to `openai/whisper-large-v3`.
+- `STT_TIMEOUT_SECONDS` defaults to `900`.
 
-Keep `LIVEKIT_API_SECRET`, `LLM_API_KEY`, and `STT_API_KEY` only on the backend. Never expose them through Vite environment variables or browser code.
+## Storage
 
-## Endpoints
+- `REPORTS_STORAGE_PATH` stores generated reports.
+- `RECORDINGS_STORAGE_PATH` stores manually uploaded recordings.
+- LiveKit Egress recordings are stored in MinIO bucket `alemlive-recordings`.
 
-- `GET /healthz` returns backend health.
-- `GET /api/config` returns public frontend configuration.
-- `GET /api/ai/status` returns whether AI is configured plus the active public model metadata.
-- `POST /api/ai/chat` sends a report-aware chat prompt to the configured LLM provider.
-- `POST /api/meetings/transcribe` accepts audio/video upload or `transcriptText`, runs Whisper STT, then returns transcript plus meeting analysis.
-- `GET /api/meetings/analysis?roomName=...` returns AI-generated meeting analysis when AI is configured, otherwise falls back to a demo report.
-- `GET /api/ask-ai` returns `{"url": "https://alem-workspace.gov.kz/web/alem-rag"}` for the external Alem Workspace RAG assistant.
-- `POST /api/livekit/token` accepts:
-
-```json
-{
-  "roomName": "alem-meeting",
-  "userName": "Madi",
-  "isHost": true
-}
-```
-
-Response:
-
-```json
-{
-  "serverUrl": "wss://your-project.livekit.cloud",
-  "token": "eyJ...",
-  "roomName": "alem-meeting",
-  "userName": "Madi",
-  "expiresAt": "2026-06-10T12:00:00Z"
-}
-```
+Keep `LIVEKIT_API_SECRET`, `LLM_API_KEY`, and `STT_API_KEY` only on the backend.

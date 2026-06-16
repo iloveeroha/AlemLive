@@ -34,7 +34,6 @@ import {
   Minimize2,
   MoreHorizontal,
   PanelRight,
-  Pause,
   Play,
   Radio,
   RefreshCw,
@@ -48,8 +47,6 @@ import {
   TrendingUp,
   Users,
   Video,
-  Volume2,
-  VolumeX,
   Zap,
 } from 'lucide-react'
 import { LiveKitRoom, VideoConference, useChat, useLocalParticipant, useParticipants } from '@livekit/components-react'
@@ -327,28 +324,6 @@ function formatAPIDate(date) {
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   return `${year}-${month}-${day}`
-}
-
-function parseDurationToSeconds(value) {
-  const parts = String(value || '')
-    .split(':')
-    .map((part) => Number.parseInt(part, 10))
-    .filter((part) => Number.isFinite(part))
-
-  if (parts.length === 3) {
-    return parts[0] * 3600 + parts[1] * 60 + parts[2]
-  }
-  if (parts.length === 2) {
-    return parts[0] * 60 + parts[1]
-  }
-  return 529
-}
-
-function formatPlaybackTime(seconds) {
-  const safeSeconds = Math.max(0, Math.floor(seconds || 0))
-  const minutes = Math.floor(safeSeconds / 60)
-  const remainder = String(safeSeconds % 60).padStart(2, '0')
-  return `${minutes}:${remainder}`
 }
 
 function getReportLocalDate(report) {
@@ -966,10 +941,6 @@ function App() {
   const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false)
   const [roomSettings, setRoomSettings] = useState(null)
   const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false)
-  const [reportVideoPlaying, setReportVideoPlaying] = useState(false)
-  const [reportVideoSeconds, setReportVideoSeconds] = useState(0)
-  const [reportVideoMuted, setReportVideoMuted] = useState(false)
-  const [reportVideoSpeed, setReportVideoSpeed] = useState(1)
   const copilotInputRef = useRef(null)
   const reportUploadInputRef = useRef(null)
 
@@ -988,10 +959,18 @@ function App() {
   const calendarDays = getCalendarDays(calendarMonth)
   const areAllTypeFiltersSelected = selectedTypeFilterIds.length === typeFilterOptions.length
   const visibleReports = filterReportsByType(reports.length ? reports : reportRows, selectedTypeFilterIds)
-  const reportVideoDurationSeconds = parseDurationToSeconds(selectedReport?.duration || '08:49')
-  const reportVideoProgress = Math.min(100, Math.max(0, (reportVideoSeconds / reportVideoDurationSeconds) * 100))
   const hasProcessingReports = reports.some((report) => ['processing', 'recording'].includes(report.processingState || report.status))
   const selectedReportRecordingUrl = selectedReportDetail?.recordingUrl || ''
+  const selectedReportRecordingMessage = (() => {
+    const state = selectedReport?.processingState || selectedReport?.status || ''
+    if (state === 'recording') {
+      return 'Запись еще идет. Видео появится после завершения LiveKit Egress и обработки отчета.'
+    }
+    if (state === 'processing') {
+      return 'Отчет обрабатывается. Видео появится здесь, когда backend сохранит файл записи.'
+    }
+    return 'Для этой встречи нет сохраненного видео. Включите LiveKit Egress и storage, чтобы записи автоматически появлялись в отчетах.'
+  })()
 
   function syncViewFromHash() {
     if (typeof window === 'undefined') {
@@ -1314,30 +1293,6 @@ function App() {
     }
   }, [isMeetingMaximized])
 
-  useEffect(() => {
-    setReportVideoPlaying(false)
-    setReportVideoSeconds(0)
-  }, [selectedReportId])
-
-  useEffect(() => {
-    if (!reportVideoPlaying) {
-      return undefined
-    }
-
-    const timer = window.setInterval(() => {
-      setReportVideoSeconds((current) => {
-        const nextValue = current + reportVideoSpeed
-        if (nextValue >= reportVideoDurationSeconds) {
-          setReportVideoPlaying(false)
-          return reportVideoDurationSeconds
-        }
-        return nextValue
-      })
-    }, 1000)
-
-    return () => window.clearInterval(timer)
-  }, [reportVideoDurationSeconds, reportVideoPlaying, reportVideoSpeed])
-
   function updateField(event) {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
@@ -1515,13 +1470,24 @@ function App() {
 
   async function leaveMeeting() {
     manualDisconnectRef.current = true
-    await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, {
+    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, {
       method: 'POST',
       body: JSON.stringify({
         userName: meetingMeta.name,
         event: 'left',
       }),
     }).catch(() => null)
+    if (payload?.reportId) {
+      setSelectedReportId(payload.reportId)
+      setReportsRefreshKey((current) => current + 1)
+      apiRequest(`/api/reports/${payload.reportId}`).then((detail) => {
+        if (detail?.report) {
+          setReportDetails((current) => ({ ...current, [payload.reportId]: detail }))
+          setReports((current) => [detail.report, ...current.filter((report) => report.id !== detail.report.id)])
+        }
+      }).catch(() => null)
+      setWorkspaceNotice(`Отчет встречи сохранен: ${payload.reportId}`)
+    }
     setMeeting(null)
     setIsMeetingMaximized(false)
     setMeetingNotice('')
@@ -1604,40 +1570,13 @@ function App() {
 
     const payload = await apiRequest(`/api/reports/${selectedReport.id}/recording`).catch(() => null)
     if (payload) {
-      if (payload.url) {
+      if (payload.available && payload.url) {
         window.open(payload.url, '_blank', 'noopener,noreferrer')
       }
-      setReportActionMessage(`Запись: ${payload.duration}, маркеры ${payload.markers?.join(', ') || 'нет'}`)
+      setReportActionMessage(payload.available
+        ? `Запись: ${payload.duration}, маркеры ${payload.markers?.join(', ') || 'нет'}`
+        : payload.message || 'Запись пока недоступна')
     }
-  }
-
-  function toggleReportVideoPlayback() {
-    setReportVideoPlaying((current) => {
-      if (!current && reportVideoSeconds >= reportVideoDurationSeconds) {
-        setReportVideoSeconds(0)
-      }
-      return !current
-    })
-  }
-
-  function seekReportVideo(event) {
-    const rect = event.currentTarget.getBoundingClientRect()
-    const ratio = rect.width ? (event.clientX - rect.left) / rect.width : 0
-    const nextSeconds = Math.round(Math.min(1, Math.max(0, ratio)) * reportVideoDurationSeconds)
-    setReportVideoSeconds(nextSeconds)
-  }
-
-  function toggleReportVideoMute() {
-    setReportVideoMuted((current) => !current)
-    setReportActionMessage(reportVideoMuted ? 'Звук видео включён' : 'Звук видео выключен')
-  }
-
-  function cycleReportVideoSpeed() {
-    const speeds = [1, 1.25, 1.5, 2]
-    const currentIndex = speeds.indexOf(reportVideoSpeed)
-    const nextSpeed = speeds[(currentIndex + 1) % speeds.length]
-    setReportVideoSpeed(nextSpeed)
-    setReportActionMessage(`Скорость видео: ${nextSpeed}x`)
   }
 
   function focusCopilotPanel() {
@@ -2943,39 +2882,14 @@ function App() {
                 </button>
               </div>
             ) : (
-              <div className="video-player-mock">
-                <div className="video-person">
-                  <span>{selectedReport.ownerInitial}</span>
-                </div>
-                <button className="video-pop-button" type="button" onClick={openReportRecording} aria-label="Expand video">
-                  <ExternalLink size={19} />
+              <div className="video-player-empty">
+                <Video size={42} />
+                <h3>Видео недоступно</h3>
+                <p>{selectedReportRecordingMessage}</p>
+                <button className="soft-action" type="button" onClick={openReportRecording}>
+                  <RefreshCw size={18} />
+                  Проверить запись
                 </button>
-                <div className="video-controls">
-                  <button className="video-control-button" type="button" onClick={toggleReportVideoPlayback} aria-label={reportVideoPlaying ? 'Пауза' : 'Воспроизвести'}>
-                    {reportVideoPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
-                  </button>
-                  <span>{formatPlaybackTime(reportVideoSeconds)} / {formatPlaybackTime(reportVideoDurationSeconds)}</span>
-                  <button
-                    className="video-timeline"
-                    type="button"
-                    onClick={seekReportVideo}
-                    style={{ '--video-progress': `${reportVideoProgress}%` }}
-                    aria-label="Перемотать видео"
-                  >
-                    {[18, 32, 48, 65, 82].map((left) => (
-                      <i style={{ left: `${left}%` }} key={left} />
-                    ))}
-                  </button>
-                  <button className="video-control-button" type="button" onClick={toggleReportVideoMute} aria-label={reportVideoMuted ? 'Включить звук' : 'Выключить звук'}>
-                    {reportVideoMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-                  </button>
-                  <button className="video-control-button speed-button" type="button" onClick={cycleReportVideoSpeed} aria-label="Скорость видео">
-                    {reportVideoSpeed}x
-                  </button>
-                  <button className="video-control-button" type="button" onClick={openReportRecording} aria-label="Настройки записи">
-                    <Settings size={18} />
-                  </button>
-                </div>
               </div>
             )}
 

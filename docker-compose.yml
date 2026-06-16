@@ -1,4 +1,66 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml --node-ip=${LIVEKIT_NODE_IP:-127.0.0.1}
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      - "60000-60100:60000-60100/udp"
+    volumes:
+      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "alemlive"
+      MINIO_ROOT_PASSWORD: "alemlive-secret"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: /bin/sh
+    command: >
+      -c "until mc alias set local http://minio:9000 alemlive alemlive-secret; do sleep 1; done;
+      mc mb -p local/alemlive-recordings || true;
+      mc anonymous set download local/alemlive-recordings || true"
+    restart: "no"
+
+  livekit-egress:
+    image: livekit/egress:latest
+    environment:
+      EGRESS_CONFIG_FILE: /etc/livekit-egress.yaml
+    volumes:
+      - ./livekit/egress.yaml:/etc/livekit-egress.yaml:ro
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+    shm_size: "1gb"
+    depends_on:
+      livekit:
+        condition: service_started
+      redis:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm"]
@@ -26,6 +88,22 @@ services:
       KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/certs"
       KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
       KEYCLOAK_CLIENT_ID: "alemlive"
+      LIVEKIT_URL: "ws://livekit:7880"
+      LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}"
+      LIVEKIT_API_KEY: "devkey"
+      LIVEKIT_API_SECRET: "devsecret-local-change-me-32-chars"
+      LIVEKIT_EGRESS_ENABLED: "true"
+      LIVEKIT_EGRESS_AUDIO_ONLY: "false"
+      LIVEKIT_EGRESS_LAYOUT: "grid"
+      LIVEKIT_EGRESS_FILE_PREFIX: "alemlive"
+      LIVEKIT_EGRESS_PUBLIC_BASE_URL: "${LIVEKIT_EGRESS_PUBLIC_BASE_URL:-http://localhost:9000/alemlive-recordings}"
+      LIVEKIT_EGRESS_WEBHOOK_URL: "http://backend:8080/api/livekit/webhook"
+      LIVEKIT_S3_BUCKET: "alemlive-recordings"
+      LIVEKIT_S3_REGION: "us-east-1"
+      LIVEKIT_S3_ENDPOINT: "http://minio:9000"
+      LIVEKIT_S3_ACCESS_KEY: "alemlive"
+      LIVEKIT_S3_SECRET: "alemlive-secret"
+      LIVEKIT_S3_FORCE_PATH_STYLE: "true"
       REPORTS_STORAGE_PATH: "/app/data/reports.json"
       RECORDINGS_STORAGE_PATH: "/app/data/recordings"
     volumes:
@@ -35,6 +113,10 @@ services:
     depends_on:
       keycloak:
         condition: service_started
+      livekit:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
       interval: 10s
@@ -53,3 +135,6 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  minio_data:

@@ -375,16 +375,31 @@ func TestReportActionsTabsAndSubresources(t *testing.T) {
 
 func TestReportRecordingStream(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
+	metadata := httptest.NewRecorder()
+	handler.ServeHTTP(metadata, httptest.NewRequest(http.MethodGet, "/api/reports/read-intro/recording", nil))
+	if metadata.Code != http.StatusOK {
+		t.Fatalf("expected recording metadata status 200, got %d: %s", metadata.Code, metadata.Body.String())
+	}
+	var payload struct {
+		Available bool `json:"available"`
+	}
+	if err := json.Unmarshal(metadata.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode recording metadata: %v", err)
+	}
+	if payload.Available {
+		t.Fatalf("demo report should not pretend to have recording: %#v", payload)
+	}
+
 	request := httptest.NewRequest(http.MethodGet, "/api/reports/read-intro/recording/stream", nil)
 	response := httptest.NewRecorder()
 
 	handler.ServeHTTP(response, request)
 
-	if response.Code != http.StatusOK {
-		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	if response.Code != http.StatusNotFound {
+		t.Fatalf("expected status 404, got %d: %s", response.Code, response.Body.String())
 	}
-	if got := response.Header().Get("Content-Type"); !strings.Contains(got, "text/html") {
-		t.Fatalf("expected html stream placeholder, got %s", got)
+	if !strings.Contains(response.Body.String(), "Recording is not available") {
+		t.Fatalf("expected missing recording message, got %s", response.Body.String())
 	}
 }
 

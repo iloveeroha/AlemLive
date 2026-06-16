@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"path"
 	"strings"
 	"time"
@@ -130,19 +131,35 @@ func isWebhookEgressTerminal(info *lkproto.EgressInfo) bool {
 }
 
 func (s *Server) processEgressRecording(ctx context.Context, state livekitservice.EgressState, info *lkproto.EgressInfo) {
-	if s.stt == nil || !s.stt.Configured() {
+	downloadURL := s.firstRecordingDownloadURL(state, info)
+	if downloadURL == "" {
 		return
 	}
-	recordingURL := firstRecordingURL(state, info)
-	if recordingURL == "" {
+	playbackURL := s.firstRecordingPlaybackURL(state, info)
+	roomName := firstNonEmpty(state.RoomName, info.GetRoomName(), "alem-meeting")
+	now := s.clock().UTC()
+	reportID := firstNonEmpty(
+		s.latestReportIDForRoom(roomName),
+		"egress-"+sanitizeReportID(firstNonEmpty(state.EgressID, now.Format("20060102150405"))),
+	)
+	detail := s.upsertEgressRecordingDetail(reportID, roomName, playbackURL, now)
+
+	if s.stt == nil || !s.stt.Configured() {
+		detail.Report.Status = "ready"
+		detail.Report.ProcessingState = "ready"
+		detail.Summary = []summarySection{
+			{Title: "Recording captured", Text: "Meeting video is available. Configure STT to generate transcript and AI analysis automatically."},
+		}
+		s.storeReport(detail)
 		return
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
-	fileName, contentType, data, err := downloadRecording(ctx, recordingURL)
+	fileName, contentType, data, err := downloadRecording(ctx, downloadURL)
 	if err != nil {
+		s.markEgressReportFailed(reportID, err)
 		return
 	}
 	transcription, err := s.stt.Transcribe(ctx, fileName, contentType, data, llm.TranscriptionOptions{
@@ -151,6 +168,7 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 		ResponseFormat: "verbose_json",
 	})
 	if err != nil {
+		s.markEgressReportFailed(reportID, err)
 		return
 	}
 	transcriptText := truncateRunes(strings.TrimSpace(transcription.Text), maxTranscriptRunes)
@@ -158,16 +176,37 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 	if len(lines) == 0 {
 		lines = transcriptLinesFromText(transcriptText)
 	}
-	roomName := firstNonEmpty(state.RoomName, info.GetRoomName(), "alem-meeting")
 	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, roomName, "", transcriptText, lines)
 	if err != nil {
 		analysis = fallbackAnalysisFromTranscript(roomName, transcriptText, lines, s.clock())
 	}
 
-	now := s.clock().UTC()
-	reportID := s.latestReportIDForRoom(roomName)
+	report := detail.Report
+	report.Score = 90
+	report.Status = "ready"
+	report.ProcessingState = "ready"
+	report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
+	if report.Title == "" {
+		report.Title = "Recording - " + roomName
+	}
+	readyDetail := reportDetailFromAnalysis(report, analysis)
+	readyDetail.RecordingURL = firstNonEmpty(playbackURL, downloadURL)
+	readyDetail.RoomName = roomName
+	s.storeReport(readyDetail)
+}
+
+func (s *Server) upsertEgressRecordingDetail(reportID, roomName, playbackURL string, now time.Time) reportDetailResponse {
+	if existing, ok := s.reportDetailForUpdate(reportID); ok {
+		existing.RecordingURL = firstNonEmpty(playbackURL, existing.RecordingURL)
+		existing.RoomName = firstNonEmpty(existing.RoomName, roomName)
+		existing.Report.Status = "processing"
+		existing.Report.ProcessingState = "processing"
+		s.storeReport(existing)
+		return existing
+	}
+
 	report := reportRow{
-		ID:               firstNonEmpty(reportID, "egress-"+sanitizeReportID(firstNonEmpty(state.EgressID, now.Format("20060102150405")))),
+		ID:               reportID,
 		Title:            "Recording - " + roomName,
 		Source:           "LiveKit",
 		Type:             "recording",
@@ -175,48 +214,120 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 		Time:             now.Format("15:04"),
 		Participants:     0,
 		ParticipantNames: "LiveKit room",
-		Score:            90,
+		Score:            0,
 		Folder:           "Recordings",
 		Owner:            "AlemLive",
 		OwnerInitial:     "A",
 		ThumbnailTone:    "blue",
 		Week:             "LiveKit recordings",
-		Duration:         formatTranscriptTime(float64(max(30, len(lines)*30))),
-		Status:           "ready",
-		ProcessingState:  "ready",
+		Duration:         "00:00",
+		Status:           "processing",
+		ProcessingState:  "processing",
 		CreatedAt:        now.Format(time.RFC3339),
 		OccurredAt:       now,
 	}
-	if existing, ok := s.reportDetailForUpdate(report.ID); ok {
-		report = existing.Report
-		report.Score = 90
-		report.Status = "ready"
-		report.ProcessingState = "ready"
-		report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
-		if report.Title == "" {
-			report.Title = "Recording - " + roomName
-		}
+	detail := reportDetailResponse{
+		Report: report,
+		Summary: []summarySection{
+			{Title: "Recording captured", Text: "Meeting video is saved. Backend is generating transcript and AI analysis."},
+		},
+		ActionItems:     []reportActionItem{},
+		TranscriptLines: []reportTranscript{},
+		Transcript:      []reportTranscript{},
+		SpeakerStats:    []speakerStat{},
+		Highlights:      []highlight{},
+		Chapters:        []chapter{},
+		AIQuestions: []string{
+			"What were the key decisions?",
+			"What action items appeared after the meeting?",
+			"Summarize this meeting in Russian.",
+		},
+		RecordingURL: playbackURL,
+		RoomName:     roomName,
 	}
-	detail := reportDetailFromAnalysis(report, analysis)
-	detail.RecordingURL = recordingURL
-	detail.RoomName = roomName
+	s.storeReport(detail)
+	return detail
+}
+
+func (s *Server) markEgressReportFailed(reportID string, err error) {
+	detail, ok := s.reportDetailByID(reportID)
+	if !ok {
+		return
+	}
+	detail.Report.Status = "failed"
+	detail.Report.ProcessingState = "failed"
+	detail.Summary = []summarySection{
+		{Title: "Recording captured", Text: "Meeting video is available, but transcript/AI processing failed: " + reportProcessingErrorMessage(err)},
+	}
 	s.storeReport(detail)
 }
 
-func firstRecordingURL(state livekitservice.EgressState, info *lkproto.EgressInfo) string {
-	for _, value := range []string{state.PublicURL, state.FileLocation} {
-		if strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+func (s *Server) firstRecordingDownloadURL(state livekitservice.EgressState, info *lkproto.EgressInfo) string {
+	if url := s.s3ObjectURL(s.cfg.LiveKitS3Endpoint, s.cfg.LiveKitS3Bucket, firstEgressFilePath(state, info)); url != "" {
+		return url
+	}
+	for _, value := range []string{state.FileLocation, state.PublicURL} {
+		if isHTTPURL(value) {
 			return value
 		}
 	}
 	if info != nil {
 		for _, file := range info.GetFileResults() {
-			if strings.HasPrefix(file.GetLocation(), "http://") || strings.HasPrefix(file.GetLocation(), "https://") {
+			if isHTTPURL(file.GetLocation()) {
 				return file.GetLocation()
 			}
 		}
 	}
 	return ""
+}
+
+func (s *Server) firstRecordingPlaybackURL(state livekitservice.EgressState, info *lkproto.EgressInfo) string {
+	for _, value := range []string{state.PublicURL, state.FileLocation} {
+		if isHTTPURL(value) {
+			return value
+		}
+	}
+	if info != nil {
+		for _, file := range info.GetFileResults() {
+			if isHTTPURL(file.GetLocation()) {
+				return file.GetLocation()
+			}
+		}
+	}
+	return s.s3ObjectURL(s.cfg.LiveKitS3Endpoint, s.cfg.LiveKitS3Bucket, firstEgressFilePath(state, info))
+}
+
+func (s *Server) s3ObjectURL(baseURL, bucket, filePath string) string {
+	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	bucket = strings.Trim(strings.TrimSpace(bucket), "/")
+	filePath = strings.TrimLeft(strings.TrimSpace(filePath), "/")
+	if baseURL == "" || bucket == "" || filePath == "" || !isHTTPURL(baseURL) {
+		return ""
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	return baseURL + "/" + bucket + "/" + filePath
+}
+
+func firstEgressFilePath(state livekitservice.EgressState, info *lkproto.EgressInfo) string {
+	if state.FilePath != "" && !isHTTPURL(state.FilePath) {
+		return state.FilePath
+	}
+	if info != nil {
+		for _, file := range info.GetFileResults() {
+			if file.GetFilename() != "" {
+				return file.GetFilename()
+			}
+		}
+	}
+	return ""
+}
+
+func isHTTPURL(value string) bool {
+	value = strings.TrimSpace(value)
+	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }
 
 func downloadRecording(ctx context.Context, url string) (string, string, []byte, error) {

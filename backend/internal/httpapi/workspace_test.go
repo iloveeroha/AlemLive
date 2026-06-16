@@ -162,3 +162,34 @@ func TestMeetingEventPersistsConferenceReport(t *testing.T) {
 		t.Fatalf("expected persisted saved report %s, got %#v", createdPayload.ReportID, reports.Reports)
 	}
 }
+
+func TestLeaveWithoutActiveSessionDoesNotCreateReport(t *testing.T) {
+	handler := NewServer(config.Config{TokenTTL: time.Hour})
+
+	leaveResponse := httptest.NewRecorder()
+	handler.ServeHTTP(leaveResponse, httptest.NewRequest(http.MethodPost, "/api/rooms/ghost-room/leave", bytes.NewBufferString(`{"userName":"Madi"}`)))
+	if leaveResponse.Code != http.StatusOK {
+		t.Fatalf("expected leave status 200, got %d: %s", leaveResponse.Code, leaveResponse.Body.String())
+	}
+
+	var leavePayload map[string]any
+	if err := json.Unmarshal(leaveResponse.Body.Bytes(), &leavePayload); err != nil {
+		t.Fatalf("decode leave response: %v", err)
+	}
+	if leavePayload["reportId"] != nil {
+		t.Fatalf("stray leave should not create report: %#v", leavePayload)
+	}
+
+	reportsRecorder := httptest.NewRecorder()
+	handler.ServeHTTP(reportsRecorder, httptest.NewRequest(http.MethodGet, "/api/reports?q=ghost-room", nil))
+	if reportsRecorder.Code != http.StatusOK {
+		t.Fatalf("expected reports status 200, got %d: %s", reportsRecorder.Code, reportsRecorder.Body.String())
+	}
+	var reports reportsResponse
+	if err := json.Unmarshal(reportsRecorder.Body.Bytes(), &reports); err != nil {
+		t.Fatalf("decode reports: %v", err)
+	}
+	if reports.Total != 0 {
+		t.Fatalf("stray leave created a report: %#v", reports.Reports)
+	}
+}
