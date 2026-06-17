@@ -316,6 +316,16 @@ func TestAIChat(t *testing.T) {
 	}
 }
 
+func TestPlainTextAIAnswerRemovesMarkdown(t *testing.T) {
+	answer := plainTextAIAnswer("**Как работает:**\n- Нужно подключить календарь.\n`Готово`")
+	if strings.Contains(answer, "**") || strings.Contains(answer, "`") || strings.Contains(answer, "- ") {
+		t.Fatalf("answer still contains markdown: %q", answer)
+	}
+	if !strings.Contains(answer, "Как работает:") || !strings.Contains(answer, "Нужно подключить календарь.") {
+		t.Fatalf("answer lost useful text: %q", answer)
+	}
+}
+
 func TestAIChatTrimsUnicodeHistorySafely(t *testing.T) {
 	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var payload struct {

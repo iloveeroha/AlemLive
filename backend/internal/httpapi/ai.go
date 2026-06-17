@@ -103,6 +103,10 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request) {
 			Content: "Ты AI-помощник AlemLive. Отвечай кратко и полезно на русском языке. Используй контекст отчета о встрече, если он передан. Не выдумывай факты, которых нет в контексте.",
 		},
 	}
+	messages = append(messages, llm.Message{
+		Role:    "system",
+		Content: "Отвечай обычным текстом на русском языке. Не используй Markdown: без **, без #, без списков с маркерами и без code fences.",
+	})
 	if contextText != "" {
 		messages = append(messages, llm.Message{
 			Role:    "user",
@@ -121,7 +125,30 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, aiChatResponse{Answer: answer})
+	writeJSON(w, http.StatusOK, aiChatResponse{Answer: plainTextAIAnswer(answer)})
+}
+
+func plainTextAIAnswer(value string) string {
+	value = strings.TrimSpace(value)
+	replacer := strings.NewReplacer(
+		"**", "",
+		"__", "",
+		"### ", "",
+		"## ", "",
+		"# ", "",
+		"`", "",
+	)
+	value = replacer.Replace(value)
+
+	lines := strings.Split(value, "\n")
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		line = strings.TrimPrefix(line, "- ")
+		line = strings.TrimPrefix(line, "* ")
+		lines[i] = line
+	}
+
+	return strings.TrimSpace(strings.Join(lines, "\n"))
 }
 
 func sanitizeChatHistory(history []aiChatMessage) []llm.Message {

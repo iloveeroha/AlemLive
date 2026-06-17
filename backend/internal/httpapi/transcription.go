@@ -437,7 +437,7 @@ func fallbackAnalysisFromTranscript(roomName, transcriptText string, lines []tra
 		ActionItems: actions,
 		Transcript:  lines,
 		Insights: meetingInsights{
-			Sentiment: "РРЅС„РѕСЂРјР°С†РёРѕРЅРЅР°СЏ РІСЃС‚СЂРµС‡Р°",
+			Sentiment: "Информационная встреча",
 			TalkTime:  talkTime,
 			SpeechRate: []metricValue{
 				{Label: "Average", Value: estimatedSpeechRate(wordCount, len(lines)), Unit: "wpm"},
@@ -456,30 +456,30 @@ func fallbackAnalysisFromTranscript(roomName, transcriptText string, lines []tra
 }
 
 func fallbackSummarySections(transcriptText string) []summarySection {
-	firstText := truncateRunes(strings.TrimSpace(transcriptText), 600)
+	_ = transcriptText
 	return []summarySection{
-		{Title: "Transcript captured", Text: firstNonEmpty(firstText, "Audio was transcribed. AI analysis is unavailable, so the transcript needs manual review.")},
+		{Title: "Транскрипт получен", Text: "Аудио распознано, но AI-анализ сейчас недоступен. Откройте вкладку транскрипта для исходного текста или повторите AI-запрос позже."},
 	}
 }
 
 func fallbackActionItems(transcriptText string) []actionItem {
 	_ = transcriptText
 	return []actionItem{
-		{Task: "Review transcript and confirm action items", Owner: "Team", Due: "After meeting", Priority: "Medium"},
+		{Task: "Проверить транскрипт и подтвердить задачи вручную", Owner: "Team", Due: "После встречи", Priority: "Medium"},
 	}
 }
 
 func fallbackHighlights(transcriptText string) []highlight {
 	_ = transcriptText
 	return []highlight{
-		{Time: "00:00", Title: "Transcript ready", Text: "Speech-to-text completed. AI review is recommended for final highlights.", Type: "Action"},
+		{Time: "00:00", Title: "Транскрипт готов", Text: "Speech-to-text завершился. Для финальных выводов нужен повторный AI-анализ.", Type: "Action"},
 	}
 }
 
 func fallbackChapters(lines []transcriptLine) []chapter {
 	end := formatTranscriptTime(float64(max(30, len(lines)*30)))
 	return []chapter{
-		{Start: "00:00", End: end, Title: "Conversation", Text: "Automatically transcribed meeting conversation."},
+		{Start: "00:00", End: end, Title: "Разговор", Text: "Автоматически распознанная запись встречи."},
 	}
 }
 

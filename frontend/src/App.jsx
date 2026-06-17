@@ -1541,7 +1541,7 @@ function App() {
     const payload = await apiRequest('/api/profile').catch(() => null)
     if (payload) {
       setProfile(payload)
-      setWorkspaceNotice(`${payload.name} В· ${payload.role || 'profile'}`)
+      setWorkspaceNotice(`${payload.name} · ${payload.role || 'profile'}`)
     }
   }
 
@@ -2687,7 +2687,7 @@ function App() {
                   </span>
                   <div>
                     <h4>{item.task || item.title}</h4>
-                    <p>{item.owner} В· {item.due}</p>
+                    <p>{item.owner} · {item.due}</p>
                   </div>
                 </article>
               ))}
@@ -2750,7 +2750,7 @@ function App() {
               <article className="speaker-row" key={speaker.name}>
                 <div>
                   <strong>{speaker.name}</strong>
-                  <span>{speaker.sentiment} В· {speaker.pace}</span>
+                  <span>{speaker.sentiment} · {speaker.pace}</span>
                 </div>
                 <div className="talk-bar" aria-label={`${speaker.name} говорил ${speaker.talk || speaker.talkTime}% времени`}>
                   <span style={{ width: `${speaker.talk || speaker.talkTime}%` }} />

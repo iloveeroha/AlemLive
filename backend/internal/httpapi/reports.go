@@ -968,7 +968,7 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 
 	contextText := truncateRunes(firstNonEmpty(req.Context, reportDetailContext(detail)), maxChatContextRunes)
 	if s.ai == nil || !s.ai.Configured() {
-		writeJSON(w, http.StatusOK, aiChatResponse{Answer: fallbackReportAnswerSafe(detail, message)})
+		writeJSON(w, http.StatusOK, aiChatResponse{Answer: reportChatFallbackAnswer(detail, message)})
 		return
 	}
 
@@ -979,6 +979,10 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 		},
 		{Role: "user", Content: "Контекст отчёта:\n" + contextText},
 	}
+	messages = append(messages, llm.Message{
+		Role:    "system",
+		Content: "Отвечай обычным текстом на русском языке. Не используй Markdown: без **, без #, без списков с маркерами и без code fences.",
+	})
 	messages = append(messages, sanitizeChatHistory(req.History)...)
 	messages = append(messages, llm.Message{Role: "user", Content: message})
 
@@ -987,12 +991,35 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 		MaxTokens:   700,
 	})
 	if err != nil {
-		log.Printf("report chat AI fallback for report %s: %v", detail.Report.ID, err)
-		writeJSON(w, http.StatusOK, aiChatResponse{Answer: fallbackReportAnswerSafe(detail, message)})
+		retryAnswer, retryErr := s.retryReportChat(r.Context(), contextText, message)
+		if retryErr == nil {
+			writeJSON(w, http.StatusOK, aiChatResponse{Answer: plainTextAIAnswer(retryAnswer)})
+			return
+		}
+		log.Printf("report chat AI fallback for report %s: %v; retry: %v", detail.Report.ID, err, retryErr)
+		writeJSON(w, http.StatusOK, aiChatResponse{Answer: reportChatFallbackAnswer(detail, message)})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, aiChatResponse{Answer: answer})
+	writeJSON(w, http.StatusOK, aiChatResponse{Answer: plainTextAIAnswer(answer)})
+}
+
+func (s *Server) retryReportChat(ctx context.Context, contextText, message string) (string, error) {
+	if s.ai == nil || !s.ai.Configured() {
+		return "", llm.ErrNotConfigured
+	}
+	shortContext := truncateRunes(contextText, 5000)
+	return s.ai.Chat(ctx, []llm.Message{
+		{
+			Role:    "system",
+			Content: "Answer in Russian plain text only. No Markdown. Use the meeting context. If the user asks for a Russian summary, summarize the meeting in Russian and do not copy English transcript text verbatim except product names and people's names.",
+		},
+		{Role: "user", Content: "Meeting report context:\n" + shortContext},
+		{Role: "user", Content: message},
+	}, llm.ChatOptions{
+		Temperature: 0.2,
+		MaxTokens:   600,
+	})
 }
 
 func (s *Server) downloadReport(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
@@ -1617,6 +1644,47 @@ func fallbackReportAnswerSafe(detail reportDetailResponse, message string) strin
 		return "Отчет еще обрабатывается или не содержит сводку."
 	}
 	return "Короткое резюме: " + detail.Summary[0].Text
+}
+
+func reportChatFallbackAnswer(detail reportDetailResponse, message string) string {
+	if len(detail.Summary) > 0 {
+		summaryText := strings.TrimSpace(detail.Summary[0].Text)
+		if wantsRussianAnswer(message) && mostlyEnglishText(summaryText) {
+			return "AI-сервис сейчас не вернул ответ, поэтому русский пересказ пока недоступен. Транскрипт уже распознан, но отчет нужно повторно обработать или попробовать запрос ещё раз через минуту."
+		}
+	}
+	return plainTextAIAnswer(fallbackReportAnswerSafe(detail, message))
+}
+
+func wantsRussianAnswer(message string) bool {
+	message = strings.ToLower(message)
+	if strings.Contains(message, "рус") || strings.Contains(message, "russian") {
+		return true
+	}
+	return containsCyrillic(message)
+}
+
+func mostlyEnglishText(value string) bool {
+	asciiLetters := 0
+	cyrillicLetters := 0
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z':
+			asciiLetters++
+		case r >= 0x0400 && r <= 0x04FF:
+			cyrillicLetters++
+		}
+	}
+	return asciiLetters > 40 && asciiLetters > cyrillicLetters*4
+}
+
+func containsCyrillic(value string) bool {
+	for _, r := range value {
+		if r >= 0x0400 && r <= 0x04FF {
+			return true
+		}
+	}
+	return false
 }
 
 func firstRune(value string) string {

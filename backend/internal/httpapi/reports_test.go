@@ -423,6 +423,53 @@ func TestReportChatFallback(t *testing.T) {
 	}
 }
 
+func TestReportChatRetriesEmptyAIAnswer(t *testing.T) {
+	calls := 0
+	llmServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		calls++
+		answer := ""
+		if calls > 1 {
+			answer = "Краткий русский пересказ встречи."
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]string{"role": "assistant", "content": answer}},
+			},
+		})
+	}))
+	defer llmServer.Close()
+
+	handler := NewServer(config.Config{
+		TokenTTL:   time.Hour,
+		LLMBaseURL: llmServer.URL,
+		LLMAPIKey:  "test-key",
+		LLMModel:   "test-model",
+		LLMTimeout: time.Second,
+	})
+	request := httptest.NewRequest(http.MethodPost, "/api/reports/read-intro/chat", bytes.NewBufferString(`{"message":"Кратко перескажи встречу на русском."}`))
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	if calls != 2 {
+		t.Fatalf("expected one retry after empty answer, got %d calls", calls)
+	}
+
+	var payload aiChatResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Answer != "Краткий русский пересказ встречи." {
+		t.Fatalf("unexpected answer: %q", payload.Answer)
+	}
+}
+
 func TestReportUpload(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
 	body := bytes.NewBufferString(`{"title":"Demo upload","owner":"Backend"}`)
