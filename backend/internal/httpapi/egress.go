@@ -59,26 +59,126 @@ func (s *Server) stopRoomRecording(ctx context.Context, roomName string) (liveki
 }
 
 func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName, action string) {
+	snapshot := s.roomSnapshot(roomName)
+	liveKitRoomName := firstNonEmpty(snapshot.Name, roomName)
+
 	switch {
-	case r.Method == http.MethodGet && action == "":
-		writeJSON(w, http.StatusOK, s.recordingStatus(roomName))
+	case r.Method == http.MethodGet && (action == "" || action == "status"):
+		writeJSON(w, http.StatusOK, s.roomRecordingStatusPayload(snapshot))
 	case r.Method == http.MethodPost && (action == "" || action == "start"):
-		state, err := s.startRoomRecording(r.Context(), roomName)
+		_ = s.ensureLiveKitRoom(r.Context(), liveKitRoomName)
+		state, err := s.startRoomRecording(r.Context(), liveKitRoomName)
 		if err != nil {
-			writeRecordingError(w, err)
+			recordingState := roomRecordingError
+			if errors.Is(err, livekitservice.ErrEgressNotConfigured) {
+				recordingState = roomRecordingIdle
+			}
+			s.setRoomRecordingState(snapshot.ID, recordingState, snapshot.ReportID)
+			payload := map[string]any{
+				"roomId":     snapshot.ID,
+				"roomName":   liveKitRoomName,
+				"status":     recordingState,
+				"state":      recordingState,
+				"configured": s.egress != nil && s.egress.Configured(),
+				"error":      recordingErrorMessage(err),
+			}
+			s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "recording_status_changed", Payload: payload})
+			writeJSON(w, http.StatusOK, payload)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"roomName": roomName, "status": "recording_started", "recording": state})
+		s.setRoomRecordingState(snapshot.ID, roomRecordingRecording, snapshot.ReportID)
+		payload := map[string]any{
+			"roomId":     snapshot.ID,
+			"roomName":   liveKitRoomName,
+			"status":     roomRecordingRecording,
+			"state":      roomRecordingRecording,
+			"configured": true,
+			"recording":  state,
+		}
+		s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "recording_started", Payload: payload})
+		writeJSON(w, http.StatusOK, payload)
 	case r.Method == http.MethodPost && action == "stop":
-		state, err := s.stopRoomRecording(r.Context(), roomName)
+		state, err := s.stopRoomRecording(r.Context(), liveKitRoomName)
 		if err != nil {
-			writeRecordingError(w, err)
+			recordingState := roomRecordingError
+			if errors.Is(err, livekitservice.ErrEgressNotConfigured) {
+				recordingState = roomRecordingIdle
+			}
+			s.setRoomRecordingState(snapshot.ID, recordingState, snapshot.ReportID)
+			payload := map[string]any{
+				"roomId":     snapshot.ID,
+				"roomName":   liveKitRoomName,
+				"status":     recordingState,
+				"state":      recordingState,
+				"configured": s.egress != nil && s.egress.Configured(),
+				"error":      recordingErrorMessage(err),
+			}
+			s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "recording_status_changed", Payload: payload})
+			writeJSON(w, http.StatusOK, payload)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"roomName": roomName, "status": "recording_stopped", "recording": state})
+		s.setRoomRecordingState(snapshot.ID, roomRecordingProcessing, snapshot.ReportID)
+		payload := map[string]any{
+			"roomId":     snapshot.ID,
+			"roomName":   liveKitRoomName,
+			"status":     roomRecordingProcessing,
+			"state":      roomRecordingProcessing,
+			"configured": true,
+			"recording":  state,
+			"reportId":   snapshot.ReportID,
+		}
+		s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "recording_stopped", Payload: payload})
+		writeJSON(w, http.StatusOK, payload)
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
 	}
+}
+
+func (s *Server) roomRecordingStatusPayload(snapshot roomStateSnapshot) map[string]any {
+	state := firstNonEmpty(snapshot.RecordingState, roomRecordingIdle)
+	status := s.recordingStatus(firstNonEmpty(snapshot.Name, snapshot.ID))
+	if egressState := normalizeRoomRecordingState(status); egressState != "" {
+		if state == roomRecordingIdle || egressState != roomRecordingIdle {
+			state = egressState
+		}
+	}
+	s.setRoomRecordingState(snapshot.ID, state, snapshot.ReportID)
+
+	return map[string]any{
+		"roomId":     snapshot.ID,
+		"roomName":   snapshot.Name,
+		"status":     state,
+		"state":      state,
+		"reportId":   snapshot.ReportID,
+		"configured": status["configured"],
+		"active":     status["active"],
+		"recording":  status["recording"],
+	}
+}
+
+func normalizeRoomRecordingState(payload map[string]any) string {
+	active, _ := payload["active"].(bool)
+	statusValue, _ := payload["status"].(string)
+	status := strings.ToLower(strings.TrimSpace(statusValue))
+	switch {
+	case strings.Contains(status, "fail") || strings.Contains(status, "abort") || strings.Contains(status, "error"):
+		return roomRecordingError
+	case strings.Contains(status, "complete") || strings.Contains(status, "ready"):
+		return roomRecordingReady
+	case active || strings.Contains(status, "active") || strings.Contains(status, "record"):
+		return roomRecordingRecording
+	case status == "idle" || status == "disabled" || status == "":
+		return roomRecordingIdle
+	default:
+		return ""
+	}
+}
+
+func recordingErrorMessage(err error) string {
+	if errors.Is(err, livekitservice.ErrEgressNotConfigured) {
+		return "LiveKit Egress is not configured"
+	}
+	return "LiveKit Egress request failed"
 }
 
 func writeRecordingError(w http.ResponseWriter, err error) {
@@ -113,12 +213,42 @@ func (s *Server) liveKitWebhook(w http.ResponseWriter, r *http.Request) {
 	if info := event.GetEgressInfo(); info != nil && s.egress != nil {
 		state := s.egress.UpdateFromInfo(info)
 		response["recording"] = state
+		roomID := roomIDFromName(firstNonEmpty(state.RoomName, info.GetRoomName()))
+		recordingState := normalizeLiveKitEgressStatus(info.GetStatus().String())
+		if recordingState == "" {
+			recordingState = roomRecordingRecording
+		}
+		s.setRoomRecordingState(roomID, recordingState, "")
+		s.broadcastRoomEvent(roomID, roomEventEnvelope{
+			Type: "recording_status_changed",
+			Payload: map[string]any{
+				"roomId":    roomID,
+				"roomName":  firstNonEmpty(state.RoomName, info.GetRoomName()),
+				"state":     recordingState,
+				"status":    recordingState,
+				"recording": state,
+			},
+		})
 		if isWebhookEgressTerminal(info) {
 			go s.processEgressRecording(context.Background(), state, info)
 		}
 	}
 
 	writeJSON(w, http.StatusOK, response)
+}
+
+func normalizeLiveKitEgressStatus(status string) string {
+	status = strings.ToLower(strings.TrimSpace(status))
+	switch {
+	case strings.Contains(status, "complete"):
+		return roomRecordingProcessing
+	case strings.Contains(status, "fail") || strings.Contains(status, "abort") || strings.Contains(status, "limit"):
+		return roomRecordingError
+	case status != "":
+		return roomRecordingRecording
+	default:
+		return ""
+	}
 }
 
 func isWebhookEgressTerminal(info *lkproto.EgressInfo) bool {
@@ -156,6 +286,7 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 			{Title: "Recording captured", Text: "Meeting video is available. Configure STT to generate transcript and AI analysis automatically."},
 		}
 		s.storeReport(detail)
+		s.publishRoomRecordingReady(roomName, reportID)
 		return
 	}
 
@@ -208,6 +339,7 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 	readyDetail.RecordingURL = firstNonEmpty(playbackURL, downloadURL)
 	readyDetail.RoomName = roomName
 	s.storeReport(readyDetail)
+	s.publishRoomRecordingReady(roomName, reportID)
 }
 
 func (s *Server) upsertEgressRecordingDetail(reportID, roomName, playbackURL string, now time.Time) reportDetailResponse {
@@ -288,6 +420,22 @@ func (s *Server) markEgressReportFailed(reportID string, err error) {
 		{Title: "Recording captured", Text: "Meeting video is available, but transcript/AI processing failed: " + reportProcessingErrorMessage(err)},
 	}
 	s.storeReport(detail)
+	s.publishRoomRecordingReady(detail.RoomName, reportID)
+}
+
+func (s *Server) publishRoomRecordingReady(roomName, reportID string) {
+	roomID := roomIDFromName(roomName)
+	s.setRoomRecordingState(roomID, roomRecordingReady, reportID)
+	s.broadcastRoomEvent(roomID, roomEventEnvelope{
+		Type: "recording_status_changed",
+		Payload: map[string]any{
+			"roomId":   roomID,
+			"roomName": roomName,
+			"state":    roomRecordingReady,
+			"status":   roomRecordingReady,
+			"reportId": reportID,
+		},
+	})
 }
 
 func (s *Server) processingTimeout() time.Duration {

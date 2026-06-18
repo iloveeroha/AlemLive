@@ -33,6 +33,9 @@ type Server struct {
 	deletedReportIDs     map[string]struct{}
 	activeMeetings       map[string]meetingSession
 	latestRoomReports    map[string]string
+	roomsMu              sync.Mutex
+	rooms                map[string]*roomState
+	roomClients          map[string]map[*roomEventClient]struct{}
 }
 
 type tokenRequest struct {
@@ -133,6 +136,8 @@ func NewServer(cfg config.Config) http.Handler {
 		deletedReportIDs:     map[string]struct{}{},
 		activeMeetings:       map[string]meetingSession{},
 		latestRoomReports:    map[string]string{},
+		rooms:                map[string]*roomState{},
+		roomClients:          map[string]map[*roomEventClient]struct{}{},
 	}
 	server.cfg.STTBaseURL = sttBaseURL
 	server.cfg.STTAPIKey = sttAPIKey
@@ -152,11 +157,17 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/config", s.config)
 	s.mux.HandleFunc("/api/auth/config", s.authConfig)
 	s.mux.HandleFunc("/api/auth/token", s.authToken)
+	s.mux.HandleFunc("/api/auth/login", s.authLogin)
+	s.mux.HandleFunc("/api/auth/register", s.authRegister)
+	s.mux.HandleFunc("/api/auth/logout", s.authLogout)
+	s.mux.HandleFunc("/api/auth/me", s.authMe)
 	s.mux.HandleFunc("/api/livekit/webhook", s.liveKitWebhook)
 	s.mux.HandleFunc("/api/livekit/token", s.createLiveKitToken)
 	s.mux.HandleFunc("/api/meetings/analysis", s.meetingAnalysis)
 	s.mux.HandleFunc("/api/meetings/transcribe", s.meetingTranscription)
 	s.mux.HandleFunc("/api/meetings/events", s.meetingEvent)
+	s.mux.HandleFunc("/api/rooms/create", s.createRoom)
+	s.mux.HandleFunc("/api/rooms/join", s.joinRoom)
 	s.mux.HandleFunc("/api/rooms/", s.roomAction)
 	s.mux.HandleFunc("/api/devices", s.devicePreference)
 	s.mux.HandleFunc("/api/notifications", s.notifications)
@@ -317,13 +328,16 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) publicLiveKitURL(r *http.Request) string {
 	explicitURL := strings.TrimSpace(s.cfg.LiveKitPublicURL)
-	if explicitURL != "" && !isLoopbackURL(explicitURL) {
+	host := forwardedHost(r)
+	if explicitURL != "" {
+		if isLoopbackURL(explicitURL) && host != "" && !isLoopbackHost(stripPort(host)) {
+			return liveKitURLWithRequestHost(explicitURL, host)
+		}
 		return explicitURL
 	}
 
-	host := forwardedHost(r)
 	if host == "" {
-		return firstNonEmpty(explicitURL, s.cfg.LiveKitURL)
+		return s.cfg.LiveKitURL
 	}
 
 	scheme := "ws"
@@ -332,6 +346,35 @@ func (s *Server) publicLiveKitURL(r *http.Request) string {
 	}
 
 	return scheme + "://" + host + "/livekit"
+}
+
+func liveKitURLWithRequestHost(rawURL, requestHost string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil || parsed.Scheme == "" {
+		return rawURL
+	}
+	host := stripPort(requestHost)
+	if host == "" {
+		return rawURL
+	}
+	port := parsed.Port()
+	if port != "" {
+		parsed.Host = net.JoinHostPort(host, port)
+	} else {
+		parsed.Host = host
+	}
+	return parsed.String()
+}
+
+func stripPort(host string) string {
+	host = strings.TrimSpace(host)
+	if host == "" {
+		return ""
+	}
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		return parsedHost
+	}
+	return strings.Trim(host, "[]")
 }
 
 func forwardedHost(r *http.Request) string {

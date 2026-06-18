@@ -46,6 +46,8 @@ type Config struct {
 	KeycloakJWKSURL            string
 	KeycloakTokenURL           string
 	KeycloakClientID           string
+	LocalAuthEnabled           bool
+	LocalAuthSecret            string
 	LLMBaseURL                 string
 	LLMAPIKey                  string
 	LLMModel                   string
@@ -92,6 +94,8 @@ func Load() Config {
 		KeycloakJWKSURL:            strings.TrimSpace(os.Getenv("KEYCLOAK_JWKS_URL")),
 		KeycloakTokenURL:           strings.TrimSpace(os.Getenv("KEYCLOAK_TOKEN_URL")),
 		KeycloakClientID:           strings.TrimSpace(os.Getenv("KEYCLOAK_CLIENT_ID")),
+		LocalAuthEnabled:           envBool("LOCAL_AUTH_ENABLED", false),
+		LocalAuthSecret:            strings.TrimSpace(env("LOCAL_AUTH_SECRET", os.Getenv("LIVEKIT_API_SECRET"))),
 		LLMBaseURL:                 strings.TrimRight(env("LLM_BASE_URL", defaultLLMBaseURL), "/"),
 		LLMAPIKey:                  strings.TrimSpace(os.Getenv("LLM_API_KEY")),
 		LLMModel:                   env("LLM_MODEL", env("DEFAULT_LLM_MODEL", defaultLLMModel)),

@@ -17,36 +17,50 @@ class ReportModel extends Report {
     required super.actionItems,
     required super.speakerActivity,
     required super.transcript,
+    super.recordingUrl,
   });
 
-  factory ReportModel.fromJson(Map<String, dynamic> json) {
+  factory ReportModel.fromJson(
+    Map<String, dynamic> json, {
+    String? backendBaseUrl,
+  }) {
+    final root = _asMap(json['report']) ?? json;
+    final id = _readString(root['id'], fallback: 'report');
+    final actionItems = _mapsFrom(
+      json['actionItems'] ?? root['actionItems'],
+    ).map(ActionItemModel.fromJson).toList();
+    final speakerActivity = _markMostActive(
+      _mapsFrom(
+        json['speakerStats'] ?? root['speakerActivity'],
+      ).map(SpeakerActivityModel.fromJson).toList(),
+    );
+    final transcript = _mapsFrom(
+      json['transcriptLines'] ?? json['transcript'] ?? root['transcript'],
+    ).map(TranscriptSegmentModel.fromJson).toList();
+
     return ReportModel(
-      id: json['id'] as String,
-      roomName: json['roomName'] as String,
-      startedAt: DateTime.parse(json['startedAt'] as String),
-      duration: Duration(seconds: json['durationSeconds'] as int),
-      status: ReportProcessingStatus.values.firstWhere(
-        (status) => status.name == json['status'],
-        orElse: () => ReportProcessingStatus.processing,
+      id: id,
+      roomName: _readString(
+        json['roomName'] ?? root['roomName'] ?? root['title'],
+        fallback: 'AlemLive',
       ),
-      summary: json['summary'] as String,
-      topics: (json['topics'] as List<dynamic>).cast<String>(),
-      takeaways: (json['takeaways'] as List<dynamic>).cast<String>(),
-      actionItems: (json['actionItems'] as List<dynamic>)
-          .map((item) => ActionItemModel.fromJson(item as Map<String, dynamic>))
-          .toList(),
-      speakerActivity: (json['speakerActivity'] as List<dynamic>)
-          .map(
-            (item) =>
-                SpeakerActivityModel.fromJson(item as Map<String, dynamic>),
-          )
-          .toList(),
-      transcript: (json['transcript'] as List<dynamic>)
-          .map(
-            (item) =>
-                TranscriptSegmentModel.fromJson(item as Map<String, dynamic>),
-          )
-          .toList(),
+      startedAt: _readDateTime(
+        root['startedAt'] ?? root['createdAt'] ?? root['date'],
+      ),
+      duration: _readDuration(root['durationSeconds'] ?? root['duration']),
+      status: _readStatus(root['status'] ?? root['processingState']),
+      summary: _readSummary(json, root),
+      topics: _readTopics(json, root),
+      takeaways: _readTakeaways(json, root),
+      actionItems: actionItems,
+      speakerActivity: speakerActivity,
+      transcript: transcript,
+      recordingUrl: _readRecordingUrl(
+        json: json,
+        root: root,
+        reportId: id,
+        backendBaseUrl: backendBaseUrl,
+      ),
     );
   }
 
@@ -89,7 +103,223 @@ class ReportModel extends Report {
             ).toJson(),
           )
           .toList(),
+      'recordingUrl': recordingUrl,
     };
+  }
+
+  static Map<String, dynamic>? _asMap(Object? value) {
+    if (value is Map<String, dynamic>) {
+      return value;
+    }
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return null;
+  }
+
+  static List<Map<String, dynamic>> _mapsFrom(Object? value) {
+    if (value is! List) {
+      return const [];
+    }
+
+    final maps = <Map<String, dynamic>>[];
+    for (final item in value) {
+      final map = _asMap(item);
+      if (map != null) {
+        maps.add(map);
+      }
+    }
+    return maps;
+  }
+
+  static String _readString(Object? value, {String fallback = ''}) {
+    final string = value?.toString().trim();
+    if (string == null || string.isEmpty) {
+      return fallback;
+    }
+    return string;
+  }
+
+  static DateTime _readDateTime(Object? value) {
+    final parsed = DateTime.tryParse(value?.toString() ?? '');
+    return parsed ?? DateTime.now();
+  }
+
+  static Duration _readDuration(Object? value) {
+    if (value is int) {
+      return Duration(seconds: value);
+    }
+    if (value is num) {
+      return Duration(seconds: value.round());
+    }
+
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) {
+      return Duration.zero;
+    }
+
+    final parts = raw.split(':').map(int.tryParse).toList();
+    if (parts.length == 2 && parts.every((part) => part != null)) {
+      return Duration(hours: parts[0]!, minutes: parts[1]!);
+    }
+    if (parts.length == 3 && parts.every((part) => part != null)) {
+      return Duration(hours: parts[0]!, minutes: parts[1]!, seconds: parts[2]!);
+    }
+
+    final minutes = int.tryParse(raw.replaceAll(RegExp(r'[^0-9]'), ''));
+    return Duration(minutes: minutes ?? 0);
+  }
+
+  static ReportProcessingStatus _readStatus(Object? value) {
+    final normalized = value?.toString().trim().toLowerCase() ?? '';
+    return switch (normalized) {
+      'ready' ||
+      'saved' ||
+      'needs_review' ||
+      'completed' ||
+      'complete' => ReportProcessingStatus.ready,
+      'error' || 'failed' || 'failure' => ReportProcessingStatus.error,
+      _ => ReportProcessingStatus.processing,
+    };
+  }
+
+  static String _readSummary(
+    Map<String, dynamic> json,
+    Map<String, dynamic> root,
+  ) {
+    final flat = root['summary'];
+    if (flat is String && flat.trim().isNotEmpty) {
+      return flat.trim();
+    }
+
+    final sections = _mapsFrom(json['summary']);
+    if (sections.isEmpty) {
+      return 'Отчет пока обрабатывается. Подробности появятся после AI-анализа.';
+    }
+
+    return sections
+        .map((section) => _readString(section['text'] ?? section['title']))
+        .where((text) => text.isNotEmpty)
+        .join('\n\n');
+  }
+
+  static List<String> _readTopics(
+    Map<String, dynamic> json,
+    Map<String, dynamic> root,
+  ) {
+    final topics = _stringsFrom(root['topics']);
+    if (topics.isNotEmpty) {
+      return topics;
+    }
+
+    final chapters = _mapsFrom(json['chapters'])
+        .map((chapter) => _readString(chapter['title']))
+        .where((title) => title.isNotEmpty)
+        .toList();
+    if (chapters.isNotEmpty) {
+      return chapters;
+    }
+
+    return _mapsFrom(json['summary'])
+        .map((section) => _readString(section['title']))
+        .where((title) => title.isNotEmpty)
+        .toList();
+  }
+
+  static List<String> _readTakeaways(
+    Map<String, dynamic> json,
+    Map<String, dynamic> root,
+  ) {
+    final takeaways = _stringsFrom(root['takeaways']);
+    if (takeaways.isNotEmpty) {
+      return takeaways;
+    }
+
+    final highlights = _mapsFrom(json['highlights'])
+        .map((highlight) => _readString(highlight['text'] ?? highlight['note']))
+        .where((text) => text.isNotEmpty)
+        .toList();
+    if (highlights.isNotEmpty) {
+      return highlights;
+    }
+
+    return _mapsFrom(json['summary'])
+        .skip(1)
+        .map((section) => _readString(section['text']))
+        .where((text) => text.isNotEmpty)
+        .toList();
+  }
+
+  static List<String> _stringsFrom(Object? value) {
+    if (value is! List) {
+      return const [];
+    }
+    return value
+        .map((item) => item.toString().trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
+  }
+
+  static List<SpeakerActivityModel> _markMostActive(
+    List<SpeakerActivityModel> activity,
+  ) {
+    if (activity.isEmpty || activity.any((speaker) => speaker.isMostActive)) {
+      return activity;
+    }
+
+    final maxPercent = activity
+        .map((speaker) => speaker.participationPercent)
+        .reduce((a, b) => a > b ? a : b);
+    return activity
+        .map(
+          (speaker) => SpeakerActivityModel(
+            speakerName: speaker.speakerName,
+            talkTime: speaker.talkTime,
+            participationPercent: speaker.participationPercent,
+            isMostActive: speaker.participationPercent == maxPercent,
+          ),
+        )
+        .toList();
+  }
+
+  static String? _readRecordingUrl({
+    required Map<String, dynamic> json,
+    required Map<String, dynamic> root,
+    required String reportId,
+    required String? backendBaseUrl,
+  }) {
+    var raw = _readString(
+      json['recordingUrl'] ??
+          json['recordingURL'] ??
+          json['recording_url'] ??
+          root['recordingUrl'] ??
+          root['recording_url'],
+    );
+    final recording = _asMap(json['recording']);
+    raw = _readString(
+      recording?['url'] ?? recording?['recordingUrl'],
+      fallback: raw,
+    );
+
+    if (raw.isEmpty && _readString(json['recordingFile']).isNotEmpty) {
+      raw = '/api/reports/$reportId/recording/stream';
+    }
+    if (raw.isEmpty) {
+      return null;
+    }
+
+    final uri = Uri.tryParse(raw);
+    if (uri != null && uri.hasScheme) {
+      return raw;
+    }
+
+    final base = Uri.tryParse(backendBaseUrl ?? '');
+    if (base == null || !base.hasScheme) {
+      return raw;
+    }
+
+    final path = raw.startsWith('/') ? raw : '/$raw';
+    return base.resolve(path).toString();
   }
 
   static List<ReportModel> mockReports() {

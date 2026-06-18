@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"crypto"
+	"crypto/hmac"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
@@ -60,6 +61,20 @@ type jwtClaims struct {
 	Email             string          `json:"email"`
 }
 
+type authCredentialsRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type localAuthClaims struct {
+	Subject           string `json:"sub"`
+	Name              string `json:"name"`
+	PreferredUsername string `json:"preferred_username"`
+	Email             string `json:"email,omitempty"`
+	ExpiresAt         int64  `json:"exp"`
+	IssuedAt          int64  `json:"iat"`
+}
+
 type jwksCache struct {
 	mu        sync.Mutex
 	keys      map[string]*rsa.PublicKey
@@ -72,7 +87,7 @@ func (s *Server) authEnabled() bool {
 
 func (s *Server) withAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !s.authEnabled() || r.Method == http.MethodOptions || isPublicPath(r.URL.Path) {
+		if (!s.authEnabled() && !s.cfg.LocalAuthEnabled) || r.Method == http.MethodOptions || isPublicPath(r.URL.Path) {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -92,7 +107,203 @@ func isPublicPath(path string) bool {
 	if strings.HasPrefix(path, "/api/reports/") && strings.HasSuffix(path, "/recording/stream") {
 		return true
 	}
-	return path == "/healthz" || path == "/api/config" || path == "/api/auth/config" || path == "/api/auth/token" || path == "/api/livekit/webhook"
+	return path == "/healthz" ||
+		path == "/api/config" ||
+		path == "/api/auth/config" ||
+		path == "/api/auth/token" ||
+		path == "/api/auth/login" ||
+		path == "/api/auth/register" ||
+		path == "/api/auth/logout" ||
+		path == "/api/livekit/webhook"
+}
+
+func (s *Server) authLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+
+	credentials, ok := readAuthCredentials(w, r)
+	if !ok {
+		return
+	}
+
+	if s.authEnabled() {
+		if response, err := s.loginWithKeycloak(r, credentials); err == nil {
+			writeJSON(w, http.StatusOK, response)
+			return
+		} else if !s.cfg.LocalAuthEnabled {
+			writeError(w, http.StatusUnauthorized, "Invalid username or password")
+			return
+		}
+	}
+
+	if !s.cfg.LocalAuthEnabled {
+		writeError(w, http.StatusServiceUnavailable, "Local auth is disabled")
+		return
+	}
+
+	response, err := s.localAuthResponse(credentials.Username)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not create local auth token")
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) authRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+
+	credentials, ok := readAuthCredentials(w, r)
+	if !ok {
+		return
+	}
+	if !s.cfg.LocalAuthEnabled {
+		writeError(w, http.StatusServiceUnavailable, "Registration is handled by the identity provider")
+		return
+	}
+
+	response, err := s.localAuthResponse(credentials.Username)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Could not create local auth token")
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) authMe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w, http.MethodGet)
+		return
+	}
+
+	user, ok := userFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "Missing user")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, authUserPayload(user))
+}
+
+func readAuthCredentials(w http.ResponseWriter, r *http.Request) (authCredentialsRequest, bool) {
+	var req authCredentialsRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+		return authCredentialsRequest{}, false
+	}
+	req.Username = strings.TrimSpace(req.Username)
+	if req.Username == "" || strings.TrimSpace(req.Password) == "" {
+		writeError(w, http.StatusBadRequest, "username and password are required")
+		return authCredentialsRequest{}, false
+	}
+	return req, true
+}
+
+func (s *Server) loginWithKeycloak(r *http.Request, credentials authCredentialsRequest) (map[string]any, error) {
+	tokenURL := s.cfg.KeycloakTokenURL
+	if tokenURL == "" {
+		tokenURL = authEndpoint(s.cfg.KeycloakIssuerURL, "token")
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "password")
+	form.Set("client_id", s.cfg.KeycloakClientID)
+	form.Set("username", credentials.Username)
+	form.Set("password", credentials.Password)
+	form.Set("scope", "openid profile email")
+
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+		return nil, errors.New("keycloak login failed")
+	}
+
+	var tokenPayload map[string]any
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&tokenPayload); err != nil {
+		return nil, err
+	}
+	accessToken, _ := tokenPayload["access_token"].(string)
+	if accessToken == "" {
+		return nil, errors.New("keycloak response did not include access token")
+	}
+
+	user := userFromAccessToken(accessToken, credentials.Username)
+	return map[string]any{
+		"accessToken": accessToken,
+		"token":       accessToken,
+		"expiresIn":   tokenPayload["expires_in"],
+		"user":        authUserPayload(user),
+	}, nil
+}
+
+func (s *Server) localAuthResponse(username string) (map[string]any, error) {
+	now := s.clock().UTC()
+	user := authUser{
+		ID:       localUserID(username),
+		Name:     username,
+		Username: username,
+	}
+	token, expiresAt, err := s.createLocalAccessToken(user, now)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]any{
+		"accessToken": token,
+		"token":       token,
+		"expiresAt":   expiresAt.Format(time.RFC3339),
+		"user":        authUserPayload(user),
+	}, nil
+}
+
+func authUserPayload(user authUser) map[string]string {
+	return map[string]string{
+		"id":          user.ID,
+		"name":        firstNonEmpty(user.Name, user.Username, user.ID),
+		"username":    firstNonEmpty(user.Username, user.Name, user.ID),
+		"displayName": firstNonEmpty(user.Name, user.Username, user.ID),
+		"email":       user.Email,
+	}
+}
+
+func userFromAccessToken(accessToken string, fallbackUsername string) authUser {
+	var claims jwtClaims
+	parts := strings.Split(accessToken, ".")
+	if len(parts) == 3 {
+		_ = decodeJWTPart(parts[1], &claims)
+	}
+	name := firstNonEmpty(claims.Name, claims.PreferredUsername, claims.Email, fallbackUsername)
+	username := firstNonEmpty(claims.PreferredUsername, fallbackUsername, claims.Email, claims.Subject)
+	return authUser{
+		ID:       firstNonEmpty(claims.Subject, localUserID(username)),
+		Name:     name,
+		Email:    claims.Email,
+		Username: username,
+	}
 }
 
 func (s *Server) authToken(w http.ResponseWriter, r *http.Request) {
@@ -153,11 +364,118 @@ func (s *Server) authToken(w http.ResponseWriter, r *http.Request) {
 func (s *Server) authenticateRequest(r *http.Request) (authUser, error) {
 	const prefix = "Bearer "
 	header := strings.TrimSpace(r.Header.Get("Authorization"))
-	if !strings.HasPrefix(header, prefix) {
+	token := ""
+	if strings.HasPrefix(header, prefix) {
+		token = strings.TrimSpace(strings.TrimPrefix(header, prefix))
+	}
+	if token == "" {
+		token = strings.TrimSpace(r.URL.Query().Get("token"))
+	}
+	if token == "" {
 		return authUser{}, errors.New("Missing bearer token")
 	}
 
-	return s.validateAccessToken(strings.TrimSpace(strings.TrimPrefix(header, prefix)))
+	if s.cfg.LocalAuthEnabled {
+		if user, err := s.validateLocalAccessToken(token); err == nil {
+			return user, nil
+		}
+	}
+
+	return s.validateAccessToken(token)
+}
+
+func (s *Server) createLocalAccessToken(user authUser, now time.Time) (string, time.Time, error) {
+	secret := strings.TrimSpace(s.cfg.LocalAuthSecret)
+	if secret == "" {
+		return "", time.Time{}, errors.New("local auth secret is empty")
+	}
+
+	expiresAt := now.Add(s.cfg.TokenTTL)
+	if s.cfg.TokenTTL <= 0 {
+		expiresAt = now.Add(12 * time.Hour)
+	}
+	claims := localAuthClaims{
+		Subject:           firstNonEmpty(user.ID, localUserID(user.Username)),
+		Name:              firstNonEmpty(user.Name, user.Username, user.ID),
+		PreferredUsername: firstNonEmpty(user.Username, user.Name, user.ID),
+		Email:             user.Email,
+		ExpiresAt:         expiresAt.Unix(),
+		IssuedAt:          now.Unix(),
+	}
+
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	payloadPart := base64.RawURLEncoding.EncodeToString(payload)
+	signature := signLocalAuth(payloadPart, secret)
+	return "local." + payloadPart + "." + signature, expiresAt, nil
+}
+
+func (s *Server) validateLocalAccessToken(token string) (authUser, error) {
+	secret := strings.TrimSpace(s.cfg.LocalAuthSecret)
+	if secret == "" || !strings.HasPrefix(token, "local.") {
+		return authUser{}, errors.New("not a local auth token")
+	}
+
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return authUser{}, errors.New("invalid local auth token")
+	}
+	expectedSignature := signLocalAuth(parts[1], secret)
+	if !hmac.Equal([]byte(parts[2]), []byte(expectedSignature)) {
+		return authUser{}, errors.New("invalid local auth signature")
+	}
+
+	rawClaims, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return authUser{}, errors.New("invalid local auth payload")
+	}
+	var claims localAuthClaims
+	if err := json.Unmarshal(rawClaims, &claims); err != nil {
+		return authUser{}, errors.New("invalid local auth claims")
+	}
+	if claims.ExpiresAt <= s.clock().Unix() {
+		return authUser{}, errors.New("local auth token expired")
+	}
+
+	username := firstNonEmpty(claims.PreferredUsername, claims.Name, claims.Subject)
+	return authUser{
+		ID:       firstNonEmpty(claims.Subject, localUserID(username)),
+		Name:     firstNonEmpty(claims.Name, username),
+		Email:    claims.Email,
+		Username: username,
+	}, nil
+}
+
+func signLocalAuth(payloadPart, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write([]byte(payloadPart))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func localUserID(username string) string {
+	username = strings.TrimSpace(strings.ToLower(username))
+	if username == "" {
+		return "local-user"
+	}
+	var b strings.Builder
+	lastDash := false
+	for _, r := range username {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+			lastDash = false
+		case !lastDash:
+			b.WriteRune('-')
+			lastDash = true
+		}
+	}
+	id := strings.Trim(b.String(), "-")
+	if id == "" {
+		return "local-user"
+	}
+	return "local-" + id
 }
 
 func (s *Server) validateAccessToken(token string) (authUser, error) {

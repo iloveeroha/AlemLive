@@ -9,10 +9,11 @@ import 'package:alem_live_mobile/features/reports/presentation/widgets/activity_
 import 'package:alem_live_mobile/features/reports/presentation/widgets/ai_question_tab.dart';
 import 'package:alem_live_mobile/features/reports/presentation/widgets/notes_tab.dart';
 import 'package:alem_live_mobile/features/reports/presentation/widgets/report_tabs.dart';
-import 'package:alem_live_mobile/features/reports/presentation/widgets/report_video_placeholder.dart';
+import 'package:alem_live_mobile/features/reports/presentation/widgets/report_video_player.dart';
 import 'package:alem_live_mobile/features/reports/presentation/widgets/transcript_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:video_player/video_player.dart';
 
 class ReportNavigationArgs {
   const ReportNavigationArgs({required this.report});
@@ -34,6 +35,16 @@ class ReportDetailScreen extends ConsumerStatefulWidget {
 
 class _ReportDetailScreenState extends ConsumerState<ReportDetailScreen> {
   int _selectedTab = 0;
+  String? _loadedRecordingUrl;
+  VideoPlayerController? _videoController;
+  Future<void>? _videoInitialization;
+  Object? _videoError;
+
+  @override
+  void dispose() {
+    _disposeVideoController();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +66,8 @@ class _ReportDetailScreenState extends ConsumerState<ReportDetailScreen> {
   }
 
   Widget _buildReport(Report report) {
+    _syncVideoController(report);
+
     return Column(
       children: [
         Expanded(
@@ -66,7 +79,14 @@ class _ReportDetailScreenState extends ConsumerState<ReportDetailScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const ReportVideoPlaceholder(),
+                      ReportVideoPlayer(
+                        recordingUrl: report.recordingUrl,
+                        controller: _videoController,
+                        initialization: _videoInitialization,
+                        error: _videoError,
+                        onTogglePlayback: _togglePlayback,
+                        onRetry: () => _retryVideo(report),
+                      ),
                       const SizedBox(height: 14),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -117,6 +137,7 @@ class _ReportDetailScreenState extends ConsumerState<ReportDetailScreen> {
                 child: _SelectedTabContent(
                   selectedTab: _selectedTab,
                   report: report,
+                  onTimecodeTap: _seekToTimecode,
                 ),
               ),
             ],
@@ -125,13 +146,137 @@ class _ReportDetailScreenState extends ConsumerState<ReportDetailScreen> {
       ],
     );
   }
+
+  void _syncVideoController(Report report) {
+    final recordingUrl = report.recordingUrl?.trim();
+    if (recordingUrl == null || recordingUrl.isEmpty) {
+      _disposeVideoController();
+      return;
+    }
+    if (_loadedRecordingUrl == recordingUrl) {
+      return;
+    }
+
+    _disposeVideoController();
+    _loadedRecordingUrl = recordingUrl;
+
+    final uri = Uri.tryParse(recordingUrl);
+    if (uri == null || !uri.hasScheme) {
+      _videoError = StateError('Invalid recording URL');
+      return;
+    }
+
+    try {
+      final controller = VideoPlayerController.networkUrl(uri);
+      _videoController = controller;
+      _videoInitialization = controller
+          .initialize()
+          .then((_) {
+            if (!mounted) {
+              return;
+            }
+            setState(() {});
+          })
+          .catchError((Object error) {
+            if (!mounted) {
+              return;
+            }
+            setState(() => _videoError = error);
+          });
+    } catch (error) {
+      _videoError = error;
+    }
+  }
+
+  void _disposeVideoController() {
+    final controller = _videoController;
+    _videoController = null;
+    _videoInitialization = null;
+    _videoError = null;
+    _loadedRecordingUrl = null;
+    controller?.dispose();
+  }
+
+  void _retryVideo(Report report) {
+    _disposeVideoController();
+    setState(() {
+      _syncVideoController(report);
+    });
+  }
+
+  Future<void> _togglePlayback() async {
+    final controller = _videoController;
+    if (controller == null || !controller.value.isInitialized) {
+      return;
+    }
+
+    if (controller.value.isPlaying) {
+      await controller.pause();
+    } else {
+      await controller.play();
+    }
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  Future<void> _seekToTimecode(String timecode) async {
+    final position = _parseTimecode(timecode);
+    if (position == null) {
+      _showSnack('Не удалось распознать таймкод $timecode');
+      return;
+    }
+
+    final controller = _videoController;
+    if (controller == null || !controller.value.isInitialized) {
+      _showSnack('Видео для этого отчета пока недоступно');
+      return;
+    }
+
+    final duration = controller.value.duration;
+    final target = duration > Duration.zero && position > duration
+        ? duration
+        : position;
+    await controller.seekTo(target);
+    await controller.play();
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+    _showSnack('Переход к $timecode');
+  }
+
+  Duration? _parseTimecode(String timecode) {
+    final parts = timecode.split(':').map(int.tryParse).toList();
+    if (parts.length == 2 && parts.every((part) => part != null)) {
+      return Duration(minutes: parts[0]!, seconds: parts[1]!);
+    }
+    if (parts.length == 3 && parts.every((part) => part != null)) {
+      return Duration(hours: parts[0]!, minutes: parts[1]!, seconds: parts[2]!);
+    }
+    return null;
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
 }
 
 class _SelectedTabContent extends StatelessWidget {
-  const _SelectedTabContent({required this.selectedTab, required this.report});
+  const _SelectedTabContent({
+    required this.selectedTab,
+    required this.report,
+    required this.onTimecodeTap,
+  });
 
   final int selectedTab;
   final Report report;
+  final ValueChanged<String> onTimecodeTap;
 
   @override
   Widget build(BuildContext context) {
@@ -139,7 +284,7 @@ class _SelectedTabContent extends StatelessWidget {
       0 => NotesTab(report: report),
       1 => ActionItemsTab(report: report),
       2 => ActivityTab(report: report),
-      3 => TranscriptTab(report: report),
+      3 => TranscriptTab(report: report, onTimecodeTap: onTimecodeTap),
       _ => AiQuestionTab(report: report),
     };
   }

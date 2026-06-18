@@ -3,12 +3,17 @@ import 'package:alem_live_mobile/features/reports/domain/entities/report.dart';
 import 'package:flutter/material.dart';
 
 class TranscriptTab extends StatelessWidget {
-  const TranscriptTab({required this.report, super.key});
+  const TranscriptTab({required this.report, this.onTimecodeTap, super.key});
 
   final Report report;
+  final ValueChanged<String>? onTimecodeTap;
 
   @override
   Widget build(BuildContext context) {
+    if (report.transcript.isEmpty) {
+      return const Center(child: Text('Транскрипт пока недоступен'));
+    }
+
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: report.transcript.length,
@@ -26,16 +31,7 @@ class TranscriptTab extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               TextButton(
-                onPressed: () {
-                  // TODO: Seek video player timeline to transcript timecode.
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Переход к ${segment.timecode} будет подключен позже',
-                      ),
-                    ),
-                  );
-                },
+                onPressed: () => onTimecodeTap?.call(segment.timecode),
                 child: Text(segment.timecode),
               ),
               const SizedBox(width: 8),

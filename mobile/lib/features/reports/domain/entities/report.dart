@@ -18,6 +18,7 @@ class Report extends Equatable {
     required this.actionItems,
     required this.speakerActivity,
     required this.transcript,
+    this.recordingUrl,
   });
 
   final String id;
@@ -31,6 +32,12 @@ class Report extends Equatable {
   final List<ActionItem> actionItems;
   final List<SpeakerActivity> speakerActivity;
   final List<TranscriptSegment> transcript;
+  final String? recordingUrl;
+
+  bool get hasRecording {
+    final url = recordingUrl;
+    return url != null && url.trim().isNotEmpty;
+  }
 
   String get statusLabel {
     return switch (status) {
@@ -71,5 +78,6 @@ class Report extends Equatable {
     actionItems,
     speakerActivity,
     transcript,
+    recordingUrl,
   ];
 }

@@ -183,7 +183,9 @@ func (s *Server) roomAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch action {
-	case "", "link":
+	case "":
+		s.roomInfo(w, r, roomName)
+	case "link":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
 			return
@@ -201,38 +203,12 @@ func (s *Server) roomAction(w http.ResponseWriter, r *http.Request) {
 			subAction = parts[2]
 		}
 		s.roomRecording(w, r, roomName, subAction)
+	case "participants":
+		s.roomParticipants(w, r, roomName, parts[2:])
+	case "events":
+		s.roomEvents(w, r, roomName)
 	case "leave":
-		if r.Method != http.MethodPost {
-			methodNotAllowed(w, http.MethodPost)
-			return
-		}
-		var req meetingEventRequest
-		if r.Body != nil {
-			_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req)
-		}
-		userName := strings.TrimSpace(firstNonEmpty(req.UserName, "Guest"))
-		conference := s.recordConferenceEvent(roomName, userName, "left", s.clock())
-		response := map[string]any{
-			"roomName": roomName,
-			"status":   "left",
-			"at":       s.clock().UTC().Format(time.RFC3339),
-		}
-		if conference.ConferenceSaved {
-			response["conference"] = conference
-			response["reportId"] = conference.ReportID
-		}
-		if conference.RecordingShouldStop {
-			if state, err := s.stopRoomRecording(r.Context(), roomName); err == nil {
-				response["recording"] = state
-				response["recordingStatus"] = "stopped"
-			} else {
-				response["recordingStatus"] = "not_stopped"
-				response["recordingError"] = err.Error()
-			}
-		} else {
-			response["recordingStatus"] = "still_active"
-		}
-		writeJSON(w, http.StatusOK, response)
+		s.leaveRoom(w, r, roomName)
 	default:
 		writeError(w, http.StatusNotFound, "Room action not found")
 	}

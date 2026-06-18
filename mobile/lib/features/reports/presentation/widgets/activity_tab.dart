@@ -9,6 +9,10 @@ class ActivityTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (report.speakerActivity.isEmpty) {
+      return const Center(child: Text('Активность пока недоступна'));
+    }
+
     final mostActive = report.speakerActivity.firstWhere(
       (activity) => activity.isMostActive,
       orElse: () => report.speakerActivity.first,

@@ -9,14 +9,13 @@ class ActionItemModel extends ActionItem {
   });
 
   factory ActionItemModel.fromJson(Map<String, dynamic> json) {
+    final rawStatus = (json['status'] ?? '').toString().toLowerCase();
     return ActionItemModel(
-      task: json['task'] as String,
-      owner: json['owner'] as String,
-      dueDate: json['dueDate'] as String?,
-      status: ActionItemStatus.values.firstWhere(
-        (status) => status.name == json['status'],
-        orElse: () => ActionItemStatus.open,
-      ),
+      task: (json['task'] ?? json['title'] ?? json['description'] ?? '')
+          .toString(),
+      owner: (json['owner'] ?? 'Команда').toString(),
+      dueDate: (json['dueDate'] ?? json['due'])?.toString(),
+      status: _parseStatus(rawStatus),
     );
   }
 
@@ -26,6 +25,17 @@ class ActionItemModel extends ActionItem {
       'owner': owner,
       'dueDate': dueDate,
       'status': status.name,
+    };
+  }
+
+  static ActionItemStatus _parseStatus(String value) {
+    return switch (value) {
+      'done' || 'completed' || 'complete' || 'closed' => ActionItemStatus.done,
+      'inprogress' ||
+      'in_progress' ||
+      'in-progress' ||
+      'processing' => ActionItemStatus.inProgress,
+      _ => ActionItemStatus.open,
     };
   }
 }

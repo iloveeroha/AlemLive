@@ -6,9 +6,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/iloveeroha/AlemLive/backend/internal/config"
 	livekitservice "github.com/iloveeroha/AlemLive/backend/internal/livekit"
 )
@@ -91,6 +93,81 @@ func TestRoomActions(t *testing.T) {
 	handler.ServeHTTP(leaveResponse, httptest.NewRequest(http.MethodPost, "/api/rooms/alem-meeting/leave", nil))
 	if leaveResponse.Code != http.StatusOK {
 		t.Fatalf("expected leave status 200, got %d: %s", leaveResponse.Code, leaveResponse.Body.String())
+	}
+}
+
+func TestMobileRoomFlowEndpoints(t *testing.T) {
+	handler := NewServer(config.Config{TokenTTL: time.Hour})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	createBody := bytes.NewBufferString(`{"roomName":"Mobile Sync","initialMicEnabled":true,"initialCameraEnabled":false}`)
+	createResponse, err := http.Post(server.URL+"/api/rooms/create", "application/json", createBody)
+	if err != nil {
+		t.Fatalf("create room request: %v", err)
+	}
+	defer createResponse.Body.Close()
+	if createResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected create status 200, got %d", createResponse.StatusCode)
+	}
+
+	var created struct {
+		RoomID       string           `json:"roomId"`
+		RoomName     string           `json:"roomName"`
+		OwnerID      string           `json:"ownerId"`
+		IsOwner      bool             `json:"isOwner"`
+		Participants []map[string]any `json:"participants"`
+	}
+	if err := json.NewDecoder(createResponse.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.RoomID == "" || created.RoomName != "Mobile Sync" || created.OwnerID == "" || !created.IsOwner {
+		t.Fatalf("unexpected create payload: %#v", created)
+	}
+	if len(created.Participants) != 1 {
+		t.Fatalf("expected current participant in create payload: %#v", created.Participants)
+	}
+
+	eventsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/rooms/" + created.RoomID + "/events"
+	conn, _, err := websocket.DefaultDialer.Dial(eventsURL, nil)
+	if err != nil {
+		t.Fatalf("connect room events: %v", err)
+	}
+	defer conn.Close()
+
+	var event roomEventEnvelope
+	if err := conn.ReadJSON(&event); err != nil {
+		t.Fatalf("read initial room event: %v", err)
+	}
+	if event.Type != "owner_changed" || event.Payload["ownerId"] != created.OwnerID {
+		t.Fatalf("unexpected initial event: %#v", event)
+	}
+
+	participantsResponse, err := http.Get(server.URL + "/api/rooms/" + created.RoomID + "/participants")
+	if err != nil {
+		t.Fatalf("participants request: %v", err)
+	}
+	defer participantsResponse.Body.Close()
+	if participantsResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected participants status 200, got %d", participantsResponse.StatusCode)
+	}
+
+	controlResponse, err := http.Post(server.URL+"/api/rooms/"+created.RoomID+"/participants/"+created.OwnerID+"/mute", "application/json", nil)
+	if err != nil {
+		t.Fatalf("participant control request: %v", err)
+	}
+	defer controlResponse.Body.Close()
+	if controlResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected control status 200, got %d", controlResponse.StatusCode)
+	}
+
+	statusResponse, err := http.Get(server.URL + "/api/rooms/" + created.RoomID + "/recording/status")
+	if err != nil {
+		t.Fatalf("recording status request: %v", err)
+	}
+	defer statusResponse.Body.Close()
+	if statusResponse.StatusCode != http.StatusOK {
+		t.Fatalf("expected recording status 200, got %d", statusResponse.StatusCode)
 	}
 }
 

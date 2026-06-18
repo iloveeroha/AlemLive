@@ -155,6 +155,8 @@ services:
       KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/certs"
       KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
       KEYCLOAK_CLIENT_ID: "alemlive"
+      LOCAL_AUTH_ENABLED: "true"
+      LOCAL_AUTH_SECRET: "alemlive-local-auth-secret-change-me"
       LIVEKIT_URL: "ws://livekit:7880"
       LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL:-}"
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"

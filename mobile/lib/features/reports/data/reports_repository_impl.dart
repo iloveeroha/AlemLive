@@ -25,7 +25,12 @@ class ReportsRepositoryImpl implements ReportsRepository {
       final response = await apiClient.list();
       return response
           .whereType<Map<String, dynamic>>()
-          .map(ReportModel.fromJson)
+          .map(
+            (json) => ReportModel.fromJson(
+              json,
+              backendBaseUrl: config.backendBaseUrl,
+            ),
+          )
           .toList();
     } catch (error) {
       if (!config.enableMockFallback) {
@@ -38,7 +43,10 @@ class ReportsRepositoryImpl implements ReportsRepository {
   @override
   Future<Report> detail({required String reportId}) async {
     try {
-      return ReportModel.fromJson(await apiClient.detail(reportId: reportId));
+      return ReportModel.fromJson(
+        await apiClient.detail(reportId: reportId),
+        backendBaseUrl: config.backendBaseUrl,
+      );
     } catch (error) {
       if (!config.enableMockFallback) {
         throw mapDioException(error);

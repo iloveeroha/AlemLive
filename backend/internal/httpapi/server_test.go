@@ -95,7 +95,7 @@ func TestLiveKitURLUsesForwardedHostWhenPublicURLIsLocalhost(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload["serverUrl"] != "wss://10.111.186.181:5174/livekit" {
+	if payload["serverUrl"] != "ws://10.111.186.181:7880" {
 		t.Fatalf("unexpected serverUrl: %#v", payload)
 	}
 }
