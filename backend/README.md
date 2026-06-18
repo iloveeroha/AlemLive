@@ -1,52 +1,88 @@
 # AlemLive Backend
 
-Go API для LiveKit токенов, Keycloak auth, AI-чата, STT и отчётов после встреч.
+Go API for AlemLive: Keycloak auth, LiveKit tokens, meeting events, LiveKit Egress webhooks, reports, STT, diarization and AI chat.
 
-## Локальный запуск
+## Local Run
 
 ```powershell
 Copy-Item .env.example .env
 go run ./cmd/server
 ```
 
-Backend слушает `http://localhost:8080`. В полном Docker stack он доступен с хоста на `http://localhost:8088`.
+In full Docker Compose the backend is available at `http://localhost:8088`.
 
-## LiveKit + Egress + MinIO
+## Main Endpoints
 
-В полном `docker compose up -d --build` backend уже получает рабочие значения:
-
-- `LIVEKIT_URL=ws://livekit:7880` для backend и Egress внутри Docker.
-- `LIVEKIT_PUBLIC_URL=ws://localhost:7880` для браузера.
-- `LIVEKIT_EGRESS_ENABLED=true`.
-- `LIVEKIT_EGRESS_AUDIO_ONLY=false`, чтобы сохранялся MP4 с видео, а не только аудио.
-- `LIVEKIT_EGRESS_PUBLIC_BASE_URL=http://localhost:9000/alemlive-recordings`.
-- `LIVEKIT_S3_ENDPOINT=http://minio:9000`.
-- `LIVEKIT_S3_BUCKET=alemlive-recordings`.
-
-Если backend запускается через `go run`, а LiveKit/Egress/MinIO в Docker, используй host-reachable адреса:
-
-```powershell
-$env:LIVEKIT_URL="ws://localhost:7880"
-$env:LIVEKIT_PUBLIC_URL="ws://localhost:7880"
-$env:LIVEKIT_EGRESS_WEBHOOK_URL="http://host.docker.internal:8080/api/livekit/webhook"
-$env:LIVEKIT_S3_ENDPOINT="http://localhost:9000"
-go run ./cmd/server
-```
+- `GET /healthz`
+- `GET /api/config`
+- `GET /api/auth/config`
+- `POST /api/auth/token`
+- `POST /api/livekit/token`
+- `POST /api/meetings/events`
+- `GET /api/reports`
+- `GET /api/reports/{id}`
+- `POST /api/reports/upload`
+- `POST /api/reports/{id}/chat`
+- `POST /api/livekit/webhook`
 
 ## AI/STT
 
-- `LLM_BASE_URL` defaults to `https://llm.nitec.kz`.
-- `LLM_API_KEY` enables AI chat and report analysis.
-- `LLM_MODEL` defaults to `moonshotai/Kimi-K2.6`.
-- `STT_BASE_URL` defaults to `LLM_BASE_URL`.
-- `STT_API_KEY` defaults to `LLM_API_KEY`.
-- `STT_MODEL` defaults to `openai/whisper-large-v3`.
-- `STT_TIMEOUT_SECONDS` defaults to `900`.
+The backend uses OpenAI-style endpoints:
 
-## Storage
+- Chat: `POST {LLM_BASE_URL}/v1/chat/completions`
+- STT: `POST {STT_BASE_URL}/v1/audio/transcriptions`
 
-- `REPORTS_STORAGE_PATH` stores generated reports.
-- `RECORDINGS_STORAGE_PATH` stores manually uploaded recordings.
-- LiveKit Egress recordings are stored in MinIO bucket `alemlive-recordings`.
+Defaults:
 
-Keep `LIVEKIT_API_SECRET`, `LLM_API_KEY`, and `STT_API_KEY` only on the backend.
+```env
+LLM_BASE_URL=https://llm.nitec.kz
+DEFAULT_LLM_MODEL=openai/gpt-oss-120b
+STT_BASE_URL=https://llm.nitec.kz
+DEFAULT_STT_MODEL=openai/whisper-large-v3
+```
+
+`LLM_MODEL` and `STT_MODEL` override the defaults.
+
+## LiveKit/Egress
+
+Inside Docker:
+
+```env
+LIVEKIT_URL=ws://livekit:7880
+LIVEKIT_EGRESS_ENABLED=true
+LIVEKIT_EGRESS_AUDIO_ONLY=false
+LIVEKIT_S3_ENDPOINT=http://minio:9000
+LIVEKIT_S3_BUCKET=alemlive-recordings
+LIVEKIT_EGRESS_WEBHOOK_URL=http://backend:8080/api/livekit/webhook
+```
+
+The browser should use the URL returned by `/api/config` or `/api/livekit/token`. In the default stack it is proxied as `wss://<frontend-host>/livekit`.
+
+## Diarization
+
+The optional bundled service uses pyannote:
+
+```env
+DIARIZATION_BASE_URL=http://diarization:8091
+HF_TOKEN=your-huggingface-token
+```
+
+The service returns voice labels such as `SPEAKER_00`. Backend maps them to transcript lines as `Speaker 1`, `Speaker 2`; if participant names are known or speakers introduce themselves, backend can replace generic labels with names.
+
+## Report Statuses
+
+Reports keep coarse `processingState` plus pipeline fields:
+
+- `recordingStatus`: `missing`, `pending`, `running`, `completed`, `failed`
+- `transcriptionStatus`: `not_started`, `pending`, `completed`, `failed`, `not_configured`
+- `analysisStatus`: `not_started`, `pending`, `completed`, `failed`
+
+The report is still saved when a later pipeline step fails.
+
+## Tests
+
+```powershell
+$env:GOCACHE = Join-Path (Get-Location) '.gocache'
+go test ./...
+Remove-Item .gocache -Recurse -Force
+```

@@ -85,6 +85,7 @@ func (s *Server) meetingTranscription(w http.ResponseWriter, r *http.Request) {
 	if len(lines) == 0 {
 		lines = transcriptLinesFromText(transcriptText)
 	}
+	lines = s.diarizeTranscript(r.Context(), input.FileName, input.ContentType, input.Data, input.ParticipantNames, lines)
 
 	analysis, err := s.generateMeetingAnalysisFromTranscript(r.Context(), roomName, input.ParticipantNames, transcriptText, lines)
 	if err != nil || s.ai == nil || !s.ai.Configured() {
@@ -267,6 +268,7 @@ Use Russian for user-facing text. Preserve roomName.`
 		analysis.Transcript = lines
 	}
 	analysis.Transcript = normalizeTranscriptSpeakers(analysis.Transcript)
+	analysis.Transcript = applyParticipantSpeakerNames(analysis.Transcript, participants)
 	if len(analysis.Insights.TalkTime) == 0 || hasOnlyGenericSpeakerStats(analysis.Insights.TalkTime) {
 		analysis.Insights.TalkTime = speakerTalkTime(analysis.Transcript)
 	}

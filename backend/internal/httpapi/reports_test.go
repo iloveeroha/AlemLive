@@ -254,7 +254,7 @@ func TestReportRenameDeleteAndSend(t *testing.T) {
 
 func TestReportDeletePersistsDemoTombstone(t *testing.T) {
 	storagePath := filepath.Join(t.TempDir(), "reports.json")
-	cfg := config.Config{TokenTTL: time.Hour, ReportsStoragePath: storagePath}
+	cfg := config.Config{TokenTTL: time.Hour, ReportsStoragePath: storagePath, DemoReportsEnabled: true}
 	handler := NewServer(cfg)
 
 	deleted := httptest.NewRecorder()
@@ -488,7 +488,10 @@ func TestReportUpload(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if payload.Report.Title != "Demo upload" || payload.Report.ProcessingState != "processing" {
+	if payload.Report.Title != "Demo upload" ||
+		payload.Report.ProcessingState != "saved" ||
+		payload.Report.RecordingStatus != "missing" ||
+		payload.Report.TranscriptionStatus != "not_started" {
 		t.Fatalf("unexpected upload response: %#v", payload)
 	}
 }

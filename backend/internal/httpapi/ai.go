@@ -35,12 +35,14 @@ type aiChatResponse struct {
 }
 
 type aiStatusResponse struct {
-	Configured    bool   `json:"configured"`
-	BaseURL       string `json:"baseUrl,omitempty"`
-	Model         string `json:"model,omitempty"`
-	STTConfigured bool   `json:"sttConfigured"`
-	STTBaseURL    string `json:"sttBaseUrl,omitempty"`
-	STTModel      string `json:"sttModel,omitempty"`
+	Configured            bool   `json:"configured"`
+	BaseURL               string `json:"baseUrl,omitempty"`
+	Model                 string `json:"model,omitempty"`
+	STTConfigured         bool   `json:"sttConfigured"`
+	STTBaseURL            string `json:"sttBaseUrl,omitempty"`
+	STTModel              string `json:"sttModel,omitempty"`
+	DiarizationConfigured bool   `json:"diarizationConfigured"`
+	DiarizationBaseURL    string `json:"diarizationBaseUrl,omitempty"`
 }
 
 func (s *Server) aiStatus(w http.ResponseWriter, r *http.Request) {
@@ -59,6 +61,10 @@ func (s *Server) aiStatus(w http.ResponseWriter, r *http.Request) {
 		response.STTConfigured = true
 		response.STTBaseURL = s.cfg.STTBaseURL
 		response.STTModel = s.cfg.STTModel
+	}
+	if s.diarizer != nil && s.diarizer.Configured() {
+		response.DiarizationConfigured = true
+		response.DiarizationBaseURL = s.cfg.DiarizationBaseURL
 	}
 
 	writeJSON(w, http.StatusOK, response)
@@ -111,6 +117,16 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request) {
 		messages = append(messages, llm.Message{
 			Role:    "user",
 			Content: "Контекст отчета о встрече:\n" + contextText,
+		})
+	}
+	messages = []llm.Message{
+		{Role: "system", Content: "Ты AI-помощник AlemLive. Отвечай кратко и полезно на русском языке. Используй контекст отчёта о встрече, если он передан. Не выдумывай факты, которых нет в контексте."},
+		{Role: "system", Content: "Отвечай обычным текстом на русском языке. Не используй Markdown: без **, без #, без списков с маркерами и без code fences."},
+	}
+	if contextText != "" {
+		messages = append(messages, llm.Message{
+			Role:    "user",
+			Content: "Контекст отчёта о встрече:\n" + contextText,
 		})
 	}
 	messages = append(messages, sanitizeChatHistory(req.History)...)

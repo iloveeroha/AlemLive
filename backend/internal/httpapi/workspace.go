@@ -118,6 +118,7 @@ func (s *Server) meetingEvent(w http.ResponseWriter, r *http.Request) {
 			response["recordingStatus"] = "started"
 		} else {
 			response["recordingStatus"] = "not_started"
+			response["recordingError"] = err.Error()
 		}
 	case "left", "ended":
 		if conference.RecordingShouldStop {
@@ -126,6 +127,7 @@ func (s *Server) meetingEvent(w http.ResponseWriter, r *http.Request) {
 				response["recordingStatus"] = "stopped"
 			} else {
 				response["recordingStatus"] = "not_stopped"
+				response["recordingError"] = err.Error()
 			}
 		} else {
 			response["recordingStatus"] = "still_active"
@@ -225,6 +227,7 @@ func (s *Server) roomAction(w http.ResponseWriter, r *http.Request) {
 				response["recordingStatus"] = "stopped"
 			} else {
 				response["recordingStatus"] = "not_stopped"
+				response["recordingError"] = err.Error()
 			}
 		} else {
 			response["recordingStatus"] = "still_active"
@@ -262,4 +265,22 @@ func (s *Server) roomSettings(w http.ResponseWriter, r *http.Request, roomName s
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPatch)
 	}
+}
+
+func conferenceSummary(roomName, status string, egressEnabled bool) []summarySection {
+	if status == "saved" {
+		text := "Конференция сохранена в отчётах."
+		if egressEnabled {
+			text += " Запись, транскрипт и AI-анализ будут добавлены после завершения LiveKit Egress."
+		} else {
+			text += " Для видео и автоматического STT включите LiveKit Egress и storage."
+		}
+		return []summarySection{{Title: "Конференция сохранена", Text: text}}
+	}
+
+	text := "Backend уже создал отчёт для комнаты " + roomName + " и обновляет его по событиям участников."
+	if egressEnabled {
+		text += " LiveKit Egress записывает конференцию автоматически."
+	}
+	return []summarySection{{Title: "Конференция записывается", Text: text}}
 }

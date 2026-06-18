@@ -3,26 +3,76 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
 
+  livekit-config:
+    image: alpine:3.23
+    environment:
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-change-me-livekit-secret}"
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -eu
+        mkdir -p /config
+        cat > /config/livekit.yaml <<EOF
+        port: 7880
+        bind_addresses:
+          - ""
+
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: false
+          port_range_start: 60000
+          port_range_end: 60100
+
+        keys:
+          "$${LIVEKIT_API_KEY}": "$${LIVEKIT_API_SECRET}"
+
+        redis:
+          address: redis:6379
+
+        logging:
+          level: info
+        EOF
+
+        cat > /config/egress.yaml <<EOF
+        log_level: info
+        api_key: "$${LIVEKIT_API_KEY}"
+        api_secret: "$${LIVEKIT_API_SECRET}"
+        ws_url: ws://livekit:7880
+        insecure: true
+
+        redis:
+          address: redis:6379
+        EOF
+    volumes:
+      - livekit_config:/config
+    restart: "no"
+
   livekit:
     image: livekit/livekit-server:latest
-    command: --config /etc/livekit.yaml --node-ip=${LIVEKIT_NODE_IP:-127.0.0.1}
+    command: --config /etc/livekit/livekit.yaml --node-ip=${LIVEKIT_NODE_IP:-127.0.0.1}
     ports:
       - "7880:7880"
       - "7881:7881"
       - "7882:7882/udp"
       - "60000-60100:60000-60100/udp"
     volumes:
-      - ./livekit/livekit.yaml:/etc/livekit.yaml:ro
+      - livekit_config:/etc/livekit:ro
     depends_on:
-      - redis
+      redis:
+        condition: service_started
+      livekit-config:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: "alemlive"
-      MINIO_ROOT_PASSWORD: "alemlive-secret"
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-alemlive}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-change-me-minio-password}"
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -34,19 +84,23 @@ services:
     image: minio/mc:latest
     depends_on:
       - minio
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-alemlive}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-change-me-minio-password}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-alemlive-recordings}"
     entrypoint: /bin/sh
     command: >
-      -c "until mc alias set local http://minio:9000 alemlive alemlive-secret; do sleep 1; done;
-      mc mb -p local/alemlive-recordings || true;
-      mc anonymous set download local/alemlive-recordings || true"
+      -c "until mc alias set local http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\"; do sleep 1; done;
+      mc mb -p \"local/$${MINIO_BUCKET}\" || true;
+      mc anonymous set download \"local/$${MINIO_BUCKET}\" || true"
     restart: "no"
 
   livekit-egress:
     image: livekit/egress:latest
     environment:
-      EGRESS_CONFIG_FILE: /etc/livekit-egress.yaml
+      EGRESS_CONFIG_FILE: /etc/livekit/egress.yaml
     volumes:
-      - ./livekit/egress.yaml:/etc/livekit-egress.yaml:ro
+      - livekit_config:/etc/livekit:ro
     cap_add:
       - SYS_ADMIN
     security_opt:
@@ -55,6 +109,8 @@ services:
     depends_on:
       livekit:
         condition: service_started
+      livekit-config:
+        condition: service_completed_successfully
       redis:
         condition: service_started
       minio-init:
@@ -63,3 +119,4 @@ services:
 
 volumes:
   minio_data:
+  livekit_config:

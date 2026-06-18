@@ -12,18 +12,20 @@ import (
 	"unicode"
 
 	"github.com/iloveeroha/AlemLive/backend/internal/config"
+	"github.com/iloveeroha/AlemLive/backend/internal/diarization"
 	"github.com/iloveeroha/AlemLive/backend/internal/livekit"
 	"github.com/iloveeroha/AlemLive/backend/internal/llm"
 )
 
 type Server struct {
-	cfg    config.Config
-	clock  func() time.Time
-	ai     *llm.Client
-	stt    *llm.Client
-	egress *livekit.EgressManager
-	mux    *http.ServeMux
-	jwks   jwksCache
+	cfg      config.Config
+	clock    func() time.Time
+	ai       *llm.Client
+	stt      *llm.Client
+	diarizer *diarization.Client
+	egress   *livekit.EgressManager
+	mux      *http.ServeMux
+	jwks     jwksCache
 
 	reportsMu            sync.Mutex
 	generatedReports     []reportRow
@@ -124,6 +126,7 @@ func NewServer(cfg config.Config) http.Handler {
 		clock:                time.Now,
 		ai:                   llm.New(cfg.LLMBaseURL, cfg.LLMAPIKey, cfg.LLMModel, cfg.LLMTimeout),
 		stt:                  llm.New(sttBaseURL, sttAPIKey, sttModel, sttTimeout),
+		diarizer:             diarization.New(cfg.DiarizationBaseURL, cfg.DiarizationAPIKey, cfg.DiarizationTimeout),
 		egress:               livekit.NewEgressManager(egressConfigFromAppConfig(cfg)),
 		mux:                  http.NewServeMux(),
 		generatedReportStore: map[string]reportDetailResponse{},
@@ -192,6 +195,7 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 		"aiStatusEndpoint":       "/api/ai/status",
 		"analysisEndpoint":       "/api/meetings/analysis",
 		"speechToTextEndpoint":   "/api/meetings/transcribe",
+		"diarizationEnabled":     s.diarizer != nil && s.diarizer.Configured(),
 		"meetingEventsEndpoint":  "/api/meetings/events",
 		"roomsEndpoint":          "/api/rooms",
 		"devicesEndpoint":        "/api/devices",

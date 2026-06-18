@@ -2,7 +2,7 @@
   "realm": "alemlive",
   "enabled": true,
   "displayName": "AlemLive",
-  "registrationAllowed": false,
+  "registrationAllowed": true,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": true,
@@ -22,12 +22,16 @@
       "redirectUris": [
         "http://localhost:5173/*",
         "https://localhost:5174/*",
-        "http://10.111.193.153:5173/*",
-        "https://10.111.193.153:5174/*",
-        "http://10.111.186.181:5173/*",
-        "https://10.111.186.181:5174/*",
-        "https://10.111.171.190:5174/*",
-        "https://10.111.163.152:5174/*"
+        "http://127.0.0.1:5173/*",
+        "https://127.0.0.1:5174/*",
+        "http://10.111.199.51:5173/*",
+        "https://10.111.199.51:5174/*",
+        "http://10.*:5173/*",
+        "https://10.*:5174/*",
+        "http://172.*:5173/*",
+        "https://172.*:5174/*",
+        "http://192.168.*:5173/*",
+        "https://192.168.*:5174/*"
       ],
       "webOrigins": [
         "+"
@@ -38,21 +42,5 @@
       }
     }
   ],
-  "users": [
-    {
-      "username": "madi",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Madi",
-      "lastName": "AlemLive",
-      "email": "madi@example.local",
-      "credentials": [
-        {
-          "type": "password",
-          "value": "admin",
-          "temporary": false
-        }
-      ]
-    }
-  ]
+  "users": []
 }

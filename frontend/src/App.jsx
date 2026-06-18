@@ -361,6 +361,30 @@ function getReportLocalTime(report) {
 
 function reportProcessingLabel(report) {
   const state = report?.processingState || report?.status || ''
+  const recording = report?.recordingStatus || ''
+  const transcription = report?.transcriptionStatus || ''
+  const analysis = report?.analysisStatus || ''
+  if (recording === 'running') {
+    return 'Запись идет'
+  }
+  if (recording === 'pending') {
+    return 'Запись ожидает'
+  }
+  if (recording === 'failed') {
+    return 'Ошибка записи'
+  }
+  if (transcription === 'pending' || transcription === 'running') {
+    return 'Транскрипция'
+  }
+  if (transcription === 'failed') {
+    return 'Ошибка STT'
+  }
+  if (analysis === 'pending' || analysis === 'running') {
+    return 'AI-анализ'
+  }
+  if (analysis === 'failed') {
+    return 'AI fallback'
+  }
   if (state === 'processing') {
     return 'Обрабатывается'
   }
@@ -879,7 +903,7 @@ function App() {
   const initialReportId = getInitialReportId()
   const manualDisconnectRef = useRef(false)
   const [activeView, setActiveView] = useState(() => getInitialView(initialReportId))
-  const [selectedReportId, setSelectedReportId] = useState(initialReportId || reportRows[0].id)
+  const [selectedReportId, setSelectedReportId] = useState(initialReportId || '')
   const [activeReportTab, setActiveReportTab] = useState('notes')
   const [form, setForm] = useState({
     roomName: getInitialRoomName(),
@@ -919,7 +943,7 @@ function App() {
   const [authReady, setAuthReady] = useState(false)
   const [notifications, setNotifications] = useState({ unread: 0, items: [] })
   const [locales, setLocales] = useState({ current: 'ru', items: [] })
-  const [reports, setReports] = useState(reportRows)
+  const [reports, setReports] = useState([])
   const [reportFilters, setReportFilters] = useState(null)
   const [reportDetails, setReportDetails] = useState({})
   const [reportActions, setReportActions] = useState({})
@@ -958,7 +982,7 @@ function App() {
   const timeFilterLabel = timeFilterMode === 'custom' ? formatDateRange(timeFilterRange) : activeQuickDateOption?.label || quickDateOptions[0].label
   const calendarDays = getCalendarDays(calendarMonth)
   const areAllTypeFiltersSelected = selectedTypeFilterIds.length === typeFilterOptions.length
-  const visibleReports = filterReportsByType(reports.length ? reports : reportRows, selectedTypeFilterIds)
+  const visibleReports = filterReportsByType(reports, selectedTypeFilterIds)
   const hasProcessingReports = reports.some((report) => ['processing', 'recording'].includes(report.processingState || report.status))
   const selectedReportRecordingUrl = selectedReportDetail?.recordingUrl || ''
   const selectedReportRecordingMessage = (() => {
@@ -1214,7 +1238,7 @@ function App() {
         }
       } catch (error) {
         if (isMounted) {
-          setReports(reportRows)
+          setReports([])
           setReportsError(error.message || 'Не удалось загрузить отчёты из backend')
         }
       } finally {

@@ -110,25 +110,28 @@ func (s *Server) newMeetingSessionLocked(roomName, userName string, now time.Tim
 
 	reportID := fmt.Sprintf("meeting-%s-%s", sanitizeReportID(roomName), now.UTC().Format("20060102-150405"))
 	report := reportRow{
-		ID:               reportID,
-		Title:            "Встреча - " + roomName,
-		Source:           "LiveKit",
-		Type:             "meeting",
-		Date:             now.Format("02.01.2006"),
-		Time:             now.Format("15:04"),
-		Participants:     0,
-		ParticipantNames: "",
-		Score:            0,
-		Folder:           "Сохранённые встречи",
-		Owner:            userName,
-		OwnerInitial:     strings.ToUpper(firstNonEmpty(firstRune(userName), "A")),
-		ThumbnailTone:    "blue",
-		Week:             "LiveKit meetings",
-		Duration:         "00:00",
-		Status:           "recording",
-		ProcessingState:  "recording",
-		CreatedAt:        now.UTC().Format(time.RFC3339),
-		OccurredAt:       now,
+		ID:                  reportID,
+		Title:               "Встреча - " + roomName,
+		Source:              "LiveKit",
+		Type:                "meeting",
+		Date:                now.Format("02.01.2006"),
+		Time:                now.Format("15:04"),
+		Participants:        0,
+		ParticipantNames:    "",
+		Score:               0,
+		Folder:              "Сохранённые встречи",
+		Owner:               userName,
+		OwnerInitial:        strings.ToUpper(firstNonEmpty(firstRune(userName), "A")),
+		ThumbnailTone:       "blue",
+		Week:                "LiveKit meetings",
+		Duration:            "00:00",
+		Status:              "recording",
+		ProcessingState:     "recording",
+		RecordingStatus:     "running",
+		TranscriptionStatus: "pending",
+		AnalysisStatus:      "pending",
+		CreatedAt:           now.UTC().Format(time.RFC3339),
+		OccurredAt:          now,
 	}
 	detail := reportDetailResponse{
 		Report:          report,
@@ -199,6 +202,22 @@ func (s *Server) updateConferenceReportLocked(session meetingSession, now time.T
 	}
 	detail.Report.Status = status
 	detail.Report.ProcessingState = status
+	switch status {
+	case "recording":
+		detail.Report.RecordingStatus = "running"
+		detail.Report.TranscriptionStatus = "pending"
+		detail.Report.AnalysisStatus = "pending"
+	case "processing":
+		detail.Report.RecordingStatus = "completed"
+		detail.Report.TranscriptionStatus = "pending"
+		detail.Report.AnalysisStatus = "pending"
+	case "saved":
+		if detail.Report.RecordingStatus == "" || detail.Report.RecordingStatus == "running" {
+			detail.Report.RecordingStatus = "missing"
+		}
+		detail.Report.TranscriptionStatus = "not_started"
+		detail.Report.AnalysisStatus = "not_started"
+	}
 	detail.Summary = conferenceSummary(session.RoomName, status, s.egress != nil && s.egress.Configured())
 	detail.RoomName = session.RoomName
 	detail.Transcript = detail.TranscriptLines
@@ -249,7 +268,7 @@ func participantsFromReport(value string) map[string]struct{} {
 	return participants
 }
 
-func conferenceSummary(roomName, status string, egressEnabled bool) []summarySection {
+func legacyConferenceSummary(roomName, status string, egressEnabled bool) []summarySection {
 	if status == "saved" {
 		text := "Конференция сохранена в отчётах."
 		if egressEnabled {

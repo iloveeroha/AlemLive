@@ -12,10 +12,11 @@ const (
 	defaultPort            = "8080"
 	defaultTokenTTLMinutes = 120
 	defaultLLMBaseURL      = "https://llm.nitec.kz"
-	defaultLLMModel        = "moonshotai/Kimi-K2.6"
+	defaultLLMModel        = "openai/gpt-oss-120b"
 	defaultSTTModel        = "openai/whisper-large-v3"
 	defaultLLMTimeout      = 60
 	defaultSTTTimeout      = 900
+	defaultDiarizeTimeout  = 900
 	defaultReportsStorage  = "data/reports.json"
 	defaultRecordingsDir   = "data/recordings"
 )
@@ -51,10 +52,14 @@ type Config struct {
 	STTBaseURL                 string
 	STTAPIKey                  string
 	STTModel                   string
+	DiarizationBaseURL         string
+	DiarizationAPIKey          string
 	LLMTimeout                 time.Duration
 	STTTimeout                 time.Duration
+	DiarizationTimeout         time.Duration
 	ReportsStoragePath         string
 	RecordingsStoragePath      string
+	DemoReportsEnabled         bool
 }
 
 func Load() Config {
@@ -89,14 +94,18 @@ func Load() Config {
 		KeycloakClientID:           strings.TrimSpace(os.Getenv("KEYCLOAK_CLIENT_ID")),
 		LLMBaseURL:                 strings.TrimRight(env("LLM_BASE_URL", defaultLLMBaseURL), "/"),
 		LLMAPIKey:                  strings.TrimSpace(os.Getenv("LLM_API_KEY")),
-		LLMModel:                   env("LLM_MODEL", defaultLLMModel),
+		LLMModel:                   env("LLM_MODEL", env("DEFAULT_LLM_MODEL", defaultLLMModel)),
 		STTBaseURL:                 strings.TrimRight(env("STT_BASE_URL", env("LLM_BASE_URL", defaultLLMBaseURL)), "/"),
 		STTAPIKey:                  strings.TrimSpace(env("STT_API_KEY", os.Getenv("LLM_API_KEY"))),
-		STTModel:                   env("STT_MODEL", defaultSTTModel),
+		STTModel:                   env("STT_MODEL", env("DEFAULT_STT_MODEL", defaultSTTModel)),
+		DiarizationBaseURL:         strings.TrimRight(strings.TrimSpace(os.Getenv("DIARIZATION_BASE_URL")), "/"),
+		DiarizationAPIKey:          strings.TrimSpace(os.Getenv("DIARIZATION_API_KEY")),
 		LLMTimeout:                 time.Duration(envInt("LLM_TIMEOUT_SECONDS", defaultLLMTimeout)) * time.Second,
 		STTTimeout:                 time.Duration(envInt("STT_TIMEOUT_SECONDS", defaultSTTTimeout)) * time.Second,
+		DiarizationTimeout:         time.Duration(envInt("DIARIZATION_TIMEOUT_SECONDS", defaultDiarizeTimeout)) * time.Second,
 		ReportsStoragePath:         strings.TrimSpace(env("REPORTS_STORAGE_PATH", defaultReportsStorage)),
 		RecordingsStoragePath:      strings.TrimSpace(env("RECORDINGS_STORAGE_PATH", defaultRecordingsDir)),
+		DemoReportsEnabled:         envBool("DEMO_REPORTS_ENABLED", false),
 	}
 }
 

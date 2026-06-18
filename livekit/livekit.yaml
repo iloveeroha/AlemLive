@@ -10,7 +10,7 @@ rtc:
   port_range_end: 60100
 
 keys:
-  devkey: devsecret-local-change-me-32-chars
+  CHANGE_ME_API_KEY: CHANGE_ME_API_SECRET
 
 redis:
   address: redis:6379

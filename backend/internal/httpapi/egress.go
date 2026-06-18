@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"path"
@@ -133,6 +134,7 @@ func isWebhookEgressTerminal(info *lkproto.EgressInfo) bool {
 func (s *Server) processEgressRecording(ctx context.Context, state livekitservice.EgressState, info *lkproto.EgressInfo) {
 	downloadURL := s.firstRecordingDownloadURL(state, info)
 	if downloadURL == "" {
+		log.Printf("egress report skipped: no recording download URL for room=%s egress=%s", state.RoomName, state.EgressID)
 		return
 	}
 	playbackURL := s.firstRecordingPlaybackURL(state, info)
@@ -147,6 +149,9 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 	if s.stt == nil || !s.stt.Configured() {
 		detail.Report.Status = "ready"
 		detail.Report.ProcessingState = "ready"
+		detail.Report.RecordingStatus = "completed"
+		detail.Report.TranscriptionStatus = "not_configured"
+		detail.Report.AnalysisStatus = "not_started"
 		detail.Summary = []summarySection{
 			{Title: "Recording captured", Text: "Meeting video is available. Configure STT to generate transcript and AI analysis automatically."},
 		}
@@ -159,6 +164,7 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 
 	fileName, contentType, data, err := downloadRecording(ctx, downloadURL)
 	if err != nil {
+		log.Printf("egress report %s recording download failed: %v", reportID, err)
 		s.markEgressReportFailed(reportID, err)
 		return
 	}
@@ -168,6 +174,7 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 		ResponseFormat: "verbose_json",
 	})
 	if err != nil {
+		log.Printf("egress report %s transcription failed: %v", reportID, err)
 		s.markEgressReportFailed(reportID, err)
 		return
 	}
@@ -176,15 +183,23 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 	if len(lines) == 0 {
 		lines = transcriptLinesFromText(transcriptText)
 	}
-	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, roomName, "", transcriptText, lines)
+	participants := strings.TrimSpace(detail.Report.ParticipantNames)
+	lines = s.diarizeTranscript(ctx, fileName, contentType, data, participants, lines)
+	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, roomName, participants, transcriptText, lines)
+	analysisStatus := "completed"
 	if err != nil {
+		log.Printf("egress report %s meeting analysis fallback: %v", reportID, err)
 		analysis = fallbackAnalysisFromTranscript(roomName, transcriptText, lines, s.clock())
+		analysisStatus = "failed"
 	}
 
 	report := detail.Report
 	report.Score = 90
 	report.Status = "ready"
 	report.ProcessingState = "ready"
+	report.RecordingStatus = "completed"
+	report.TranscriptionStatus = "completed"
+	report.AnalysisStatus = analysisStatus
 	report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
 	if report.Title == "" {
 		report.Title = "Recording - " + roomName
@@ -201,30 +216,36 @@ func (s *Server) upsertEgressRecordingDetail(reportID, roomName, playbackURL str
 		existing.RoomName = firstNonEmpty(existing.RoomName, roomName)
 		existing.Report.Status = "processing"
 		existing.Report.ProcessingState = "processing"
+		existing.Report.RecordingStatus = "completed"
+		existing.Report.TranscriptionStatus = "pending"
+		existing.Report.AnalysisStatus = "pending"
 		s.storeReport(existing)
 		return existing
 	}
 
 	report := reportRow{
-		ID:               reportID,
-		Title:            "Recording - " + roomName,
-		Source:           "LiveKit",
-		Type:             "recording",
-		Date:             now.Format("02.01.2006"),
-		Time:             now.Format("15:04"),
-		Participants:     0,
-		ParticipantNames: "LiveKit room",
-		Score:            0,
-		Folder:           "Recordings",
-		Owner:            "AlemLive",
-		OwnerInitial:     "A",
-		ThumbnailTone:    "blue",
-		Week:             "LiveKit recordings",
-		Duration:         "00:00",
-		Status:           "processing",
-		ProcessingState:  "processing",
-		CreatedAt:        now.Format(time.RFC3339),
-		OccurredAt:       now,
+		ID:                  reportID,
+		Title:               "Recording - " + roomName,
+		Source:              "LiveKit",
+		Type:                "recording",
+		Date:                now.Format("02.01.2006"),
+		Time:                now.Format("15:04"),
+		Participants:        0,
+		ParticipantNames:    "LiveKit room",
+		Score:               0,
+		Folder:              "Recordings",
+		Owner:               "AlemLive",
+		OwnerInitial:        "A",
+		ThumbnailTone:       "blue",
+		Week:                "LiveKit recordings",
+		Duration:            "00:00",
+		Status:              "processing",
+		ProcessingState:     "processing",
+		RecordingStatus:     "completed",
+		TranscriptionStatus: "pending",
+		AnalysisStatus:      "pending",
+		CreatedAt:           now.Format(time.RFC3339),
+		OccurredAt:          now,
 	}
 	detail := reportDetailResponse{
 		Report: report,
@@ -256,6 +277,13 @@ func (s *Server) markEgressReportFailed(reportID string, err error) {
 	}
 	detail.Report.Status = "ready"
 	detail.Report.ProcessingState = "ready"
+	if detail.Report.RecordingStatus == "" {
+		detail.Report.RecordingStatus = "completed"
+	}
+	detail.Report.TranscriptionStatus = "failed"
+	if detail.Report.AnalysisStatus == "" {
+		detail.Report.AnalysisStatus = "not_started"
+	}
 	detail.Summary = []summarySection{
 		{Title: "Recording captured", Text: "Meeting video is available, but transcript/AI processing failed: " + reportProcessingErrorMessage(err)},
 	}
@@ -263,7 +291,7 @@ func (s *Server) markEgressReportFailed(reportID string, err error) {
 }
 
 func (s *Server) processingTimeout() time.Duration {
-	timeout := s.cfg.STTTimeout + s.cfg.LLMTimeout + time.Minute
+	timeout := s.cfg.STTTimeout + s.cfg.DiarizationTimeout + s.cfg.LLMTimeout + time.Minute
 	if timeout <= time.Minute {
 		return 20 * time.Minute
 	}

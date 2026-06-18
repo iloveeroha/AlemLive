@@ -87,7 +87,58 @@ func normalizeLoadedReport(detail *reportDetailResponse) bool {
 		detail.RecordingURL = "/api/reports/" + detail.Report.ID + "/recording/stream"
 		changed = true
 	}
+	if normalizeReportPipelineStatuses(&detail.Report, detail.RecordingFile != "" || detail.RecordingURL != "", len(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)) > 0) {
+		changed = true
+	}
 	if repairLoadedReportAnalysis(detail) {
+		changed = true
+	}
+	return changed
+}
+
+func normalizeReportPipelineStatuses(report *reportRow, hasRecording, hasTranscript bool) bool {
+	if report == nil {
+		return false
+	}
+	changed := false
+	state := strings.ToLower(strings.TrimSpace(firstNonEmpty(report.ProcessingState, report.Status)))
+	if report.RecordingStatus == "" {
+		switch {
+		case state == "recording":
+			report.RecordingStatus = "running"
+		case hasRecording || state == "processing" || state == "ready":
+			report.RecordingStatus = "completed"
+		case state == "failed":
+			report.RecordingStatus = "failed"
+		default:
+			report.RecordingStatus = "missing"
+		}
+		changed = true
+	}
+	if report.TranscriptionStatus == "" {
+		switch {
+		case state == "recording" || state == "processing":
+			report.TranscriptionStatus = "pending"
+		case hasTranscript || state == "ready":
+			report.TranscriptionStatus = "completed"
+		case state == "failed":
+			report.TranscriptionStatus = "failed"
+		default:
+			report.TranscriptionStatus = "not_started"
+		}
+		changed = true
+	}
+	if report.AnalysisStatus == "" {
+		switch {
+		case state == "recording" || state == "processing":
+			report.AnalysisStatus = "pending"
+		case state == "ready":
+			report.AnalysisStatus = "completed"
+		case state == "failed":
+			report.AnalysisStatus = "failed"
+		default:
+			report.AnalysisStatus = "not_started"
+		}
 		changed = true
 	}
 	return changed
@@ -106,6 +157,7 @@ func repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
 	}
 
 	lines = normalizeTranscriptSpeakers(lines)
+	lines = applyParticipantSpeakerNames(lines, detail.Report.ParticipantNames)
 	transcriptText := transcriptTextFromLines(lines)
 
 	if needsFallbackRepair {

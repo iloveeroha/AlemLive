@@ -20,25 +20,28 @@ import (
 )
 
 type reportRow struct {
-	ID               string    `json:"id"`
-	Title            string    `json:"title"`
-	Source           string    `json:"source"`
-	Type             string    `json:"type"`
-	Date             string    `json:"date"`
-	Time             string    `json:"time"`
-	Participants     int       `json:"participants"`
-	ParticipantNames string    `json:"participantNames"`
-	Score            int       `json:"score"`
-	Folder           string    `json:"folder"`
-	Owner            string    `json:"owner"`
-	OwnerInitial     string    `json:"ownerInitial"`
-	ThumbnailTone    string    `json:"thumbnailTone"`
-	Week             string    `json:"week"`
-	Duration         string    `json:"duration"`
-	Status           string    `json:"status"`
-	ProcessingState  string    `json:"processingState"`
-	CreatedAt        string    `json:"createdAt"`
-	OccurredAt       time.Time `json:"-"`
+	ID                  string    `json:"id"`
+	Title               string    `json:"title"`
+	Source              string    `json:"source"`
+	Type                string    `json:"type"`
+	Date                string    `json:"date"`
+	Time                string    `json:"time"`
+	Participants        int       `json:"participants"`
+	ParticipantNames    string    `json:"participantNames"`
+	Score               int       `json:"score"`
+	Folder              string    `json:"folder"`
+	Owner               string    `json:"owner"`
+	OwnerInitial        string    `json:"ownerInitial"`
+	ThumbnailTone       string    `json:"thumbnailTone"`
+	Week                string    `json:"week"`
+	Duration            string    `json:"duration"`
+	Status              string    `json:"status"`
+	ProcessingState     string    `json:"processingState"`
+	RecordingStatus     string    `json:"recordingStatus,omitempty"`
+	TranscriptionStatus string    `json:"transcriptionStatus,omitempty"`
+	AnalysisStatus      string    `json:"analysisStatus,omitempty"`
+	CreatedAt           string    `json:"createdAt"`
+	OccurredAt          time.Time `json:"-"`
 }
 
 type reportsResponse struct {
@@ -191,30 +194,33 @@ func (s *Server) reportUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	report := reportRow{
-		ID:               "uploaded-" + now.Format("20060102150405"),
-		Title:            title,
-		Source:           source,
-		Type:             reportTypeFromSource(source),
-		Date:             now.Format("02.01.2006"),
-		Time:             now.Format("15:04"),
-		Participants:     parsePositiveInt(req.Participants, 0),
-		ParticipantNames: firstNonEmpty(req.Participants, "Ожидает анализа"),
-		Score:            0,
-		Folder:           folder,
-		Owner:            owner,
-		OwnerInitial:     initial,
-		ThumbnailTone:    "mint",
-		Week:             "Новые загрузки",
-		Duration:         "00:00",
-		Status:           "processing",
-		ProcessingState:  "processing",
-		CreatedAt:        now.Format(time.RFC3339),
-		OccurredAt:       now,
+		ID:                  "uploaded-" + now.Format("20060102150405"),
+		Title:               title,
+		Source:              source,
+		Type:                reportTypeFromSource(source),
+		Date:                now.Format("02.01.2006"),
+		Time:                now.Format("15:04"),
+		Participants:        parsePositiveInt(req.Participants, 0),
+		ParticipantNames:    firstNonEmpty(req.Participants, "Ожидает анализа"),
+		Score:               0,
+		Folder:              folder,
+		Owner:               owner,
+		OwnerInitial:        initial,
+		ThumbnailTone:       "mint",
+		Week:                "Новые загрузки",
+		Duration:            "00:00",
+		Status:              "saved",
+		ProcessingState:     "saved",
+		RecordingStatus:     "missing",
+		TranscriptionStatus: "not_started",
+		AnalysisStatus:      "not_started",
+		CreatedAt:           now.Format(time.RFC3339),
+		OccurredAt:          now,
 	}
 	s.storeReport(reportDetailResponse{
 		Report: report,
 		Summary: []summarySection{
-			{Title: "Processing", Text: "Report accepted for AI processing."},
+			{Title: "No recording yet", Text: "Report was saved without a recording. Upload a recording or finish a LiveKit meeting to generate transcript and AI analysis."},
 		},
 		ActionItems:     []reportActionItem{},
 		TranscriptLines: []reportTranscript{},
@@ -230,7 +236,7 @@ func (s *Server) reportUpload(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"report":  report,
-		"message": "Report accepted for AI processing",
+		"message": "Report saved without recording. Upload a recording or finish a LiveKit meeting to generate transcript and AI analysis.",
 	})
 }
 
@@ -257,25 +263,28 @@ func (s *Server) reportRecordingUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	report := reportRow{
-		ID:               fmt.Sprintf("uploaded-%s-%09d", now.Format("20060102150405"), now.Nanosecond()),
-		Title:            title,
-		Source:           source,
-		Type:             reportTypeFromSource(source),
-		Date:             now.Format("02.01.2006"),
-		Time:             now.Format("15:04"),
-		Participants:     parsePositiveInt(input.Participants, 0),
-		ParticipantNames: firstNonEmpty(input.ParticipantNames, owner),
-		Score:            0,
-		Folder:           folder,
-		Owner:            owner,
-		OwnerInitial:     initial,
-		ThumbnailTone:    "mint",
-		Week:             "Uploads",
-		Duration:         "00:00",
-		Status:           "processing",
-		ProcessingState:  "processing",
-		CreatedAt:        now.Format(time.RFC3339),
-		OccurredAt:       now,
+		ID:                  fmt.Sprintf("uploaded-%s-%09d", now.Format("20060102150405"), now.Nanosecond()),
+		Title:               title,
+		Source:              source,
+		Type:                reportTypeFromSource(source),
+		Date:                now.Format("02.01.2006"),
+		Time:                now.Format("15:04"),
+		Participants:        parsePositiveInt(input.Participants, 0),
+		ParticipantNames:    firstNonEmpty(input.ParticipantNames, owner),
+		Score:               0,
+		Folder:              folder,
+		Owner:               owner,
+		OwnerInitial:        initial,
+		ThumbnailTone:       "mint",
+		Week:                "Uploads",
+		Duration:            "00:00",
+		Status:              "processing",
+		ProcessingState:     "processing",
+		RecordingStatus:     "completed",
+		TranscriptionStatus: "pending",
+		AnalysisStatus:      "pending",
+		CreatedAt:           now.Format(time.RFC3339),
+		OccurredAt:          now,
 	}
 
 	recordingFile, recordingType, err := s.saveUploadedRecording(report.ID, input)
@@ -380,7 +389,7 @@ func processingReportDetail(report reportRow, roomName string) reportDetailRespo
 }
 
 func (s *Server) processUploadedRecording(reportID string, input recordingUploadInput) {
-	timeout := s.cfg.STTTimeout + s.cfg.LLMTimeout + time.Minute
+	timeout := s.cfg.STTTimeout + s.cfg.DiarizationTimeout + s.cfg.LLMTimeout + time.Minute
 	if timeout <= time.Minute {
 		timeout = 20 * time.Minute
 	}
@@ -389,12 +398,14 @@ func (s *Server) processUploadedRecording(reportID string, input recordingUpload
 
 	transcription, err := s.transcribeRecording(ctx, input)
 	if err != nil {
+		log.Printf("uploaded report %s transcription failed: %v", reportID, err)
 		s.markUploadedReportFailed(reportID, err)
 		return
 	}
 
 	transcriptText := truncateRunes(strings.TrimSpace(transcription.Text), maxTranscriptRunes)
 	if transcriptText == "" {
+		log.Printf("uploaded report %s transcription returned empty text", reportID)
 		s.markUploadedReportFailed(reportID, errors.New("transcript is empty"))
 		return
 	}
@@ -403,11 +414,14 @@ func (s *Server) processUploadedRecording(reportID string, input recordingUpload
 	if len(lines) == 0 {
 		lines = transcriptLinesFromText(transcriptText)
 	}
+	lines = s.diarizeTranscript(ctx, input.FileName, input.ContentType, input.Data, input.ParticipantNames, lines)
 
 	analysis, err := s.generateMeetingAnalysisFromTranscript(ctx, input.RoomName, input.ParticipantNames, transcriptText, lines)
+	analysisStatus := "completed"
 	if err != nil {
 		log.Printf("meeting analysis fallback for report %s: %v", reportID, err)
 		analysis = fallbackAnalysisFromTranscript(input.RoomName, transcriptText, lines, s.clock())
+		analysisStatus = "failed"
 	}
 
 	detail, ok := s.reportDetailByID(reportID)
@@ -419,6 +433,9 @@ func (s *Server) processUploadedRecording(reportID string, input recordingUpload
 	report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
 	report.Status = "ready"
 	report.ProcessingState = "ready"
+	report.RecordingStatus = "completed"
+	report.TranscriptionStatus = "completed"
+	report.AnalysisStatus = analysisStatus
 
 	readyDetail := reportDetailFromAnalysis(report, analysis)
 	readyDetail.RecordingURL = detail.RecordingURL
@@ -436,6 +453,13 @@ func (s *Server) markUploadedReportFailed(reportID string, err error) {
 	detail.Report.Status = "failed"
 	detail.Report.ProcessingState = "failed"
 	detail.Report.Score = 0
+	if detail.Report.RecordingStatus == "" {
+		detail.Report.RecordingStatus = "completed"
+	}
+	detail.Report.TranscriptionStatus = "failed"
+	if detail.Report.AnalysisStatus == "" {
+		detail.Report.AnalysisStatus = "not_started"
+	}
 	detail.Summary = []summarySection{
 		{Title: "Ошибка обработки", Text: reportProcessingErrorMessage(err)},
 	}
@@ -521,6 +545,7 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 	if detail.Report.ID == "" {
 		return
 	}
+	normalizeReportPipelineStatuses(&detail.Report, detail.RecordingFile != "" || detail.RecordingURL != "", len(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)) > 0)
 	s.reportsMu.Lock()
 	defer s.reportsMu.Unlock()
 
@@ -548,7 +573,10 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 }
 
 func (s *Server) allReports() []reportRow {
-	demoRows := demoReports()
+	demoRows := []reportRow{}
+	if s.demoReportsEnabled() {
+		demoRows = demoReports()
+	}
 	s.reportsMu.Lock()
 	defer s.reportsMu.Unlock()
 
@@ -584,6 +612,9 @@ func (s *Server) reportDetailByID(id string) (reportDetailResponse, bool) {
 		return detail, true
 	}
 	s.reportsMu.Unlock()
+	if !s.demoReportsEnabled() {
+		return reportDetailResponse{}, false
+	}
 	return demoReportDetail(id, s.clock())
 }
 
@@ -607,12 +638,14 @@ func (s *Server) deleteReport(id string) bool {
 	}
 	s.generatedReports = keptReports
 
-	if _, ok := demoReportDetail(id, s.clock()); ok {
-		found = true
-		if s.deletedReportIDs == nil {
-			s.deletedReportIDs = map[string]struct{}{}
+	if s.demoReportsEnabled() {
+		if _, ok := demoReportDetail(id, s.clock()); ok {
+			found = true
+			if s.deletedReportIDs == nil {
+				s.deletedReportIDs = map[string]struct{}{}
+			}
+			s.deletedReportIDs[id] = struct{}{}
 		}
-		s.deletedReportIDs[id] = struct{}{}
 	}
 
 	for roomName, reportID := range s.latestRoomReports {
@@ -625,6 +658,16 @@ func (s *Server) deleteReport(id string) bool {
 		s.saveReportsLocked()
 	}
 	return found
+}
+
+func (s *Server) demoReportsEnabled() bool {
+	if s == nil {
+		return false
+	}
+	if s.cfg.DemoReportsEnabled {
+		return true
+	}
+	return s.cfg.ReportsStoragePath == ""
 }
 
 func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
@@ -966,7 +1009,7 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 		return
 	}
 
-	contextText := truncateRunes(firstNonEmpty(req.Context, reportDetailContext(detail)), maxChatContextRunes)
+	contextText := truncateRunes(firstNonEmpty(req.Context, cleanReportDetailContext(detail)), maxChatContextRunes)
 	if s.ai == nil || !s.ai.Configured() {
 		writeJSON(w, http.StatusOK, aiChatResponse{Answer: reportChatFallbackAnswer(detail, message)})
 		return
@@ -983,6 +1026,11 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 		Role:    "system",
 		Content: "Отвечай обычным текстом на русском языке. Не используй Markdown: без **, без #, без списков с маркерами и без code fences.",
 	})
+	messages = []llm.Message{
+		{Role: "system", Content: "Ты AI-помощник AlemLive. Отвечай кратко на русском языке, используя только контекст выбранного отчёта. Не выдумывай факты, которых нет в отчёте."},
+		{Role: "system", Content: "Отвечай обычным текстом. Не используй Markdown: без **, без #, без списков с маркерами и без code fences."},
+		{Role: "user", Content: "Контекст отчёта:\n" + contextText},
+	}
 	messages = append(messages, sanitizeChatHistory(req.History)...)
 	messages = append(messages, llm.Message{Role: "user", Content: message})
 
@@ -1548,6 +1596,58 @@ func reportDetailContext(detail reportDetailResponse) string {
 	for _, item := range detail.ActionItems {
 		b.WriteString("- ")
 		b.WriteString(item.Title)
+		b.WriteString(" / ")
+		b.WriteString(item.Owner)
+		b.WriteString(" / ")
+		b.WriteString(item.Due)
+		b.WriteString("\n")
+	}
+	b.WriteString("\nTranscript:\n")
+	for _, line := range detail.TranscriptLines {
+		b.WriteString(line.Time)
+		b.WriteString(" ")
+		b.WriteString(line.Speaker)
+		b.WriteString(": ")
+		b.WriteString(line.Text)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func cleanReportDetailContext(detail reportDetailResponse) string {
+	var b strings.Builder
+	b.WriteString("Отчёт: ")
+	b.WriteString(detail.Report.Title)
+	b.WriteString("\nID: ")
+	b.WriteString(detail.Report.ID)
+	b.WriteString("\nИсточник: ")
+	b.WriteString(detail.Report.Source)
+	b.WriteString("\nДата: ")
+	b.WriteString(detail.Report.Date)
+	b.WriteString(" ")
+	b.WriteString(detail.Report.Time)
+	b.WriteString("\nУчастники: ")
+	b.WriteString(firstNonEmpty(detail.Report.ParticipantNames, strconv.Itoa(detail.Report.Participants)))
+	if detail.Report.RecordingStatus != "" || detail.Report.TranscriptionStatus != "" || detail.Report.AnalysisStatus != "" {
+		b.WriteString("\nСтатусы: recording=")
+		b.WriteString(firstNonEmpty(detail.Report.RecordingStatus, "unknown"))
+		b.WriteString(", transcription=")
+		b.WriteString(firstNonEmpty(detail.Report.TranscriptionStatus, "unknown"))
+		b.WriteString(", analysis=")
+		b.WriteString(firstNonEmpty(detail.Report.AnalysisStatus, "unknown"))
+	}
+	b.WriteString("\n\nSummary:\n")
+	for _, section := range detail.Summary {
+		b.WriteString("- ")
+		b.WriteString(section.Title)
+		b.WriteString(": ")
+		b.WriteString(section.Text)
+		b.WriteString("\n")
+	}
+	b.WriteString("\nAction items:\n")
+	for _, item := range detail.ActionItems {
+		b.WriteString("- ")
+		b.WriteString(firstNonEmpty(item.Title, item.Task))
 		b.WriteString(" / ")
 		b.WriteString(item.Owner)
 		b.WriteString(" / ")
