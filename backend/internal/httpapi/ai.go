@@ -242,11 +242,8 @@ func (s *Server) generateMeetingAnalysis(ctx context.Context, room string, now f
 }
 
 func validateAnalysis(analysis meetingAnalysis) error {
-	if len(analysis.Summary) == 0 || len(analysis.ActionItems) == 0 || len(analysis.Transcript) == 0 {
+	if len(analysis.Summary) == 0 || len(analysis.Transcript) == 0 {
 		return errors.New("analysis is incomplete")
-	}
-	if len(analysis.Highlights) == 0 || len(analysis.Chapters) == 0 {
-		return errors.New("analysis timeline is incomplete")
 	}
 	return nil
 }

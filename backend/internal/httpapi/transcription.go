@@ -229,7 +229,6 @@ Schema:
   "generatedAt": "RFC3339 string",
   "summary": [{"title": "string", "text": "string"}],
   "actionItems": [{"task": "string", "owner": "string", "due": "string", "priority": "High|Medium|Low"}],
-  "transcript": [{"time": "00:00", "speaker": "string", "text": "string"}],
   "insights": {
     "sentiment": "string",
     "talkTime": [{"label": "string", "value": 0, "unit": "%"}],
@@ -240,11 +239,11 @@ Schema:
   "highlights": [{"time": "00:00", "title": "string", "text": "string", "type": "Decision|Risk|Action"}],
   "chapters": [{"start": "00:00", "end": "00:00", "title": "string", "text": "string"}]
 }
-Use Russian for user-facing text. Preserve roomName.`
+Use Russian for user-facing text. Preserve roomName. Do not return the full transcript; backend already has it.`
 
 	contextText := transcriptAnalysisContext(roomName, participants, transcriptText, lines)
 	answer, err := s.ai.Chat(ctx, []llm.Message{
-		{Role: "system", Content: "You are a meeting analytics engine. Return only JSON that matches the requested schema. Preserve speaker labels from the transcript. Use participant names only when the transcript clearly identifies the speaker."},
+		{Role: "system", Content: "You are a meeting analytics engine. Return only JSON that matches the requested schema. Do not copy the full transcript into the output. Use participant names only when the transcript clearly identifies the speaker."},
 		{Role: "user", Content: prompt + "\n\n" + contextText},
 	}, llm.ChatOptions{
 		Temperature: 0.2,
@@ -269,8 +268,26 @@ Use Russian for user-facing text. Preserve roomName.`
 	}
 	analysis.Transcript = normalizeTranscriptSpeakers(analysis.Transcript)
 	analysis.Transcript = applyParticipantSpeakerNames(analysis.Transcript, participants)
+	if strings.TrimSpace(analysis.Insights.Sentiment) == "" {
+		analysis.Insights.Sentiment = "Информационная встреча"
+	}
 	if len(analysis.Insights.TalkTime) == 0 || hasOnlyGenericSpeakerStats(analysis.Insights.TalkTime) {
 		analysis.Insights.TalkTime = speakerTalkTime(analysis.Transcript)
+	}
+	if len(analysis.Insights.SpeechRate) == 0 {
+		analysis.Insights.SpeechRate = []metricValue{{Label: "Average", Value: estimatedSpeechRate(len(strings.Fields(transcriptText)), len(analysis.Transcript)), Unit: "wpm"}}
+	}
+	if len(analysis.Insights.Interruptions) == 0 {
+		analysis.Insights.Interruptions = []metricValue{{Label: "Detected", Value: 0, Unit: "times"}}
+	}
+	if len(analysis.Insights.Engagement) == 0 {
+		analysis.Insights.Engagement = []metricValue{{Label: "Transcript lines", Value: len(analysis.Transcript), Unit: "items"}}
+	}
+	if len(analysis.Highlights) == 0 {
+		analysis.Highlights = fallbackHighlights(transcriptText)
+	}
+	if len(analysis.Chapters) == 0 {
+		analysis.Chapters = fallbackChapters(analysis.Transcript)
 	}
 	if err := validateAnalysis(analysis); err != nil {
 		return meetingAnalysis{}, err

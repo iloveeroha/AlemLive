@@ -617,3 +617,102 @@ func TestReportNotFound(t *testing.T) {
 		t.Fatalf("expected status 404, got %d", response.Code)
 	}
 }
+
+func TestValidateAnalysisAllowsBackendGeneratedOptionalSections(t *testing.T) {
+	err := validateAnalysis(meetingAnalysis{
+		Summary:    []summarySection{{Title: "Итог", Text: "Встреча распознана."}},
+		Transcript: []transcriptLine{{Time: "00:00", Speaker: "Speaker", Text: "Hello"}},
+	})
+	if err != nil {
+		t.Fatalf("expected minimal analysis to be valid, got %v", err)
+	}
+}
+
+func TestNormalizeLoadedReportMarksFallbackAnalysisFailed(t *testing.T) {
+	now := time.Now()
+	detail := reportDetailResponse{
+		Report: reportRow{
+			ID:                  "uploaded-test",
+			Title:               "Uploaded meeting",
+			Status:              "ready",
+			ProcessingState:     "ready",
+			RecordingStatus:     "completed",
+			TranscriptionStatus: "completed",
+			AnalysisStatus:      "completed",
+			CreatedAt:           now.Format(time.RFC3339),
+			OccurredAt:          now,
+		},
+		Summary: fallbackSummarySections("Recognized text"),
+		ActionItems: []reportActionItem{{
+			ID:    "action-1",
+			Title: "Проверить транскрипт и подтвердить задачи вручную",
+			Task:  "Проверить транскрипт и подтвердить задачи вручную",
+		}},
+		TranscriptLines: []reportTranscript{{ID: "t1", Time: "00:00", Speaker: "Speaker", Text: "Recognized text"}},
+		Highlights:      fallbackHighlights("Recognized text"),
+		Chapters:        fallbackChapters([]transcriptLine{{Time: "00:00", Speaker: "Speaker", Text: "Recognized text"}}),
+	}
+
+	if !normalizeLoadedReport(&detail) {
+		t.Fatal("expected fallback report to be normalized")
+	}
+	if detail.Report.AnalysisStatus != "failed" {
+		t.Fatalf("expected failed analysis status, got %q", detail.Report.AnalysisStatus)
+	}
+}
+
+func TestRetryReportAnalysis(t *testing.T) {
+	aiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"choices": []map[string]any{
+				{
+					"message": map[string]string{
+						"content": `{
+							"roomName":"read-intro",
+							"generatedAt":"2026-01-02T02:00:00Z",
+							"summary":[{"title":"Повторный анализ","text":"AI заново собрал сводку по сохраненному транскрипту."}],
+							"actionItems":[{"task":"Проверить отчет","owner":"Team","due":"Сегодня","priority":"Medium"}],
+							"insights":{"sentiment":"Информационная встреча","talkTime":[{"label":"Мади","value":100,"unit":"%"}]},
+							"highlights":[{"time":"00:00","title":"Ключевой момент","text":"Обсудили отчет.","type":"Decision"}],
+							"chapters":[{"start":"00:00","end":"01:00","title":"Вступление","text":"Начало встречи."}]
+						}`,
+					},
+				},
+			},
+		})
+	}))
+	defer aiServer.Close()
+
+	handler := NewServer(config.Config{
+		TokenTTL:   time.Hour,
+		LLMBaseURL: aiServer.URL,
+		LLMAPIKey:  "test-key",
+		LLMModel:   "test-model",
+		LLMTimeout: time.Second,
+	})
+
+	request := httptest.NewRequest(http.MethodPost, "/api/reports/read-intro/analysis", nil)
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload struct {
+		Status string               `json:"status"`
+		Detail reportDetailResponse `json:"detail"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Status != "completed" || payload.Detail.Report.AnalysisStatus != "completed" {
+		t.Fatalf("unexpected retry payload: %#v", payload)
+	}
+	if payload.Detail.Summary[0].Title != "Повторный анализ" {
+		t.Fatalf("expected updated summary, got %#v", payload.Detail.Summary)
+	}
+}

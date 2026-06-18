@@ -715,11 +715,15 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			methodNotAllowed(w, http.MethodGet+", "+http.MethodPatch+", "+http.MethodDelete)
 		}
 	case "analysis":
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w, http.MethodGet)
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, reportDetailToMeetingAnalysis(detail, s.clock()))
+		case http.MethodPost:
+			s.retryReportAnalysis(w, r, detail)
+		default:
+			methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
 			return
 		}
-		writeJSON(w, http.StatusOK, reportDetailToMeetingAnalysis(detail, s.clock()))
 	case "actions":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -888,6 +892,62 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusNotFound, "Report action not found")
 	}
+}
+
+func (s *Server) retryReportAnalysis(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
+	if s.ai == nil || !s.ai.Configured() {
+		writeError(w, http.StatusServiceUnavailable, "AI backend is not configured")
+		return
+	}
+
+	lines := reportTranscriptToLines(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript))
+	if len(lines) == 0 {
+		writeError(w, http.StatusBadRequest, "Report has no transcript to analyze")
+		return
+	}
+
+	lines = normalizeTranscriptSpeakers(lines)
+	lines = applyParticipantSpeakerNames(lines, detail.Report.ParticipantNames)
+	transcriptText := transcriptTextFromLines(lines)
+
+	detail.Report.AnalysisStatus = "running"
+	detail.Report.ProcessingState = "processing"
+	s.storeReport(detail)
+
+	analysis, err := s.generateMeetingAnalysisFromTranscript(r.Context(), firstNonEmpty(detail.RoomName, detail.Report.Title, detail.Report.ID), detail.Report.ParticipantNames, transcriptText, lines)
+	if err != nil {
+		detail.Report.AnalysisStatus = "failed"
+		detail.Report.ProcessingState = "ready"
+		detail.Report.Status = "ready"
+		s.storeReport(detail)
+		writeError(w, http.StatusBadGateway, "AI analysis failed: "+err.Error())
+		return
+	}
+
+	report := detail.Report
+	report.Status = "ready"
+	report.ProcessingState = "ready"
+	report.TranscriptionStatus = "completed"
+	report.AnalysisStatus = "completed"
+	if report.Duration == "" || report.Duration == "00:00" {
+		report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
+	}
+	if report.Score == 0 {
+		report.Score = 90
+	}
+
+	updated := reportDetailFromAnalysis(report, analysis)
+	updated.RecordingURL = detail.RecordingURL
+	updated.RecordingFile = detail.RecordingFile
+	updated.RecordingType = detail.RecordingType
+	updated.RoomName = firstNonEmpty(detail.RoomName, updated.RoomName)
+	s.storeReport(updated)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"reportId": detail.Report.ID,
+		"status":   "completed",
+		"detail":   updated,
+	})
 }
 
 func (s *Server) streamReportRecording(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {

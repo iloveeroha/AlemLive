@@ -161,6 +161,7 @@ func repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
 	transcriptText := transcriptTextFromLines(lines)
 
 	if needsFallbackRepair {
+		detail.Report.AnalysisStatus = "failed"
 		analysis := fallbackAnalysisFromTranscript(firstNonEmpty(detail.RoomName, detail.Report.Title, detail.Report.ID), transcriptText, lines, detail.Report.OccurredAt)
 		updated := reportDetailFromAnalysis(detail.Report, analysis)
 		updated.RecordingURL = detail.RecordingURL
@@ -233,10 +234,38 @@ func hasOnlyGenericReportSpeakers(items []reportTranscript) bool {
 }
 
 func isFallbackReportAnalysis(detail reportDetailResponse) bool {
-	if len(detail.Summary) == 1 && strings.EqualFold(strings.TrimSpace(detail.Summary[0].Title), "Transcript captured") {
-		return true
+	if len(detail.Summary) == 1 {
+		title := strings.ToLower(strings.TrimSpace(detail.Summary[0].Title))
+		text := strings.ToLower(strings.TrimSpace(detail.Summary[0].Text))
+		if title == "transcript captured" ||
+			title == "транскрипт получен" ||
+			strings.Contains(text, "ai-анализ сейчас недоступен") ||
+			strings.Contains(text, "ai analysis") {
+			return true
+		}
 	}
-	if len(detail.ActionItems) == 1 && strings.Contains(strings.ToLower(detail.ActionItems[0].Title+" "+detail.ActionItems[0].Task), "review generated transcript") {
+	if len(detail.ActionItems) == 1 {
+		action := strings.ToLower(detail.ActionItems[0].Title + " " + detail.ActionItems[0].Task)
+		if strings.Contains(action, "review generated transcript") ||
+			strings.Contains(action, "проверить транскрипт") {
+			return true
+		}
+	}
+	if len(detail.Highlights) == 1 {
+		highlight := strings.ToLower(detail.Highlights[0].Title + " " + detail.Highlights[0].Text)
+		if strings.Contains(highlight, "транскрипт готов") ||
+			strings.Contains(highlight, "transcript ready") {
+			return true
+		}
+	}
+	if len(detail.Chapters) == 1 {
+		chapter := strings.ToLower(detail.Chapters[0].Title + " " + detail.Chapters[0].Text)
+		if strings.Contains(chapter, "автоматически распознанная запись") ||
+			strings.Contains(chapter, "automatically transcribed") {
+			return true
+		}
+	}
+	if len(detail.Summary) == 0 && len(detail.Highlights) == 0 && len(detail.Chapters) == 0 && detail.Report.AnalysisStatus == "completed" {
 		return true
 	}
 	return false
