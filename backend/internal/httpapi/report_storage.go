@@ -87,6 +87,20 @@ func normalizeLoadedReport(detail *reportDetailResponse) bool {
 		detail.RecordingURL = "/api/reports/" + detail.Report.ID + "/recording/stream"
 		changed = true
 	}
+	if isHTTPURL(detail.RecordingURL) && detail.Report.ID != "" {
+		if detail.RecordingSourceURL == "" {
+			detail.RecordingSourceURL = detail.RecordingURL
+		}
+		detail.RecordingURL = reportStreamURL(detail.Report.ID)
+		changed = true
+	}
+	if detail.RecordingSourceURL != "" && detail.RecordingURL == "" && detail.Report.ID != "" {
+		detail.RecordingURL = reportStreamURL(detail.Report.ID)
+		changed = true
+	}
+	if repairStaleProcessingWithoutRecording(detail) {
+		changed = true
+	}
 	if normalizeReportPipelineStatuses(&detail.Report, detail.RecordingFile != "" || detail.RecordingURL != "", len(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)) > 0) {
 		changed = true
 	}
@@ -94,6 +108,41 @@ func normalizeLoadedReport(detail *reportDetailResponse) bool {
 		changed = true
 	}
 	return changed
+}
+
+func repairStaleProcessingWithoutRecording(detail *reportDetailResponse) bool {
+	if detail == nil || detail.RecordingFile != "" || detail.RecordingURL != "" {
+		return false
+	}
+	state := strings.ToLower(strings.TrimSpace(firstNonEmpty(detail.Report.ProcessingState, detail.Report.Status)))
+	recordingStatus := strings.ToLower(strings.TrimSpace(detail.Report.RecordingStatus))
+	transcriptionStatus := strings.ToLower(strings.TrimSpace(detail.Report.TranscriptionStatus))
+	if state != "processing" && state != "ready" {
+		return false
+	}
+	if recordingStatus != "" && recordingStatus != "completed" && recordingStatus != "missing" {
+		return false
+	}
+	if transcriptionStatus != "" && transcriptionStatus != "pending" && transcriptionStatus != "running" && transcriptionStatus != "not_started" {
+		return false
+	}
+
+	detail.Report.Status = "saved"
+	detail.Report.ProcessingState = "saved"
+	detail.Report.RecordingStatus = "missing"
+	detail.Report.TranscriptionStatus = "not_started"
+	detail.Report.AnalysisStatus = "not_started"
+	detail.Summary = []summarySection{{
+		Title: "Конференция сохранена",
+		Text:  "Встреча сохранена без файла записи. Включите запись отдельной кнопкой во время конференции, чтобы получить видео, транскрипт и AI-анализ.",
+	}}
+	detail.ActionItems = []reportActionItem{}
+	detail.TranscriptLines = []reportTranscript{}
+	detail.Transcript = []reportTranscript{}
+	detail.SpeakerStats = []speakerStat{}
+	detail.Highlights = []highlight{}
+	detail.Chapters = []chapter{}
+	return true
 }
 
 func normalizeReportPipelineStatuses(report *reportRow, hasRecording, hasTranscript bool) bool {
@@ -150,7 +199,8 @@ func repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
 		return false
 	}
 
-	needsSpeakerRepair := hasOnlyGenericReportSpeakers(detail.TranscriptLines) && hasOnlyGenericReportSpeakers(detail.Transcript)
+	needsSpeakerRepair := (hasOnlyGenericReportSpeakers(detail.TranscriptLines) && hasOnlyGenericReportSpeakers(detail.Transcript)) ||
+		transcriptSpeakersNeedParticipantRepair(lines, detail.Report.ParticipantNames)
 	needsFallbackRepair := isFallbackReportAnalysis(*detail)
 	if !needsSpeakerRepair && !needsFallbackRepair {
 		return false
@@ -165,8 +215,10 @@ func repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
 		analysis := fallbackAnalysisFromTranscript(firstNonEmpty(detail.RoomName, detail.Report.Title, detail.Report.ID), transcriptText, lines, detail.Report.OccurredAt)
 		updated := reportDetailFromAnalysis(detail.Report, analysis)
 		updated.RecordingURL = detail.RecordingURL
+		updated.RecordingSourceURL = detail.RecordingSourceURL
 		updated.RecordingFile = detail.RecordingFile
 		updated.RecordingType = detail.RecordingType
+		updated.RecordingMirrorCorrection = detail.RecordingMirrorCorrection
 		updated.RoomName = firstNonEmpty(updated.RoomName, detail.RoomName)
 		*detail = updated
 		return true

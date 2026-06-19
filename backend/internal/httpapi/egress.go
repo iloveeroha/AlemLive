@@ -61,6 +61,7 @@ func (s *Server) stopRoomRecording(ctx context.Context, roomName string) (liveki
 func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName, action string) {
 	snapshot := s.roomSnapshot(roomName)
 	liveKitRoomName := firstNonEmpty(snapshot.Name, roomName)
+	reportID := firstNonEmpty(snapshot.ReportID, s.latestReportIDForRoom(liveKitRoomName))
 
 	switch {
 	case r.Method == http.MethodGet && (action == "" || action == "status"):
@@ -73,7 +74,10 @@ func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName,
 			if errors.Is(err, livekitservice.ErrEgressNotConfigured) {
 				recordingState = roomRecordingIdle
 			}
-			s.setRoomRecordingState(snapshot.ID, recordingState, snapshot.ReportID)
+			s.setRoomRecordingState(snapshot.ID, recordingState, reportID)
+			if recordingState == roomRecordingError {
+				s.setConferenceReportPipelineState(reportID, liveKitRoomName, roomRecordingError)
+			}
 			payload := map[string]any{
 				"roomId":     snapshot.ID,
 				"roomName":   liveKitRoomName,
@@ -81,12 +85,14 @@ func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName,
 				"state":      recordingState,
 				"configured": s.egress != nil && s.egress.Configured(),
 				"error":      recordingErrorMessage(err),
+				"reportId":   reportID,
 			}
 			s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "recording_status_changed", Payload: payload})
 			writeJSON(w, http.StatusOK, payload)
 			return
 		}
-		s.setRoomRecordingState(snapshot.ID, roomRecordingRecording, snapshot.ReportID)
+		s.setRoomRecordingState(snapshot.ID, roomRecordingRecording, reportID)
+		s.setConferenceReportPipelineState(reportID, liveKitRoomName, roomRecordingRecording)
 		payload := map[string]any{
 			"roomId":     snapshot.ID,
 			"roomName":   liveKitRoomName,
@@ -94,6 +100,7 @@ func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName,
 			"state":      roomRecordingRecording,
 			"configured": true,
 			"recording":  state,
+			"reportId":   reportID,
 		}
 		s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "recording_started", Payload: payload})
 		writeJSON(w, http.StatusOK, payload)
@@ -104,7 +111,10 @@ func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName,
 			if errors.Is(err, livekitservice.ErrEgressNotConfigured) {
 				recordingState = roomRecordingIdle
 			}
-			s.setRoomRecordingState(snapshot.ID, recordingState, snapshot.ReportID)
+			s.setRoomRecordingState(snapshot.ID, recordingState, reportID)
+			if recordingState == roomRecordingError {
+				s.setConferenceReportPipelineState(reportID, liveKitRoomName, roomRecordingError)
+			}
 			payload := map[string]any{
 				"roomId":     snapshot.ID,
 				"roomName":   liveKitRoomName,
@@ -112,12 +122,15 @@ func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName,
 				"state":      recordingState,
 				"configured": s.egress != nil && s.egress.Configured(),
 				"error":      recordingErrorMessage(err),
+				"reportId":   reportID,
 			}
 			s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "recording_status_changed", Payload: payload})
 			writeJSON(w, http.StatusOK, payload)
 			return
 		}
-		s.setRoomRecordingState(snapshot.ID, roomRecordingProcessing, snapshot.ReportID)
+		s.setRoomRecordingState(snapshot.ID, roomRecordingProcessing, reportID)
+		s.setConferenceReportPipelineState(reportID, liveKitRoomName, roomRecordingProcessing)
+		s.scheduleEgressRecordingProcessing(state, nil, 2*time.Second)
 		payload := map[string]any{
 			"roomId":     snapshot.ID,
 			"roomName":   liveKitRoomName,
@@ -125,7 +138,7 @@ func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName,
 			"state":      roomRecordingProcessing,
 			"configured": true,
 			"recording":  state,
-			"reportId":   snapshot.ReportID,
+			"reportId":   reportID,
 		}
 		s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "recording_stopped", Payload: payload})
 		writeJSON(w, http.StatusOK, payload)
@@ -213,28 +226,64 @@ func (s *Server) liveKitWebhook(w http.ResponseWriter, r *http.Request) {
 	if info := event.GetEgressInfo(); info != nil && s.egress != nil {
 		state := s.egress.UpdateFromInfo(info)
 		response["recording"] = state
-		roomID := roomIDFromName(firstNonEmpty(state.RoomName, info.GetRoomName()))
+		roomName := firstNonEmpty(state.RoomName, info.GetRoomName())
+		roomID := roomIDFromName(roomName)
 		recordingState := normalizeLiveKitEgressStatus(info.GetStatus().String())
 		if recordingState == "" {
 			recordingState = roomRecordingRecording
 		}
 		s.setRoomRecordingState(roomID, recordingState, "")
+		if recordingState == roomRecordingProcessing || recordingState == roomRecordingError {
+			s.setConferenceReportPipelineState("", roomName, recordingState)
+		}
 		s.broadcastRoomEvent(roomID, roomEventEnvelope{
 			Type: "recording_status_changed",
 			Payload: map[string]any{
 				"roomId":    roomID,
-				"roomName":  firstNonEmpty(state.RoomName, info.GetRoomName()),
+				"roomName":  roomName,
 				"state":     recordingState,
 				"status":    recordingState,
 				"recording": state,
 			},
 		})
 		if isWebhookEgressTerminal(info) {
-			go s.processEgressRecording(context.Background(), state, info)
+			s.scheduleEgressRecordingProcessing(state, info, 0)
 		}
 	}
 
 	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) scheduleEgressRecordingProcessing(state livekitservice.EgressState, info *lkproto.EgressInfo, delay time.Duration) {
+	key := firstNonEmpty(state.EgressID, state.FilePath, state.RoomName)
+	if key == "" {
+		return
+	}
+	s.egressProcessingMu.Lock()
+	if s.egressProcessing == nil {
+		s.egressProcessing = map[string]struct{}{}
+	}
+	if _, exists := s.egressProcessing[key]; exists {
+		s.egressProcessingMu.Unlock()
+		return
+	}
+	s.egressProcessing[key] = struct{}{}
+	s.egressProcessingMu.Unlock()
+
+	go func() {
+		defer func() {
+			s.egressProcessingMu.Lock()
+			delete(s.egressProcessing, key)
+			s.egressProcessingMu.Unlock()
+		}()
+
+		if delay > 0 {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			<-timer.C
+		}
+		s.processEgressRecording(context.Background(), state, info)
+	}()
 }
 
 func normalizeLiveKitEgressStatus(status string) string {
@@ -262,11 +311,6 @@ func isWebhookEgressTerminal(info *lkproto.EgressInfo) bool {
 }
 
 func (s *Server) processEgressRecording(ctx context.Context, state livekitservice.EgressState, info *lkproto.EgressInfo) {
-	downloadURL := s.firstRecordingDownloadURL(state, info)
-	if downloadURL == "" {
-		log.Printf("egress report skipped: no recording download URL for room=%s egress=%s", state.RoomName, state.EgressID)
-		return
-	}
 	playbackURL := s.firstRecordingPlaybackURL(state, info)
 	roomName := firstNonEmpty(state.RoomName, info.GetRoomName(), "alem-meeting")
 	now := s.clock().UTC()
@@ -274,7 +318,13 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 		s.latestReportIDForRoom(roomName),
 		"egress-"+sanitizeReportID(firstNonEmpty(state.EgressID, now.Format("20060102150405"))),
 	)
-	detail := s.upsertEgressRecordingDetail(reportID, roomName, playbackURL, now)
+	downloadURL := s.firstRecordingDownloadURL(state, info)
+	if downloadURL == "" {
+		log.Printf("egress report %s skipped: no recording download URL for room=%s egress=%s", reportID, state.RoomName, state.EgressID)
+		s.setConferenceReportPipelineState(reportID, roomName, roomRecordingError)
+		return
+	}
+	detail := s.upsertEgressRecordingDetail(reportID, roomName, playbackURL, downloadURL, now)
 
 	if s.stt == nil || !s.stt.Configured() {
 		detail.Report.Status = "ready"
@@ -293,7 +343,7 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 	ctx, cancel := context.WithTimeout(ctx, s.processingTimeout())
 	defer cancel()
 
-	fileName, contentType, data, err := downloadRecording(ctx, downloadURL)
+	fileName, contentType, data, err := downloadRecordingWithRetry(ctx, downloadURL, 2*time.Minute)
 	if err != nil {
 		log.Printf("egress report %s recording download failed: %v", reportID, err)
 		s.markEgressReportFailed(reportID, err)
@@ -336,15 +386,17 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 		report.Title = "Recording - " + roomName
 	}
 	readyDetail := reportDetailFromAnalysis(report, analysis)
-	readyDetail.RecordingURL = firstNonEmpty(playbackURL, downloadURL)
+	readyDetail.RecordingURL = reportStreamURL(reportID)
+	readyDetail.RecordingSourceURL = firstNonEmpty(detail.RecordingSourceURL, downloadURL, playbackURL)
 	readyDetail.RoomName = roomName
 	s.storeReport(readyDetail)
 	s.publishRoomRecordingReady(roomName, reportID)
 }
 
-func (s *Server) upsertEgressRecordingDetail(reportID, roomName, playbackURL string, now time.Time) reportDetailResponse {
+func (s *Server) upsertEgressRecordingDetail(reportID, roomName, playbackURL, sourceURL string, now time.Time) reportDetailResponse {
 	if existing, ok := s.reportDetailForUpdate(reportID); ok {
-		existing.RecordingURL = firstNonEmpty(playbackURL, existing.RecordingURL)
+		existing.RecordingURL = firstNonEmpty(existing.RecordingURL, reportStreamURL(reportID))
+		existing.RecordingSourceURL = firstNonEmpty(sourceURL, existing.RecordingSourceURL, playbackURL)
 		existing.RoomName = firstNonEmpty(existing.RoomName, roomName)
 		existing.Report.Status = "processing"
 		existing.Report.ProcessingState = "processing"
@@ -395,8 +447,9 @@ func (s *Server) upsertEgressRecordingDetail(reportID, roomName, playbackURL str
 			"What action items appeared after the meeting?",
 			"Summarize this meeting in Russian.",
 		},
-		RecordingURL: playbackURL,
-		RoomName:     roomName,
+		RecordingURL:       reportStreamURL(reportID),
+		RecordingSourceURL: firstNonEmpty(sourceURL, playbackURL),
+		RoomName:           roomName,
 	}
 	s.storeReport(detail)
 	return detail
@@ -421,6 +474,14 @@ func (s *Server) markEgressReportFailed(reportID string, err error) {
 	}
 	s.storeReport(detail)
 	s.publishRoomRecordingReady(detail.RoomName, reportID)
+}
+
+func reportStreamURL(reportID string) string {
+	reportID = strings.TrimSpace(reportID)
+	if reportID == "" {
+		return ""
+	}
+	return "/api/reports/" + reportID + "/recording/stream"
 }
 
 func (s *Server) publishRoomRecordingReady(roomName, reportID string) {
@@ -539,6 +600,32 @@ func downloadRecording(ctx context.Context, url string) (string, string, []byte,
 		fileName = "recording.ogg"
 	}
 	return fileName, resp.Header.Get("Content-Type"), data, nil
+}
+
+func downloadRecordingWithRetry(ctx context.Context, url string, maxWait time.Duration) (string, string, []byte, error) {
+	startedAt := time.Now()
+	var lastErr error
+	for attempt := 1; ; attempt++ {
+		fileName, contentType, data, err := downloadRecording(ctx, url)
+		if err == nil {
+			if attempt > 1 {
+				log.Printf("recording download succeeded after %d attempts", attempt)
+			}
+			return fileName, contentType, data, nil
+		}
+		lastErr = err
+		if ctx.Err() != nil || (maxWait > 0 && time.Since(startedAt) >= maxWait) {
+			return "", "", nil, lastErr
+		}
+		log.Printf("recording download not ready yet, retrying: attempt=%d err=%v", attempt, err)
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return "", "", nil, ctx.Err()
+		case <-timer.C:
+		}
+	}
 }
 
 func sanitizeReportID(value string) string {

@@ -44,6 +44,9 @@ func TestCreateLiveKitToken(t *testing.T) {
 	if payload["token"] == "" {
 		t.Fatal("token should not be empty")
 	}
+	if payload["reportId"] == "" {
+		t.Fatal("reportId should not be empty")
+	}
 }
 
 func TestConfigReturnsPublicLiveKitURL(t *testing.T) {

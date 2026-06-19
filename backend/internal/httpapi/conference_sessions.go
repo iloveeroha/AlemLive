@@ -55,32 +55,34 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 	case "created", "joined":
 		session.Participants[userName] = struct{}{}
 		s.activeMeetings[roomName] = session
-		s.updateConferenceReportLocked(session, now, "recording")
+		s.updateConferenceReportLocked(session, now, "active")
 	case "left":
 		delete(session.Participants, userName)
 		if len(session.Participants) == 0 {
 			delete(s.activeMeetings, roomName)
-			finalStatus := s.finalConferenceStatus()
+			recordingShouldStop := s.conferenceRecordingShouldStopLocked(session.ReportID)
+			finalStatus := s.finalConferenceStatusLocked(session.ReportID)
 			s.updateConferenceReportLocked(session, now, finalStatus)
 			return conferenceEventResult{
 				ReportID:             session.ReportID,
 				Participants:         0,
-				RecordingShouldStop:  true,
+				RecordingShouldStop:  recordingShouldStop,
 				ConferenceSaved:      true,
 				ConferenceStatus:     finalStatus,
 				ConferenceReportPath: "/api/reports/" + session.ReportID,
 			}
 		}
 		s.activeMeetings[roomName] = session
-		s.updateConferenceReportLocked(session, now, "recording")
+		s.updateConferenceReportLocked(session, now, "active")
 	case "ended":
 		delete(s.activeMeetings, roomName)
-		finalStatus := s.finalConferenceStatus()
+		recordingShouldStop := s.conferenceRecordingShouldStopLocked(session.ReportID)
+		finalStatus := s.finalConferenceStatusLocked(session.ReportID)
 		s.updateConferenceReportLocked(session, now, finalStatus)
 		return conferenceEventResult{
 			ReportID:             session.ReportID,
 			Participants:         len(session.Participants),
-			RecordingShouldStop:  true,
+			RecordingShouldStop:  recordingShouldStop,
 			ConferenceSaved:      true,
 			ConferenceStatus:     finalStatus,
 			ConferenceReportPath: "/api/reports/" + session.ReportID,
@@ -91,16 +93,33 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 		ReportID:             session.ReportID,
 		Participants:         len(session.Participants),
 		ConferenceSaved:      true,
-		ConferenceStatus:     "recording",
+		ConferenceStatus:     "active",
 		ConferenceReportPath: "/api/reports/" + session.ReportID,
 	}
 }
 
-func (s *Server) finalConferenceStatus() string {
-	if s.egress != nil && s.egress.Configured() {
-		return "processing"
+func (s *Server) finalConferenceStatusLocked(reportID string) string {
+	detail, ok := s.generatedReportStore[reportID]
+	if !ok {
+		return "saved"
 	}
-	return "saved"
+	status := strings.ToLower(strings.TrimSpace(detail.Report.RecordingStatus))
+	switch status {
+	case "running", "completed":
+		return "processing"
+	case "failed":
+		return "failed"
+	default:
+		return "saved"
+	}
+}
+
+func (s *Server) conferenceRecordingShouldStopLocked(reportID string) bool {
+	detail, ok := s.generatedReportStore[reportID]
+	if !ok {
+		return false
+	}
+	return strings.EqualFold(detail.Report.RecordingStatus, "running")
 }
 
 func (s *Server) newMeetingSessionLocked(roomName, userName string, now time.Time) meetingSession {
@@ -125,11 +144,11 @@ func (s *Server) newMeetingSessionLocked(roomName, userName string, now time.Tim
 		ThumbnailTone:       "blue",
 		Week:                "LiveKit meetings",
 		Duration:            "00:00",
-		Status:              "recording",
-		ProcessingState:     "recording",
-		RecordingStatus:     "running",
-		TranscriptionStatus: "pending",
-		AnalysisStatus:      "pending",
+		Status:              "active",
+		ProcessingState:     "active",
+		RecordingStatus:     "missing",
+		TranscriptionStatus: "not_started",
+		AnalysisStatus:      "not_started",
 		CreatedAt:           now.UTC().Format(time.RFC3339),
 		OccurredAt:          now,
 	}
@@ -167,7 +186,11 @@ func (s *Server) resumeMeetingSessionLocked(roomName, userName string, now time.
 		return meetingSession{}, false
 	}
 	detail, ok := s.generatedReportStore[reportID]
-	if !ok || detail.Report.ProcessingState != "recording" {
+	if !ok {
+		return meetingSession{}, false
+	}
+	state := strings.ToLower(strings.TrimSpace(detail.Report.ProcessingState))
+	if state != "active" && state != "recording" {
 		return meetingSession{}, false
 	}
 
@@ -203,6 +226,16 @@ func (s *Server) updateConferenceReportLocked(session meetingSession, now time.T
 	detail.Report.Status = status
 	detail.Report.ProcessingState = status
 	switch status {
+	case "active":
+		if detail.Report.RecordingStatus == "" || detail.Report.RecordingStatus == "missing" {
+			detail.Report.RecordingStatus = "missing"
+		}
+		if detail.Report.TranscriptionStatus == "" || detail.Report.TranscriptionStatus == "pending" {
+			detail.Report.TranscriptionStatus = "not_started"
+		}
+		if detail.Report.AnalysisStatus == "" || detail.Report.AnalysisStatus == "pending" {
+			detail.Report.AnalysisStatus = "not_started"
+		}
 	case "recording":
 		detail.Report.RecordingStatus = "running"
 		detail.Report.TranscriptionStatus = "pending"
@@ -217,6 +250,16 @@ func (s *Server) updateConferenceReportLocked(session meetingSession, now time.T
 		}
 		detail.Report.TranscriptionStatus = "not_started"
 		detail.Report.AnalysisStatus = "not_started"
+	case "failed":
+		if detail.Report.RecordingStatus == "" || detail.Report.RecordingStatus == "running" {
+			detail.Report.RecordingStatus = "failed"
+		}
+		if detail.Report.TranscriptionStatus == "" || detail.Report.TranscriptionStatus == "pending" {
+			detail.Report.TranscriptionStatus = "not_started"
+		}
+		if detail.Report.AnalysisStatus == "" || detail.Report.AnalysisStatus == "pending" {
+			detail.Report.AnalysisStatus = "not_started"
+		}
 	}
 	detail.Summary = conferenceSummary(session.RoomName, status, s.egress != nil && s.egress.Configured())
 	detail.RoomName = session.RoomName
@@ -230,6 +273,68 @@ func (s *Server) updateConferenceReportLocked(session meetingSession, now time.T
 		}
 	}
 	s.latestRoomReports[session.RoomName] = session.ReportID
+	s.saveReportsLocked()
+}
+
+func (s *Server) setConferenceReportPipelineState(reportID, roomName, state string) {
+	reportID = strings.TrimSpace(reportID)
+	roomName = strings.TrimSpace(roomName)
+	if reportID == "" && roomName != "" {
+		reportID = s.latestReportIDForRoom(roomName)
+	}
+	if reportID == "" {
+		return
+	}
+
+	s.reportsMu.Lock()
+	defer s.reportsMu.Unlock()
+
+	detail, ok := s.generatedReportStore[reportID]
+	if !ok {
+		return
+	}
+	roomName = firstNonEmpty(roomName, detail.RoomName)
+	detail.RoomName = roomName
+	switch state {
+	case roomRecordingRecording:
+		detail.Report.Status = "recording"
+		detail.Report.ProcessingState = "recording"
+		detail.Report.RecordingStatus = "running"
+		detail.Report.TranscriptionStatus = "pending"
+		detail.Report.AnalysisStatus = "pending"
+		detail.Summary = conferenceSummary(roomName, "recording", s.egress != nil && s.egress.Configured())
+	case roomRecordingProcessing:
+		detail.Report.Status = "processing"
+		detail.Report.ProcessingState = "processing"
+		detail.Report.RecordingStatus = "completed"
+		detail.Report.TranscriptionStatus = "pending"
+		detail.Report.AnalysisStatus = "pending"
+		detail.Summary = conferenceSummary(roomName, "processing", s.egress != nil && s.egress.Configured())
+	case roomRecordingError:
+		detail.Report.Status = "failed"
+		detail.Report.ProcessingState = "failed"
+		detail.Report.RecordingStatus = "failed"
+		if detail.Report.TranscriptionStatus == "" || detail.Report.TranscriptionStatus == "pending" {
+			detail.Report.TranscriptionStatus = "not_started"
+		}
+		if detail.Report.AnalysisStatus == "" || detail.Report.AnalysisStatus == "pending" {
+			detail.Report.AnalysisStatus = "not_started"
+		}
+		detail.Summary = conferenceSummary(roomName, "failed", s.egress != nil && s.egress.Configured())
+	default:
+		return
+	}
+
+	s.generatedReportStore[reportID] = detail
+	for i, row := range s.generatedReports {
+		if row.ID == reportID {
+			s.generatedReports[i] = detail.Report
+			break
+		}
+	}
+	if roomName != "" {
+		s.latestRoomReports[roomName] = reportID
+	}
 	s.saveReportsLocked()
 }
 

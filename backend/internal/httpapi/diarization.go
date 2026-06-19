@@ -149,17 +149,18 @@ func applyParticipantSpeakerNames(lines []transcriptLine, participants string) [
 	out := make([]transcriptLine, len(lines))
 	speakerToName := inferSpeakerNamesFromTranscript(lines, names)
 	usedNames := usedSpeakerNames(speakerToName)
-	if len(names) > 1 {
-		fillSpeakerNamesByParticipantOrder(speakerToName, usedNames, genericSpeakerOrder(lines), names)
+	if len(names) > 0 {
+		fillSpeakerNamesByParticipantOrder(speakerToName, usedNames, participantSpeakerOrder(lines, names), names)
 	}
+	fallbackNames := fallbackSpeakerNames(lines, speakerToName, names)
 	for i, line := range lines {
 		speaker := normalizeSpeakerLabel(line.Speaker)
-		if isGenericSpeakerName(speaker) {
-			if mapped, ok := speakerToName[speaker]; ok {
-				line.Speaker = mapped
-			} else {
-				line.Speaker = speaker
-			}
+		if known := matchKnownParticipantName(speaker, names); known != "" {
+			line.Speaker = known
+		} else if mapped, ok := speakerToName[speaker]; ok {
+			line.Speaker = mapped
+		} else if fallback, ok := fallbackNames[speaker]; ok {
+			line.Speaker = fallback
 		} else {
 			line.Speaker = speaker
 		}
@@ -173,17 +174,17 @@ func inferSpeakerNamesFromTranscript(lines []transcriptLine, names []string) map
 	usedNames := map[string]struct{}{}
 	for _, line := range lines {
 		speaker := normalizeSpeakerLabel(line.Speaker)
-		if !isGenericSpeakerName(speaker) {
+		if _, ok := speakerToName[speaker]; ok {
 			continue
 		}
-		if _, ok := speakerToName[speaker]; ok {
+		if !isGenericSpeakerName(speaker) && (len(names) == 0 || matchKnownParticipantName(speaker, names) != "") {
 			continue
 		}
 		name := selfIntroducedName(line.Text, names)
 		if name == "" {
 			continue
 		}
-		key := strings.ToLower(name)
+		key := participantNameKey(name)
 		if _, ok := usedNames[key]; ok {
 			continue
 		}
@@ -194,7 +195,7 @@ func inferSpeakerNamesFromTranscript(lines []transcriptLine, names []string) map
 }
 
 func fillSpeakerNamesByParticipantOrder(speakerToName map[string]string, usedNames map[string]struct{}, speakers, names []string) {
-	if len(speakers) == 0 || len(names) < len(speakers) {
+	if len(speakers) == 0 || len(names) == 0 {
 		return
 	}
 	nextName := 0
@@ -205,7 +206,7 @@ func fillSpeakerNamesByParticipantOrder(speakerToName map[string]string, usedNam
 		for nextName < len(names) {
 			name := names[nextName]
 			nextName++
-			key := strings.ToLower(name)
+			key := participantNameKey(name)
 			if _, used := usedNames[key]; used {
 				continue
 			}
@@ -219,17 +220,17 @@ func fillSpeakerNamesByParticipantOrder(speakerToName map[string]string, usedNam
 func usedSpeakerNames(speakerToName map[string]string) map[string]struct{} {
 	used := map[string]struct{}{}
 	for _, name := range speakerToName {
-		used[strings.ToLower(name)] = struct{}{}
+		used[participantNameKey(name)] = struct{}{}
 	}
 	return used
 }
 
-func genericSpeakerOrder(lines []transcriptLine) []string {
+func participantSpeakerOrder(lines []transcriptLine, names []string) []string {
 	order := make([]string, 0)
 	seen := map[string]struct{}{}
 	for _, line := range lines {
 		speaker := normalizeSpeakerLabel(line.Speaker)
-		if !isGenericSpeakerName(speaker) {
+		if matchKnownParticipantName(speaker, names) != "" {
 			continue
 		}
 		if _, ok := seen[speaker]; ok {
@@ -239,6 +240,43 @@ func genericSpeakerOrder(lines []transcriptLine) []string {
 		order = append(order, speaker)
 	}
 	return order
+}
+
+func fallbackSpeakerNames(lines []transcriptLine, speakerToName map[string]string, names []string) map[string]string {
+	if len(names) == 0 {
+		return nil
+	}
+	fallback := map[string]string{}
+	next := 1
+	for _, line := range lines {
+		speaker := normalizeSpeakerLabel(line.Speaker)
+		if isGenericSpeakerName(speaker) || matchKnownParticipantName(speaker, names) != "" {
+			continue
+		}
+		if _, ok := speakerToName[speaker]; ok {
+			continue
+		}
+		if _, ok := fallback[speaker]; ok {
+			continue
+		}
+		fallback[speaker] = "Speaker " + strconv.Itoa(next)
+		next++
+	}
+	return fallback
+}
+
+func transcriptSpeakersNeedParticipantRepair(lines []transcriptLine, participants string) bool {
+	names := participantNamesFromText(participants)
+	if len(lines) == 0 || len(names) == 0 {
+		return false
+	}
+	for _, line := range lines {
+		speaker := normalizeSpeakerLabel(line.Speaker)
+		if isGenericSpeakerName(speaker) || matchKnownParticipantName(speaker, names) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func participantNamesFromText(value string) []string {
@@ -254,7 +292,7 @@ func participantNamesFromText(value string) []string {
 		if !looksLikeParticipantName(name) {
 			continue
 		}
-		key := strings.ToLower(name)
+		key := participantNameKey(name)
 		if _, ok := seen[key]; ok {
 			continue
 		}
@@ -344,19 +382,23 @@ func isNameStopWord(value string) bool {
 }
 
 func matchKnownParticipantName(candidate string, knownParticipants []string) string {
-	candidate = strings.ToLower(strings.TrimSpace(candidate))
+	candidate = participantNameKey(candidate)
 	if candidate == "" {
 		return ""
 	}
 	candidateFirst := firstName(candidate)
 	for _, name := range knownParticipants {
 		name = strings.TrimSpace(name)
-		lowerName := strings.ToLower(name)
+		lowerName := participantNameKey(name)
 		if lowerName == candidate || strings.HasPrefix(lowerName, candidate+" ") || firstName(lowerName) == candidateFirst {
 			return name
 		}
 	}
 	return ""
+}
+
+func participantNameKey(value string) string {
+	return strings.ToLower(strings.Join(strings.Fields(strings.TrimSpace(value)), " "))
 }
 
 func firstName(value string) string {

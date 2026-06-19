@@ -606,6 +606,88 @@ func TestReportRecordingUploadRunsInBackground(t *testing.T) {
 	}
 }
 
+func TestReportRecordingUploadKeepsRecordingWhenTranscriptionFails(t *testing.T) {
+	sttServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, `{"error":"bad media"}`, http.StatusInternalServerError)
+	}))
+	defer sttServer.Close()
+
+	handler := NewServer(config.Config{
+		TokenTTL:              time.Hour,
+		STTBaseURL:            sttServer.URL,
+		STTAPIKey:             "test-key",
+		STTModel:              "openai/whisper-large-v3",
+		STTTimeout:            time.Second,
+		RecordingsStoragePath: t.TempDir(),
+	})
+
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	if err := writer.WriteField("title", "Failed upload"); err != nil {
+		t.Fatalf("write title: %v", err)
+	}
+	file, err := writer.CreateFormFile("file", "meeting.webm")
+	if err != nil {
+		t.Fatalf("create file: %v", err)
+	}
+	if _, err := file.Write([]byte("fake media")); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("close multipart: %v", err)
+	}
+
+	request := httptest.NewRequest(http.MethodPost, "/api/reports/upload", &body)
+	request.Header.Set("Content-Type", writer.FormDataContentType())
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var uploadPayload struct {
+		Report reportRow `json:"report"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &uploadPayload); err != nil {
+		t.Fatalf("decode upload response: %v", err)
+	}
+
+	var detail reportDetailResponse
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		detailResponse := httptest.NewRecorder()
+		handler.ServeHTTP(detailResponse, httptest.NewRequest(http.MethodGet, "/api/reports/"+uploadPayload.Report.ID, nil))
+		if detailResponse.Code != http.StatusOK {
+			t.Fatalf("expected detail status 200, got %d: %s", detailResponse.Code, detailResponse.Body.String())
+		}
+		if err := json.Unmarshal(detailResponse.Body.Bytes(), &detail); err != nil {
+			t.Fatalf("decode detail response: %v", err)
+		}
+		if detail.Report.ProcessingState == "failed" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	if detail.Report.ProcessingState != "failed" {
+		t.Fatalf("expected failed report after background job, got %#v", detail.Report)
+	}
+	if detail.RecordingFile == "" || detail.RecordingURL == "" {
+		t.Fatalf("expected failed report to keep recording fields, got %#v", detail)
+	}
+
+	streamResponse := httptest.NewRecorder()
+	handler.ServeHTTP(streamResponse, httptest.NewRequest(http.MethodGet, "/api/reports/"+uploadPayload.Report.ID+"/recording/stream", nil))
+	if streamResponse.Code != http.StatusOK {
+		t.Fatalf("expected stream status 200, got %d: %s", streamResponse.Code, streamResponse.Body.String())
+	}
+	if streamResponse.Body.String() != "fake media" {
+		t.Fatalf("unexpected stream body: %q", streamResponse.Body.String())
+	}
+}
+
 func TestReportNotFound(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
 	request := httptest.NewRequest(http.MethodGet, "/api/reports/missing", nil)
@@ -658,6 +740,34 @@ func TestNormalizeLoadedReportMarksFallbackAnalysisFailed(t *testing.T) {
 	}
 	if detail.Report.AnalysisStatus != "failed" {
 		t.Fatalf("expected failed analysis status, got %q", detail.Report.AnalysisStatus)
+	}
+}
+
+func TestNormalizeLoadedReportClearsStaleProcessingWithoutRecording(t *testing.T) {
+	now := time.Now()
+	detail := reportDetailResponse{
+		Report: reportRow{
+			ID:                  "meeting-stale",
+			Title:               "Stale meeting",
+			Status:              "processing",
+			ProcessingState:     "processing",
+			RecordingStatus:     "completed",
+			TranscriptionStatus: "pending",
+			AnalysisStatus:      "pending",
+			CreatedAt:           now.Format(time.RFC3339),
+			OccurredAt:          now,
+		},
+		Summary: []summarySection{{Title: "Old", Text: "Old processing status"}},
+	}
+
+	if !normalizeLoadedReport(&detail) {
+		t.Fatal("expected stale report to be normalized")
+	}
+	if detail.Report.ProcessingState != "saved" ||
+		detail.Report.RecordingStatus != "missing" ||
+		detail.Report.TranscriptionStatus != "not_started" ||
+		detail.Report.AnalysisStatus != "not_started" {
+		t.Fatalf("unexpected normalized status: %#v", detail.Report)
 	}
 }
 

@@ -66,19 +66,21 @@ type quickDateOption struct {
 }
 
 type reportDetailResponse struct {
-	Report          reportRow          `json:"report"`
-	Summary         []summarySection   `json:"summary"`
-	ActionItems     []reportActionItem `json:"actionItems"`
-	TranscriptLines []reportTranscript `json:"transcriptLines"`
-	Transcript      []reportTranscript `json:"transcript"`
-	SpeakerStats    []speakerStat      `json:"speakerStats"`
-	Highlights      []highlight        `json:"highlights"`
-	Chapters        []chapter          `json:"chapters"`
-	AIQuestions     []string           `json:"aiQuestions"`
-	RecordingURL    string             `json:"recordingUrl,omitempty"`
-	RecordingFile   string             `json:"recordingFile,omitempty"`
-	RecordingType   string             `json:"recordingType,omitempty"`
-	RoomName        string             `json:"roomName,omitempty"`
+	Report                    reportRow          `json:"report"`
+	Summary                   []summarySection   `json:"summary"`
+	ActionItems               []reportActionItem `json:"actionItems"`
+	TranscriptLines           []reportTranscript `json:"transcriptLines"`
+	Transcript                []reportTranscript `json:"transcript"`
+	SpeakerStats              []speakerStat      `json:"speakerStats"`
+	Highlights                []highlight        `json:"highlights"`
+	Chapters                  []chapter          `json:"chapters"`
+	AIQuestions               []string           `json:"aiQuestions"`
+	RecordingURL              string             `json:"recordingUrl,omitempty"`
+	RecordingSourceURL        string             `json:"recordingSourceUrl,omitempty"`
+	RecordingFile             string             `json:"recordingFile,omitempty"`
+	RecordingType             string             `json:"recordingType,omitempty"`
+	RecordingMirrorCorrection bool               `json:"recordingMirrorCorrection,omitempty"`
+	RoomName                  string             `json:"roomName,omitempty"`
 }
 
 type reportActionItem struct {
@@ -439,8 +441,10 @@ func (s *Server) processUploadedRecording(reportID string, input recordingUpload
 
 	readyDetail := reportDetailFromAnalysis(report, analysis)
 	readyDetail.RecordingURL = detail.RecordingURL
+	readyDetail.RecordingSourceURL = detail.RecordingSourceURL
 	readyDetail.RecordingFile = detail.RecordingFile
 	readyDetail.RecordingType = detail.RecordingType
+	readyDetail.RecordingMirrorCorrection = detail.RecordingMirrorCorrection
 	s.storeReport(readyDetail)
 }
 
@@ -938,8 +942,10 @@ func (s *Server) retryReportAnalysis(w http.ResponseWriter, r *http.Request, det
 
 	updated := reportDetailFromAnalysis(report, analysis)
 	updated.RecordingURL = detail.RecordingURL
+	updated.RecordingSourceURL = detail.RecordingSourceURL
 	updated.RecordingFile = detail.RecordingFile
 	updated.RecordingType = detail.RecordingType
+	updated.RecordingMirrorCorrection = detail.RecordingMirrorCorrection
 	updated.RoomName = firstNonEmpty(detail.RoomName, updated.RoomName)
 	s.storeReport(updated)
 
@@ -955,12 +961,21 @@ func (s *Server) streamReportRecording(w http.ResponseWriter, r *http.Request, d
 		s.serveStoredRecording(w, r, detail, false)
 		return
 	}
-	if detail.RecordingURL != "" {
-		http.Redirect(w, r, detail.RecordingURL, http.StatusTemporaryRedirect)
+	sourceURL := firstNonEmpty(detail.RecordingSourceURL, remoteRecordingURL(detail))
+	if sourceURL != "" {
+		s.proxyRemoteRecording(w, r, sourceURL, false, "")
 		return
 	}
 
 	writeError(w, http.StatusNotFound, "Recording is not available for this report yet")
+}
+
+func remoteRecordingURL(detail reportDetailResponse) string {
+	recordingURL := strings.TrimSpace(detail.RecordingURL)
+	if recordingURL == "" || recordingURL == reportStreamURL(detail.Report.ID) || strings.HasPrefix(recordingURL, "/api/reports/") {
+		return ""
+	}
+	return recordingURL
 }
 
 func reportPlaybackMarkers(detail reportDetailResponse) []string {
@@ -1187,10 +1202,24 @@ func (s *Server) downloadReportVideo(w http.ResponseWriter, r *http.Request, det
 		return
 	}
 
-	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, detail.RecordingURL, nil)
+	sourceURL := firstNonEmpty(detail.RecordingSourceURL, remoteRecordingURL(detail))
+	if sourceURL == "" {
+		writeError(w, http.StatusNotFound, "Видео встречи пока недоступно: запись появится после обработки LiveKit Egress")
+		return
+	}
+
+	filename := fmt.Sprintf("%s-%s.mp4", detail.Report.ID, format)
+	s.proxyRemoteRecording(w, r, sourceURL, true, filename)
+}
+
+func (s *Server) proxyRemoteRecording(w http.ResponseWriter, r *http.Request, sourceURL string, attachment bool, filename string) {
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodGet, sourceURL, nil)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not create recording download request")
 		return
+	}
+	if rangeHeader := strings.TrimSpace(r.Header.Get("Range")); rangeHeader != "" {
+		request.Header.Set("Range", rangeHeader)
 	}
 
 	response, err := http.DefaultClient.Do(request)
@@ -1209,13 +1238,19 @@ func (s *Server) downloadReportVideo(w http.ResponseWriter, r *http.Request, det
 	if contentType == "" {
 		contentType = "video/mp4"
 	}
-	filename := fmt.Sprintf("%s-%s.mp4", detail.Report.ID, format)
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	if attachment {
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	}
 	if response.ContentLength > 0 {
 		w.Header().Set("Content-Length", strconv.FormatInt(response.ContentLength, 10))
 	}
-	w.WriteHeader(http.StatusOK)
+	for _, header := range []string{"Accept-Ranges", "Content-Range"} {
+		if value := response.Header.Get(header); value != "" {
+			w.Header().Set(header, value)
+		}
+	}
+	w.WriteHeader(response.StatusCode)
 	_, _ = io.Copy(w, response.Body)
 }
 

@@ -117,7 +117,10 @@ func (s *Server) createRoom(w http.ResponseWriter, r *http.Request) {
 	}
 	s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "owner_changed", Payload: map[string]any{"ownerId": snapshot.OwnerID}})
 
-	s.recordConferenceEvent(snapshot.Name, user.Name, "created", s.clock())
+	conference := s.recordConferenceEvent(snapshot.Name, user.Name, "created", s.clock())
+	if conference.ReportID != "" {
+		snapshot = s.setRoomRecordingState(snapshot.ID, snapshot.RecordingState, conference.ReportID)
+	}
 	response := s.roomSessionResponse(r, snapshot, user)
 	response["liveKitRoomReady"] = liveKitRoomReady
 	writeJSON(w, http.StatusOK, response)
@@ -157,7 +160,10 @@ func (s *Server) joinRoom(w http.ResponseWriter, r *http.Request) {
 		s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "participant_joined", Payload: map[string]any{"participant": joined}})
 	}
 
-	s.recordConferenceEvent(snapshot.Name, user.Name, "joined", s.clock())
+	conference := s.recordConferenceEvent(snapshot.Name, user.Name, "joined", s.clock())
+	if conference.ReportID != "" {
+		snapshot = s.setRoomRecordingState(snapshot.ID, snapshot.RecordingState, conference.ReportID)
+	}
 	response := s.roomSessionResponse(r, snapshot, user)
 	response["liveKitRoomReady"] = liveKitRoomReady
 	writeJSON(w, http.StatusOK, response)
@@ -216,6 +222,8 @@ func (s *Server) leaveRoom(w http.ResponseWriter, r *http.Request, roomID string
 			response["recording"] = state
 			response["recordingState"] = roomRecordingProcessing
 			s.setRoomRecordingState(snapshot.ID, roomRecordingProcessing, conference.ReportID)
+			s.setConferenceReportPipelineState(conference.ReportID, snapshot.Name, roomRecordingProcessing)
+			s.scheduleEgressRecordingProcessing(state, nil, 2*time.Second)
 			s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{
 				Type:    "recording_stopped",
 				Payload: map[string]any{"state": roomRecordingProcessing, "reportId": conference.ReportID},

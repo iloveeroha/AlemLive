@@ -320,12 +320,15 @@ func (s *Server) authToken(w http.ResponseWriter, r *http.Request) {
 		Code         string `json:"code"`
 		RedirectURI  string `json:"redirectUri"`
 		CodeVerifier string `json:"codeVerifier"`
+		RefreshToken string `json:"refreshToken"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid JSON body")
 		return
 	}
-	if strings.TrimSpace(req.Code) == "" || strings.TrimSpace(req.RedirectURI) == "" || strings.TrimSpace(req.CodeVerifier) == "" {
+	hasRefreshToken := strings.TrimSpace(req.RefreshToken) != ""
+	hasCodeExchange := strings.TrimSpace(req.Code) != "" && strings.TrimSpace(req.RedirectURI) != "" && strings.TrimSpace(req.CodeVerifier) != ""
+	if !hasRefreshToken && !hasCodeExchange {
 		writeError(w, http.StatusBadRequest, "code, redirectUri and codeVerifier are required")
 		return
 	}
@@ -336,11 +339,16 @@ func (s *Server) authToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	form := url.Values{}
-	form.Set("grant_type", "authorization_code")
 	form.Set("client_id", s.cfg.KeycloakClientID)
-	form.Set("code", req.Code)
-	form.Set("redirect_uri", req.RedirectURI)
-	form.Set("code_verifier", req.CodeVerifier)
+	if hasRefreshToken {
+		form.Set("grant_type", "refresh_token")
+		form.Set("refresh_token", req.RefreshToken)
+	} else {
+		form.Set("grant_type", "authorization_code")
+		form.Set("code", req.Code)
+		form.Set("redirect_uri", req.RedirectURI)
+		form.Set("code_verifier", req.CodeVerifier)
+	}
 
 	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
 	if err != nil {

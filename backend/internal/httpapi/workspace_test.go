@@ -52,6 +52,51 @@ func TestAuthConfigEndpoint(t *testing.T) {
 	}
 }
 
+func TestAuthTokenRefreshesKeycloakToken(t *testing.T) {
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatalf("parse form: %v", err)
+		}
+		if got := r.FormValue("grant_type"); got != "refresh_token" {
+			t.Fatalf("unexpected grant_type: %s", got)
+		}
+		if got := r.FormValue("refresh_token"); got != "refresh-1" {
+			t.Fatalf("unexpected refresh_token: %s", got)
+		}
+		if got := r.FormValue("client_id"); got != "alemlive" {
+			t.Fatalf("unexpected client_id: %s", got)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"access_token":  "access-2",
+			"refresh_token": "refresh-2",
+			"expires_in":    300,
+		})
+	}))
+	defer tokenServer.Close()
+
+	handler := NewServer(config.Config{
+		TokenTTL:          time.Hour,
+		KeycloakIssuerURL: "https://keycloak.example/realms/alem",
+		KeycloakTokenURL:  tokenServer.URL,
+		KeycloakClientID:  "alemlive",
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/token", bytes.NewBufferString(`{"refreshToken":"refresh-1"}`))
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["access_token"] != "access-2" || payload["refresh_token"] != "refresh-2" {
+		t.Fatalf("unexpected token payload: %#v", payload)
+	}
+}
+
 func TestKeycloakEnabledRequiresBearerToken(t *testing.T) {
 	handler := NewServer(config.Config{
 		TokenTTL:          time.Hour,
@@ -241,7 +286,7 @@ func TestMeetingEventPersistsConferenceReport(t *testing.T) {
 	}
 }
 
-func TestConferenceFinalStatusWaitsForEgressProcessing(t *testing.T) {
+func TestConferenceFinalStatusWithoutManualRecordingIsSaved(t *testing.T) {
 	server := &Server{
 		egress: livekitservice.NewEgressManager(livekitservice.EgressConfig{
 			Enabled:   true,
@@ -266,16 +311,47 @@ func TestConferenceFinalStatusWaitsForEgressProcessing(t *testing.T) {
 	}
 
 	left := server.recordConferenceEvent("egress-room", "Madi", "left", now.Add(time.Minute))
-	if left.ConferenceStatus != "processing" {
-		t.Fatalf("expected processing final status while egress is configured, got %#v", left)
+	if left.ConferenceStatus != "saved" || left.RecordingShouldStop {
+		t.Fatalf("expected saved final status without manual recording, got %#v", left)
 	}
 
 	detail, ok := server.reportDetailByID(created.ReportID)
 	if !ok {
 		t.Fatal("expected conference report detail")
 	}
-	if detail.Report.ProcessingState != "processing" {
-		t.Fatalf("expected persisted processing report, got %#v", detail.Report)
+	if detail.Report.ProcessingState != "saved" || detail.Report.TranscriptionStatus != "not_started" {
+		t.Fatalf("expected persisted saved report, got %#v", detail.Report)
+	}
+}
+
+func TestManualRecordingMarksConferenceProcessing(t *testing.T) {
+	server := &Server{
+		generatedReportStore: map[string]reportDetailResponse{},
+		deletedReportIDs:     map[string]struct{}{},
+		activeMeetings:       map[string]meetingSession{},
+		latestRoomReports:    map[string]string{},
+	}
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+
+	created := server.recordConferenceEvent("recorded-room", "Madi", "created", now)
+	if created.ReportID == "" {
+		t.Fatal("expected report id")
+	}
+	server.setConferenceReportPipelineState(created.ReportID, "recorded-room", roomRecordingRecording)
+
+	left := server.recordConferenceEvent("recorded-room", "Madi", "left", now.Add(time.Minute))
+	if left.ConferenceStatus != "processing" || !left.RecordingShouldStop {
+		t.Fatalf("expected processing final status with manual recording, got %#v", left)
+	}
+
+	detail, ok := server.reportDetailByID(created.ReportID)
+	if !ok {
+		t.Fatal("expected conference report detail")
+	}
+	if detail.Report.ProcessingState != "processing" ||
+		detail.Report.RecordingStatus != "completed" ||
+		detail.Report.TranscriptionStatus != "pending" {
+		t.Fatalf("expected processing report, got %#v", detail.Report)
 	}
 }
 

@@ -113,18 +113,15 @@ func (s *Server) meetingEvent(w http.ResponseWriter, r *http.Request) {
 	}
 	switch strings.ToLower(event) {
 	case "created", "joined":
-		if state, err := s.startRoomRecording(r.Context(), roomName); err == nil {
-			response["recording"] = state
-			response["recordingStatus"] = "started"
-		} else {
-			response["recordingStatus"] = "not_started"
-			response["recordingError"] = err.Error()
-		}
+		response["recordingStatus"] = roomRecordingIdle
+		response["recording"] = s.recordingStatus(roomName)
 	case "left", "ended":
 		if conference.RecordingShouldStop {
 			if state, err := s.stopRoomRecording(r.Context(), roomName); err == nil {
 				response["recording"] = state
 				response["recordingStatus"] = "stopped"
+				s.setConferenceReportPipelineState(conference.ReportID, roomName, roomRecordingProcessing)
+				s.scheduleEgressRecordingProcessing(state, nil, 2*time.Second)
 			} else {
 				response["recordingStatus"] = "not_stopped"
 				response["recordingError"] = err.Error()
@@ -244,6 +241,30 @@ func (s *Server) roomSettings(w http.ResponseWriter, r *http.Request, roomName s
 }
 
 func conferenceSummary(roomName, status string, egressEnabled bool) []summarySection {
+	switch status {
+	case "active":
+		text := "Встреча идёт. Отчёт уже создан, но запись пока не включена."
+		if egressEnabled {
+			text += " Нажмите кнопку записи в конференции, чтобы после завершения получить видео, транскрипт и AI-анализ."
+		} else {
+			text += " LiveKit Egress не настроен, поэтому видео и STT не будут созданы автоматически."
+		}
+		return []summarySection{{Title: "Встреча активна", Text: text}}
+	case "recording":
+		return []summarySection{{Title: "Запись идёт", Text: "LiveKit Egress записывает комнату " + roomName + ". После остановки записи backend начнёт транскрипцию и AI-анализ."}}
+	case "processing":
+		return []summarySection{{Title: "Запись обрабатывается", Text: "Видео встречи сохранено или ожидается от LiveKit Egress. Backend запустит STT и AI-анализ, когда файл записи будет доступен."}}
+	case "failed":
+		return []summarySection{{Title: "Ошибка записи", Text: "LiveKit Egress не смог подготовить файл записи. Встреча сохранена, но транскрипция и AI-анализ не запускались."}}
+	case "saved":
+		text := "Конференция сохранена в отчётах без записи."
+		if egressEnabled {
+			text += " Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+		} else {
+			text += " Для видео и автоматического STT нужно включить LiveKit Egress и storage."
+		}
+		return []summarySection{{Title: "Конференция сохранена", Text: text}}
+	}
 	if status == "saved" {
 		text := "Конференция сохранена в отчётах."
 		if egressEnabled {

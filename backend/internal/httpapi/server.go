@@ -36,6 +36,8 @@ type Server struct {
 	roomsMu              sync.Mutex
 	rooms                map[string]*roomState
 	roomClients          map[string]map[*roomEventClient]struct{}
+	egressProcessingMu   sync.Mutex
+	egressProcessing     map[string]struct{}
 }
 
 type tokenRequest struct {
@@ -52,6 +54,7 @@ type tokenResponse struct {
 	RoomName  string `json:"roomName"`
 	UserName  string `json:"userName"`
 	ExpiresAt string `json:"expiresAt"`
+	ReportID  string `json:"reportId,omitempty"`
 }
 
 type meetingAnalysis struct {
@@ -138,6 +141,7 @@ func NewServer(cfg config.Config) http.Handler {
 		latestRoomReports:    map[string]string{},
 		rooms:                map[string]*roomState{},
 		roomClients:          map[string]map[*roomEventClient]struct{}{},
+		egressProcessing:     map[string]struct{}{},
 	}
 	server.cfg.STTBaseURL = sttBaseURL
 	server.cfg.STTAPIKey = sttAPIKey
@@ -293,6 +297,17 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := roomUser{ID: identity, Name: identity}
+	snapshot, _ := s.joinRoomState(room, user, req.IsHost, true, true)
+	conferenceEvent := "joined"
+	if req.IsHost {
+		conferenceEvent = "created"
+	}
+	conference := s.recordConferenceEvent(snapshot.Name, user.Name, conferenceEvent, s.clock())
+	if conference.ReportID != "" {
+		snapshot = s.setRoomRecordingState(snapshot.ID, snapshot.RecordingState, conference.ReportID)
+	}
+
 	role := "participant"
 	if req.IsHost {
 		role = "host"
@@ -323,6 +338,7 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		RoomName:  room,
 		UserName:  identity,
 		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
+		ReportID:  conference.ReportID,
 	})
 }
 

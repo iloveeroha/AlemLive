@@ -27,11 +27,9 @@ import {
   ListChecks,
   Loader2,
   Lock,
-  Maximize2,
   MessageSquareText,
   Mic,
   MicOff,
-  Minimize2,
   MoreHorizontal,
   PanelRight,
   Play,
@@ -43,6 +41,7 @@ import {
   Share2,
   ShieldCheck,
   Sparkles,
+  Square,
   Trash2,
   TrendingUp,
   Users,
@@ -74,6 +73,26 @@ const reportDownloadOptions = [
   { id: 'highlights', label: 'Основные моменты встречи (.mp4)', extension: 'mp4' },
   { id: 'video', label: 'Видео встречи (.mp4)', extension: 'mp4' },
 ]
+
+const fallbackReportActions = [
+  { id: 'share', label: 'Поделиться', enabled: true },
+  { id: 'download', label: 'Скачать', enabled: true },
+  { id: 'rename', label: 'Переименовать отчет', enabled: true },
+  { id: 'delete', label: 'Удалить отчет', enabled: true, danger: true },
+]
+
+function normalizeReportActions(actions) {
+  const incomingActions = Array.isArray(actions) ? actions : []
+  const byID = new Map(fallbackReportActions.map((action) => [action.id, action]))
+
+  incomingActions.forEach((action) => {
+    if (action?.id) {
+      byID.set(action.id, { ...byID.get(action.id), ...action })
+    }
+  })
+
+  return Array.from(byID.values())
+}
 
 const reportRows = [
   {
@@ -397,9 +416,25 @@ function reportProcessingLabel(report) {
   return ''
 }
 
+function roomRecordingLabel(state) {
+  switch (state) {
+    case 'recording':
+      return 'Запись идет'
+    case 'processing':
+      return 'Останавливается'
+    case 'ready':
+      return 'Запись готова'
+    case 'error':
+      return 'Ошибка записи'
+    default:
+      return 'Запись'
+  }
+}
+
 const authSessionKey = 'alemlive-auth-session-v2'
 const authVerifierKey = 'alemlive-auth-verifier'
 let currentAccessToken = ''
+let authRefreshPromise = null
 
 function setCurrentAccessToken(token) {
   currentAccessToken = token || ''
@@ -424,8 +459,74 @@ function getAuthHeaders() {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
+function tokenExpiresAt(token) {
+  const claims = decodeJWTClaims(token)
+  return claims.exp ? claims.exp * 1000 : 0
+}
+
+function shouldRefreshAccessToken(session) {
+  if (!session?.accessToken || !session?.refreshToken) {
+    return false
+  }
+  const expiresAt = tokenExpiresAt(session.accessToken) || session.expiresAt || 0
+  return expiresAt <= Date.now() + 60000
+}
+
+async function refreshAuthSession(force = false) {
+  if (typeof window === 'undefined') {
+    return null
+  }
+
+  const session = loadAuthSession({ allowExpiredAccessToken: true })
+  if (!session?.refreshToken) {
+    return null
+  }
+  if (!force && !shouldRefreshAccessToken(session)) {
+    return session
+  }
+  if (authRefreshPromise) {
+    return authRefreshPromise
+  }
+
+  authRefreshPromise = fetch('/api/auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: session.refreshToken }),
+  })
+    .then(async (response) => {
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload.access_token) {
+        throw new Error(payload.error_description || payload.error || 'Keycloak refresh failed')
+      }
+
+      const nextSession = {
+        ...session,
+        accessToken: payload.access_token,
+        idToken: payload.id_token || session.idToken,
+        refreshToken: payload.refresh_token || session.refreshToken,
+        expiresAt: Date.now() + Number(payload.expires_in || 0) * 1000,
+      }
+      saveAuthSession(nextSession)
+      window.dispatchEvent(new CustomEvent('alemlive-auth-refreshed', { detail: nextSession }))
+      return nextSession
+    })
+    .catch((error) => {
+      clearAuthSession()
+      throw error
+    })
+    .finally(() => {
+      authRefreshPromise = null
+    })
+
+  return authRefreshPromise
+}
+
 async function apiRequest(path, options = {}) {
-  const { requireAuth = false, ...requestOptions } = options
+  const { requireAuth = false, skipAuthRefresh = false, retryOnAuth = true, ...requestOptions } = options
+  if (!skipAuthRefresh) {
+    await refreshAuthSession(false).catch(() => null)
+  }
+
   const authHeaders = getAuthHeaders()
   if (requireAuth && !authHeaders.Authorization) {
     throw new Error('Сессия Keycloak не найдена. Войдите заново и повторите загрузку.')
@@ -446,6 +547,12 @@ async function apiRequest(path, options = {}) {
 
   if (!response.ok) {
     if (response.status === 401 && typeof window !== 'undefined') {
+      if (!skipAuthRefresh && retryOnAuth) {
+        const refreshed = await refreshAuthSession(true).catch(() => null)
+        if (refreshed?.accessToken) {
+          return apiRequest(path, { ...options, retryOnAuth: false })
+        }
+      }
       clearAuthSession()
       window.dispatchEvent(new CustomEvent('alemlive-auth-expired', {
         detail: payload?.error === 'Missing bearer token'
@@ -474,14 +581,15 @@ function saveDownload(blob, filename) {
   window.URL.revokeObjectURL(url)
 }
 
-function loadAuthSession() {
+function loadAuthSession(options = {}) {
+  const { allowExpiredAccessToken = false } = options
   if (typeof window === 'undefined') {
     return null
   }
 
   try {
     const session = JSON.parse(window.localStorage.getItem(authSessionKey))
-    if (!session?.accessToken || isJWTExpired(session.accessToken)) {
+    if (!session?.accessToken || (!allowExpiredAccessToken && isJWTExpired(session.accessToken) && !session.refreshToken)) {
       window.localStorage.removeItem(authSessionKey)
       return null
     }
@@ -963,8 +1071,11 @@ function App() {
   const [isMeetingMaximized, setIsMeetingMaximized] = useState(false)
   const [isConferenceChatOpen, setIsConferenceChatOpen] = useState(true)
   const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false)
+  const [reportMirrorOverrides, setReportMirrorOverrides] = useState({})
   const [roomSettings, setRoomSettings] = useState(null)
   const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false)
+  const [roomRecordingStatus, setRoomRecordingStatus] = useState({ state: 'idle', configured: false })
+  const [isRecordingToggling, setIsRecordingToggling] = useState(false)
   const copilotInputRef = useRef(null)
   const reportUploadInputRef = useRef(null)
 
@@ -984,7 +1095,10 @@ function App() {
   const areAllTypeFiltersSelected = selectedTypeFilterIds.length === typeFilterOptions.length
   const visibleReports = filterReportsByType(reports, selectedTypeFilterIds)
   const hasProcessingReports = reports.some((report) => ['processing', 'recording'].includes(report.processingState || report.status))
+  const currentRoomRecordingState = roomRecordingStatus?.state || roomRecordingStatus?.status || 'idle'
+  const isRoomRecording = currentRoomRecordingState === 'recording'
   const selectedReportRecordingUrl = selectedReportDetail?.recordingUrl || ''
+  const selectedReportMirrorCorrection = reportMirrorOverrides[selectedReportId] ?? Boolean(selectedReportDetail?.recordingMirrorCorrection)
   const selectedReportRecordingMessage = (() => {
     const state = selectedReport?.processingState || selectedReport?.status || ''
     if (state === 'recording') {
@@ -1317,6 +1431,20 @@ function App() {
     }
   }, [isMeetingMaximized])
 
+  useEffect(() => {
+    if (!isConnected || !meetingMeta.room) {
+      setRoomRecordingStatus({ state: 'idle', configured: false })
+      return undefined
+    }
+
+    refreshRoomRecordingStatus(meetingMeta.room)
+    const timer = window.setInterval(() => {
+      refreshRoomRecordingStatus(meetingMeta.room)
+    }, 5000)
+
+    return () => window.clearInterval(timer)
+  }, [isConnected, meetingMeta.room])
+
   function updateField(event) {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
@@ -1397,10 +1525,50 @@ function App() {
       setAuthError(event.detail || 'Сессия истекла. Войдите заново.')
       setAuthReady(true)
     }
+    function handleAuthRefreshed(event) {
+      if (event.detail?.accessToken) {
+        setAuthSession(event.detail)
+        setAuthError('')
+      }
+    }
 
     window.addEventListener('alemlive-auth-expired', handleAuthExpired)
-    return () => window.removeEventListener('alemlive-auth-expired', handleAuthExpired)
+    window.addEventListener('alemlive-auth-refreshed', handleAuthRefreshed)
+    return () => {
+      window.removeEventListener('alemlive-auth-expired', handleAuthExpired)
+      window.removeEventListener('alemlive-auth-refreshed', handleAuthRefreshed)
+    }
   }, [])
+
+  useEffect(() => {
+    if (!authReady || !authSession?.refreshToken) {
+      return undefined
+    }
+
+    let isMounted = true
+    const refresh = () => {
+      refreshAuthSession(false)
+        .then((nextSession) => {
+          if (isMounted && nextSession?.accessToken) {
+            setAuthSession(nextSession)
+            setAuthError('')
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setAuthSession(null)
+            setAuthError('Сессия истекла. Войдите заново.')
+          }
+        })
+    }
+
+    refresh()
+    const timer = window.setInterval(refresh, 30000)
+    return () => {
+      isMounted = false
+      window.clearInterval(timer)
+    }
+  }, [authReady, authSession?.refreshToken, authSession?.accessToken])
 
   function recordMeetingEvent(event, overrides = {}) {
     return apiRequest('/api/meetings/events', {
@@ -1413,21 +1581,48 @@ function App() {
     }).catch(() => null)
   }
 
+  async function refreshRoomRecordingStatus(roomName = meetingMeta.room) {
+    if (!roomName) {
+      return null
+    }
+
+    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/recording/status`).catch(() => null)
+    if (payload) {
+      setRoomRecordingStatus(payload)
+    }
+    return payload
+  }
+
+  async function toggleRoomRecording() {
+    if (!meetingMeta.room || isRecordingToggling) {
+      return
+    }
+
+    setIsRecordingToggling(true)
+    setMeetingNotice('')
+
+    try {
+      const action = isRoomRecording ? 'stop' : 'start'
+      const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/recording/${action}`, {
+        method: 'POST',
+      })
+      setRoomRecordingStatus(payload)
+      setWorkspaceNotice(isRoomRecording ? 'Запись останавливается, отчёт появится после обработки' : 'Запись конференции началась')
+      if (payload?.reportId) {
+        setReportsRefreshKey((current) => current + 1)
+      }
+    } catch (error) {
+      setMeetingNotice(error.message || 'Не удалось изменить статус записи')
+    } finally {
+      setIsRecordingToggling(false)
+    }
+  }
+
   async function requestToken(roomName, userName, isHost) {
-    const response = await fetch('/api/livekit/token', {
+    const payload = await apiRequest('/api/livekit/token', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...getAuthHeaders(),
-      },
       body: JSON.stringify({ roomName, userName, isHost }),
     })
-
-    const payload = await response.json().catch(() => ({}))
-
-    if (!response.ok) {
-      throw new Error(payload.error || 'Не удалось получить token для комнаты')
-    }
 
     if (!payload.serverUrl || !payload.token) {
       throw new Error('Backend не вернул LiveKit URL или token')
@@ -1657,6 +1852,17 @@ function App() {
   function selectDownloadOption(reportId, optionId) {
     setIsDownloadMenuOpen(false)
     handleReportAction(reportId, `download:${optionId}`)
+  }
+
+  function toggleReportMirrorCorrection() {
+    if (!selectedReportId) {
+      return
+    }
+
+    setReportMirrorOverrides((current) => ({
+      ...current,
+      [selectedReportId]: !(current[selectedReportId] ?? Boolean(selectedReportDetail?.recordingMirrorCorrection)),
+    }))
   }
 
   async function uploadReport() {
@@ -1917,14 +2123,45 @@ function App() {
     setIsDetailActionsOpen(false)
 
     try {
-      await apiRequest(`/api/reports/${selectedReportId}/notes`, {
+      const currentSummary = selectedReportDetail?.summary?.length
+        ? selectedReportDetail.summary
+        : [{ title: selectedReport.title || 'Сводка', text: '' }]
+      const currentActionItems = selectedReportDetail?.actionItems || []
+      const title = window.prompt('Заголовок сводки', currentSummary[0]?.title || '')
+      if (title === null) {
+        return
+      }
+
+      const text = window.prompt('Текст сводки', currentSummary[0]?.text || '')
+      if (text === null) {
+        return
+      }
+
+      const nextSummary = [
+        {
+          ...currentSummary[0],
+          title: title.trim() || currentSummary[0]?.title || 'Сводка',
+          text: text.trim() || currentSummary[0]?.text || '',
+        },
+        ...currentSummary.slice(1),
+      ]
+
+      const payload = await apiRequest(`/api/reports/${selectedReportId}/notes`, {
         method: 'PATCH',
         body: JSON.stringify({
-          summary: selectedReportDetail?.summary || [],
-          actionItems: selectedReportDetail?.actionItems || [],
+          summary: nextSummary,
+          actionItems: currentActionItems,
         }),
       })
-      setReportActionMessage('Заметки отправлены на редактирование')
+      setReportDetails((current) => ({
+        ...current,
+        [selectedReportId]: {
+          ...(current[selectedReportId] || selectedReportDetail || {}),
+          summary: payload.summary || nextSummary,
+          actionItems: payload.actionItems || currentActionItems,
+        },
+      }))
+      setReportActionMessage('Заметки сохранены')
     } catch (error) {
       setReportActionMessage(error.message || 'Backend endpoint для редактирования заметок пока недоступен')
     }
@@ -2209,13 +2446,16 @@ function App() {
           </button>
           {isConnected && (
             <button
-              className={isMeetingMaximized ? 'icon-button active' : 'icon-button'}
+              className={isRoomRecording ? 'recording-control active' : 'recording-control'}
               type="button"
-              onClick={() => setIsMeetingMaximized((current) => !current)}
-              aria-label={isMeetingMaximized ? 'Свернуть видеоконференцию' : 'Развернуть видеоконференцию'}
-              aria-pressed={isMeetingMaximized}
+              onClick={toggleRoomRecording}
+              disabled={isRecordingToggling || currentRoomRecordingState === 'processing'}
+              aria-label={isRoomRecording ? 'Остановить запись конференции' : 'Начать запись конференции'}
+              aria-pressed={isRoomRecording}
+              title={roomRecordingLabel(currentRoomRecordingState)}
             >
-              {isMeetingMaximized ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+              {isRecordingToggling ? <Loader2 className="spin-icon" size={18} /> : isRoomRecording ? <Square size={16} fill="currentColor" /> : <Radio size={18} />}
+              <span>{isRoomRecording ? 'Остановить' : 'Запись'}</span>
             </button>
           )}
           {isConnected && (
@@ -2227,18 +2467,6 @@ function App() {
               aria-pressed={isConferenceChatOpen}
             >
               <MessageSquareText size={18} />
-            </button>
-          )}
-          {isConnected && (
-            <LiveKitDeviceButtons
-              onDeviceStateChange={handleLiveKitDeviceStateChange}
-              onDevicePreferenceChange={handleLiveKitDevicePreferenceChange}
-              onDeviceError={handleLiveKitDeviceError}
-            />
-          )}
-          {isConnected && (
-            <button className="danger-action" type="button" onClick={leaveMeeting}>
-              Завершить
             </button>
           )}
         </div>
@@ -2392,26 +2620,28 @@ function App() {
               data-lk-theme="default"
               className="livekit-context"
             >
-              <section className="meeting-panel">
-                {meetingToolbar}
-                {isRoomSettingsOpen && roomSettings && (
-                  <div className="room-settings-panel">
-                    <span>Запись: {roomSettings.recording ? 'включена' : 'выключена'}</span>
-                    <span>Транскрипция: {roomSettings.transcription ? 'включена' : 'выключена'}</span>
-                    <span>Гости: {roomSettings.allowGuests ? 'разрешены' : 'запрещены'}</span>
-                    <span>Автоотчёт: {roomSettings.autoReport ? 'включён' : 'выключен'}</span>
+              <div className="meeting-livekit-layout">
+                <section className="meeting-panel">
+                  {meetingToolbar}
+                  {isRoomSettingsOpen && roomSettings && (
+                    <div className="room-settings-panel">
+                      <span>Запись: {roomSettings.recording ? 'включена' : 'выключена'}</span>
+                      <span>Транскрипция: {roomSettings.transcription ? 'включена' : 'выключена'}</span>
+                      <span>Гости: {roomSettings.allowGuests ? 'разрешены' : 'запрещены'}</span>
+                      <span>Автоотчёт: {roomSettings.autoReport ? 'включён' : 'выключен'}</span>
+                    </div>
+                  )}
+
+                  <div className="livekit-stage connected">
+                    <VideoConference />
                   </div>
-                )}
+                </section>
 
-                <div className="livekit-stage connected">
-                  <VideoConference />
-                </div>
-              </section>
-
-              <aside className="side-column">
-                <ParticipantsPanel />
-                <ConferenceChatPanel onClose={() => setIsConferenceChatOpen(false)} />
-              </aside>
+                <aside className="side-column">
+                  <ParticipantsPanel />
+                  <ConferenceChatPanel onClose={() => setIsConferenceChatOpen(false)} />
+                </aside>
+              </div>
             </LiveKitRoom>
           ) : (
             <>
@@ -2565,7 +2795,11 @@ function App() {
 
           {visibleReports.map((report) => (
             <article
-              className={selectedReportId === report.id ? 'report-row selected' : 'report-row'}
+              className={[
+                'report-row',
+                selectedReportId === report.id ? 'selected' : '',
+                openReportActionsId === report.id ? 'actions-open' : '',
+              ].filter(Boolean).join(' ')}
               key={report.id}
               role="button"
               tabIndex={0}
@@ -2620,12 +2854,7 @@ function App() {
                   </button>
                   {openReportActionsId === report.id && (
                     <span className="report-actions-menu" onClick={keepReportActionsOpen}>
-                      {(reportActions[report.id] || [
-                        { id: 'share', label: 'Поделиться', enabled: true },
-                        { id: 'download', label: 'Скачать', enabled: true },
-                        { id: 'rename', label: 'Переименовать отчет', enabled: true },
-                        { id: 'delete', label: 'Удалить отчет', enabled: true, danger: true },
-                      ]).map((action) => (
+                      {normalizeReportActions(reportActions[report.id]).map((action) => (
                         <button
                           className={action.danger ? 'report-action-item danger' : action.enabled === false ? 'report-action-item disabled' : 'report-action-item'}
                           type="button"
@@ -2891,7 +3120,7 @@ function App() {
         <div className="report-detail-layout">
           <div className="report-recording-column">
             {selectedReportRecordingUrl ? (
-              <div className="report-video-frame">
+              <div className={selectedReportMirrorCorrection ? 'report-video-frame mirror-corrected' : 'report-video-frame'}>
                 <video
                   className="report-video-player"
                   key={selectedReportRecordingUrl}
@@ -2903,6 +3132,14 @@ function App() {
                 </video>
                 <button className="video-pop-button" type="button" onClick={openReportRecording} aria-label="Открыть видео">
                   <ExternalLink size={19} />
+                </button>
+                <button
+                  className={selectedReportMirrorCorrection ? 'video-mirror-button active' : 'video-mirror-button'}
+                  type="button"
+                  onClick={toggleReportMirrorCorrection}
+                  aria-label={selectedReportMirrorCorrection ? 'Показать исходное видео' : 'Исправить зеркальность видео'}
+                >
+                  <RefreshCw size={18} />
                 </button>
               </div>
             ) : (
@@ -2961,9 +3198,17 @@ function App() {
                   </button>
                   {isDetailActionsOpen && (
                     <div className="detail-more-menu">
+                      <button className="detail-more-item" type="button" onClick={() => handleReportAction(selectedReport.id, 'rename')}>
+                        <Edit3 size={18} />
+                        Переименовать отчёт
+                      </button>
                       <button className="detail-more-item" type="button" onClick={editReportNotes}>
                         <Edit3 size={18} />
                         Редактировать заметки
+                      </button>
+                      <button className="detail-more-item danger" type="button" onClick={() => handleReportAction(selectedReport.id, 'delete')}>
+                        <Trash2 size={18} />
+                        Удалить отчёт
                       </button>
                     </div>
                   )}
