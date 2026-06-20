@@ -243,7 +243,7 @@ Use Russian for user-facing text. Preserve roomName. Do not return the full tran
 
 	contextText := transcriptAnalysisContext(roomName, participants, transcriptText, lines)
 	answer, err := s.ai.Chat(ctx, []llm.Message{
-		{Role: "system", Content: "You are a meeting analytics engine. Return only JSON that matches the requested schema. Do not copy the full transcript into the output. Use participant names only when the transcript clearly identifies the speaker."},
+		{Role: "system", Content: "You are a meeting analytics engine. Return only JSON that matches the requested schema. Do not copy the full transcript into the output. Use only known participant names or neutral Speaker/Speaker N labels for speakers; never invent speaker names from transcript words."},
 		{Role: "user", Content: prompt + "\n\n" + contextText},
 	}, llm.ChatOptions{
 		Temperature: 0.2,
@@ -315,7 +315,7 @@ func transcriptAnalysisContext(roomName, participants, transcriptText string, li
 		b.WriteString("\nKnown participants: ")
 		b.WriteString(strings.TrimSpace(participants))
 	}
-	b.WriteString("\nSpeaker policy: keep Speaker/Speaker N labels unless the transcript explicitly identifies a speaker by name.")
+	b.WriteString("\nSpeaker policy: use Known participants for speaker names when possible. If unsure, use Speaker/Speaker N. Do not turn transcript words into speaker names.")
 	b.WriteString("\n\nTranscript lines:\n")
 	for _, line := range lines {
 		b.WriteString(line.Time)
