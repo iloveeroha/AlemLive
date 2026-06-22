@@ -228,7 +228,8 @@ Schema:
   "roomName": "string",
   "generatedAt": "RFC3339 string",
   "summary": [{"title": "string", "text": "string"}],
-  "actionItems": [{"task": "string", "owner": "string", "due": "string", "priority": "High|Medium|Low"}],
+  "actionItems": [{"time": "00:00", "task": "string", "owner": "string", "due": "string", "priority": "High|Medium|Low"}],
+  "keyQuestions": [{"time": "00:00", "question": "string", "answer": "string"}],
   "insights": {
     "sentiment": "string",
     "talkTime": [{"label": "string", "value": 0, "unit": "%"}],
@@ -240,6 +241,8 @@ Schema:
   "chapters": [{"start": "00:00", "end": "00:00", "title": "string", "text": "string", "points": ["string", "string"]}]
 }
 For each chapter, text is a short paragraph describing what was discussed, and points is 2-4 short bullet points with concrete topics or decisions from that chapter.
+For each actionItem, time is the transcript timestamp (mm:ss) closest to where that task was mentioned.
+For keyQuestions, find 2-5 notable questions actually asked during the meeting, with the timestamp where each was asked and a short answer grounded in what was actually said in the transcript (or the best inferred answer if the transcript does not state it outright). Omit keyQuestions entirely if no real questions were asked.
 Use Russian for user-facing text. Preserve roomName. Do not return the full transcript; backend already has it.`
 
 	contextText := transcriptAnalysisContext(roomName, participants, transcriptText, lines)

@@ -58,15 +58,16 @@ type tokenResponse struct {
 }
 
 type meetingAnalysis struct {
-	RoomName    string           `json:"roomName"`
-	GeneratedAt string           `json:"generatedAt"`
-	Summary     []summarySection `json:"summary"`
-	ActionItems []actionItem     `json:"actionItems"`
-	Transcript  []transcriptLine `json:"transcript"`
-	Insights    meetingInsights  `json:"insights"`
-	Highlights  []highlight      `json:"highlights"`
-	Chapters    []chapter        `json:"chapters"`
-	Keywords    []string         `json:"keywords,omitempty"`
+	RoomName     string           `json:"roomName"`
+	GeneratedAt  string           `json:"generatedAt"`
+	Summary      []summarySection `json:"summary"`
+	ActionItems  []actionItem     `json:"actionItems"`
+	KeyQuestions []keyQuestion    `json:"keyQuestions,omitempty"`
+	Transcript   []transcriptLine `json:"transcript"`
+	Insights     meetingInsights  `json:"insights"`
+	Highlights   []highlight      `json:"highlights"`
+	Chapters     []chapter        `json:"chapters"`
+	Keywords     []string         `json:"keywords,omitempty"`
 }
 
 type summarySection struct {
@@ -75,10 +76,17 @@ type summarySection struct {
 }
 
 type actionItem struct {
+	Time     string `json:"time,omitempty"`
 	Task     string `json:"task"`
 	Owner    string `json:"owner"`
 	Due      string `json:"due"`
 	Priority string `json:"priority"`
+}
+
+type keyQuestion struct {
+	Time     string `json:"time,omitempty"`
+	Question string `json:"question"`
+	Answer   string `json:"answer,omitempty"`
 }
 
 type transcriptLine struct {

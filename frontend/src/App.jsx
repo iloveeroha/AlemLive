@@ -1459,6 +1459,7 @@ function App() {
   const [participationSortDescending, setParticipationSortDescending] = useState(true)
   const [selectedPositionsParticipant, setSelectedPositionsParticipant] = useState('')
   const [isEditedNoticeDismissed, setIsEditedNoticeDismissed] = useState(false)
+  const [showNotesChapterDescriptions, setShowNotesChapterDescriptions] = useState(true)
   const transcriptLineRefs = useRef({})
   const [reportsError, setReportsError] = useState('')
   const [reportsLoading, setReportsLoading] = useState(false)
@@ -2792,6 +2793,14 @@ function App() {
     }
   }
 
+  function askAboutMoment(question, time) {
+    if (time) {
+      seekRecordingTo(time)
+    }
+    focusCopilotPanel()
+    askReportCopilot(question)
+  }
+
   async function savePersonalNote(reportId, note) {
     if (!reportId) {
       return
@@ -3532,6 +3541,7 @@ function App() {
     const detailSpeakerStats = selectedReportDetail?.speakerStats || speakerStats
     const detailHighlights = selectedReportDetail?.highlights || highlights
     const detailChapters = selectedReportDetail?.chapters || chapters
+    const detailKeyQuestions = selectedReportDetail?.keyQuestions || []
 
     if (activeReportTab === 'notes') {
       return (
@@ -3593,13 +3603,102 @@ function App() {
                     <CheckCircle2 size={17} />
                   </span>
                   <div>
+                    {item.time && <time className="action-item-time">{item.time}</time>}
                     <h4>{item.task || item.title}</h4>
-                    <p>{item.owner} · {item.due}</p>
+                    <p>{[item.owner, item.due].filter(Boolean).join(' · ')}</p>
+                    <button
+                      type="button"
+                      className="ask-alem-link"
+                      onClick={() => askAboutMoment(`Расскажи подробнее про задачу: ${item.task || item.title}`, item.time)}
+                    >
+                      Спросить Alem
+                    </button>
                   </div>
                 </article>
               ))}
             </div>
           </section>
+
+          {detailKeyQuestions.length > 0 && (
+            <section className="key-questions-panel">
+              <div className="section-kicker">
+                <HelpCircle size={18} />
+                Ключевые вопросы
+              </div>
+              <div className="key-questions-list">
+                {detailKeyQuestions.map((item, index) => (
+                  <article className="key-question-item" key={`${item.question}-${index}`}>
+                    <div className="key-question-head">
+                      {item.time && <time>{item.time}</time>}
+                      <p>{item.question}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="ask-alem-link"
+                      onClick={() => askAboutMoment(item.question, item.time)}
+                    >
+                      Спросить Alem
+                    </button>
+                    {item.answer && (
+                      <div className="key-question-answer">
+                        <Sparkles size={14} />
+                        <span><strong>Предложенный ответ:</strong> {item.answer}</span>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {detailChapters.length > 0 && (
+            <section className="notes-chapters-panel">
+              <div className="notes-chapters-header">
+                <div className="section-kicker">
+                  <ListChecks size={18} />
+                  Главы и темы
+                </div>
+                <label className="chapter-description-toggle">
+                  Описания
+                  <button
+                    type="button"
+                    className={showNotesChapterDescriptions ? 'toggle-switch on' : 'toggle-switch'}
+                    onClick={() => setShowNotesChapterDescriptions((current) => !current)}
+                    aria-pressed={showNotesChapterDescriptions}
+                    aria-label="Показать описания глав"
+                  >
+                    <span />
+                  </button>
+                </label>
+              </div>
+              <div className="notes-chapters-list">
+                {detailChapters.map((chapterItem) => (
+                  <article className="notes-chapter-item" key={chapterKey(chapterItem)}>
+                    <button
+                      type="button"
+                      className="notes-chapter-title"
+                      onClick={() => seekRecordingTo(chapterItem.start || chapterItem.time)}
+                    >
+                      <time>{chapterItem.time || chapterItem.start}</time>
+                      <h4>{chapterItem.title}</h4>
+                    </button>
+                    {showNotesChapterDescriptions && (chapterItem.text || chapterItem.points?.length > 0) && (
+                      <div className="notes-chapter-description">
+                        {chapterItem.text && <p>{chapterItem.text}</p>}
+                        {chapterItem.points?.length > 0 && (
+                          <ul>
+                            {chapterItem.points.map((point, pointIndex) => (
+                              <li key={pointIndex}>{point}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="personal-notes-panel">
             <div className="section-kicker">

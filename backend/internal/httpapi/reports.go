@@ -71,6 +71,7 @@ type reportDetailResponse struct {
 	Report                    reportRow          `json:"report"`
 	Summary                   []summarySection   `json:"summary"`
 	ActionItems               []reportActionItem `json:"actionItems"`
+	KeyQuestions              []keyQuestion      `json:"keyQuestions,omitempty"`
 	TranscriptLines           []reportTranscript `json:"transcriptLines"`
 	Transcript                []reportTranscript `json:"transcript"`
 	SpeakerStats              []speakerStat      `json:"speakerStats"`
@@ -91,6 +92,7 @@ type reportDetailResponse struct {
 
 type reportActionItem struct {
 	ID          string `json:"id"`
+	Time        string `json:"time,omitempty"`
 	Title       string `json:"title"`
 	Task        string `json:"task"`
 	Description string `json:"description"`
@@ -499,6 +501,9 @@ func reportProcessingErrorMessage(err error) string {
 	if err == nil {
 		return "STT service error: unknown error"
 	}
+	if errors.Is(err, ErrRecordingDownloadFailed) {
+		return "Recording processing failed: recording is unavailable"
+	}
 
 	var apiErr *llm.APIError
 	if errors.As(err, &apiErr) {
@@ -513,6 +518,7 @@ func (s *Server) reportDetailFromAnalysis(report reportRow, analysis meetingAnal
 		id := fmt.Sprintf("action-%d", i+1)
 		actionItems = append(actionItems, reportActionItem{
 			ID:       id,
+			Time:     item.Time,
 			Title:    item.Task,
 			Task:     item.Task,
 			Owner:    item.Owner,
@@ -581,6 +587,7 @@ func (s *Server) reportDetailFromAnalysis(report reportRow, analysis meetingAnal
 		Report:          report,
 		Summary:         analysis.Summary,
 		ActionItems:     actionItems,
+		KeyQuestions:    analysis.KeyQuestions,
 		TranscriptLines: transcript,
 		Transcript:      transcript,
 		SpeakerStats:    speakerStats,

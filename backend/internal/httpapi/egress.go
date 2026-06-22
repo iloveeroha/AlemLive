@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -53,7 +54,7 @@ func (s *Server) stopRoomRecording(ctx context.Context, roomName string) (liveki
 	if s.egress == nil || !s.egress.Configured() {
 		return livekitservice.EgressState{}, livekitservice.ErrEgressNotConfigured
 	}
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	return s.egress.StopRoom(ctx, roomName)
 }
@@ -343,7 +344,21 @@ func (s *Server) processEgressRecording(ctx context.Context, state livekitservic
 	ctx, cancel := context.WithTimeout(ctx, s.processingTimeout())
 	defer cancel()
 
-	fileName, contentType, data, err := downloadRecordingWithRetry(ctx, downloadURL, 2*time.Minute)
+	status := strings.ToLower(strings.TrimSpace(state.Status))
+	if strings.Contains(status, "abort") || strings.Contains(status, "fail") || strings.Contains(status, "limit") {
+		log.Printf("egress report %s aborted before recording completion: status=%s filePath=%s", reportID, state.Status, state.FilePath)
+		s.markEgressReportFailed(reportID, ErrRecordingDownloadFailed)
+		return
+	}
+
+	downloadURLs := s.recordingDownloadURLs(state, info)
+	if len(downloadURLs) == 0 {
+		log.Printf("egress report %s skipped: no recording download URL for room=%s egress=%s status=%s", reportID, state.RoomName, state.EgressID, state.Status)
+		s.setConferenceReportPipelineState(reportID, roomName, roomRecordingError)
+		return
+	}
+
+	fileName, contentType, data, downloadURL, err := downloadRecordingWithRetry(ctx, downloadURLs, 2*time.Minute)
 	if err != nil {
 		log.Printf("egress report %s recording download failed: %v", reportID, err)
 		s.markEgressReportFailed(reportID, err)
@@ -507,22 +522,48 @@ func (s *Server) processingTimeout() time.Duration {
 }
 
 func (s *Server) firstRecordingDownloadURL(state livekitservice.EgressState, info *lkproto.EgressInfo) string {
+	urls := s.recordingDownloadURLs(state, info)
+	if len(urls) == 0 {
+		return ""
+	}
+	return urls[0]
+}
+
+func (s *Server) recordingDownloadURLs(state livekitservice.EgressState, info *lkproto.EgressInfo) []string {
+	urls := make([]string, 0, 4)
 	if url := s.s3ObjectURL(s.cfg.LiveKitS3Endpoint, s.cfg.LiveKitS3Bucket, firstEgressFilePath(state, info)); url != "" {
-		return url
+		urls = append(urls, url)
 	}
 	for _, value := range []string{state.FileLocation, state.PublicURL} {
 		if isHTTPURL(value) {
-			return value
+			urls = append(urls, value)
 		}
 	}
 	if info != nil {
 		for _, file := range info.GetFileResults() {
 			if isHTTPURL(file.GetLocation()) {
-				return file.GetLocation()
+				urls = append(urls, file.GetLocation())
 			}
 		}
 	}
-	return ""
+	return uniqueStrings(urls)
+}
+
+func uniqueStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
 }
 
 func (s *Server) firstRecordingPlaybackURL(state livekitservice.EgressState, info *lkproto.EgressInfo) string {
@@ -574,6 +615,8 @@ func isHTTPURL(value string) bool {
 	return strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://")
 }
 
+var ErrRecordingDownloadFailed = errors.New("recording download failed")
+
 func downloadRecording(ctx context.Context, url string) (string, string, []byte, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -585,7 +628,7 @@ func downloadRecording(ctx context.Context, url string) (string, string, []byte,
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", "", nil, errors.New("recording download failed")
+		return "", "", nil, fmt.Errorf("%w: %d", ErrRecordingDownloadFailed, resp.StatusCode)
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxRecordingUploadBytes+1))
 	if err != nil {
@@ -601,27 +644,29 @@ func downloadRecording(ctx context.Context, url string) (string, string, []byte,
 	return fileName, resp.Header.Get("Content-Type"), data, nil
 }
 
-func downloadRecordingWithRetry(ctx context.Context, url string, maxWait time.Duration) (string, string, []byte, error) {
+func downloadRecordingWithRetry(ctx context.Context, urls []string, maxWait time.Duration) (string, string, []byte, string, error) {
 	startedAt := time.Now()
 	var lastErr error
 	for attempt := 1; ; attempt++ {
-		fileName, contentType, data, err := downloadRecording(ctx, url)
-		if err == nil {
-			if attempt > 1 {
-				log.Printf("recording download succeeded after %d attempts", attempt)
+		for _, url := range urls {
+			fileName, contentType, data, err := downloadRecording(ctx, url)
+			if err == nil {
+				if attempt > 1 {
+					log.Printf("recording download succeeded after %d attempts using %s", attempt, url)
+				}
+				return fileName, contentType, data, url, nil
 			}
-			return fileName, contentType, data, nil
+			lastErr = err
+			log.Printf("recording download not ready yet, retrying: attempt=%d url=%s err=%v", attempt, url, err)
 		}
-		lastErr = err
 		if ctx.Err() != nil || (maxWait > 0 && time.Since(startedAt) >= maxWait) {
-			return "", "", nil, lastErr
+			return "", "", nil, "", lastErr
 		}
-		log.Printf("recording download not ready yet, retrying: attempt=%d err=%v", attempt, err)
 		timer := time.NewTimer(time.Second)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return "", "", nil, ctx.Err()
+			return "", "", nil, "", ctx.Err()
 		case <-timer.C:
 		}
 	}

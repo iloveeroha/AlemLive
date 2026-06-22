@@ -240,7 +240,7 @@ func (c *Client) Transcribe(ctx context.Context, fileName, contentType string, d
 	}
 	defer resp.Body.Close()
 
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodyBytes*16))
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return Transcription{}, fmt.Errorf("read response: %w", err)
 	}
