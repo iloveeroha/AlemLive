@@ -154,7 +154,7 @@ func TestDownloadRecordingWithRetryWaitsForObject(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
-	fileName, contentType, data, err := downloadRecordingWithRetry(ctx, recordingServer.URL+"/recording.mp4", time.Second)
+	fileName, contentType, data, _, err := downloadRecordingWithRetry(ctx, []string{recordingServer.URL + "/recording.mp4"}, time.Second)
 	if err != nil {
 		t.Fatalf("expected retry to succeed, got %v", err)
 	}

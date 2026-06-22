@@ -16,6 +16,11 @@ import (
 
 var ErrEgressNotConfigured = errors.New("livekit egress is not configured")
 
+// minRecordingDuration is the minimum time LiveKit Egress needs to boot its
+// compositor and receive a first frame. Calling StopEgress sooner reliably
+// aborts the egress with "Start signal not received" and produces no file.
+const minRecordingDuration = 15 * time.Second
+
 type EgressConfig struct {
 	Enabled       bool
 	ServerURL     string
@@ -135,6 +140,9 @@ func (m *EgressManager) StartRoomComposite(ctx context.Context, roomName string,
 	}
 
 	state := stateFromEgressInfo(info, roomName, filePath, m.publicURL(filePath))
+	if state.StartedAt == "" {
+		state.StartedAt = now.UTC().Format(time.RFC3339)
+	}
 	m.mu.Lock()
 	m.active[roomName] = state
 	m.history[roomName] = state
@@ -152,6 +160,10 @@ func (m *EgressManager) StopRoom(ctx context.Context, roomName string) (EgressSt
 	m.mu.Unlock()
 	if !ok || state.EgressID == "" {
 		return EgressState{}, errors.New("room recording is not active")
+	}
+
+	if err := waitForMinRecordingDuration(ctx, state.StartedAt); err != nil {
+		return EgressState{}, err
 	}
 
 	info, err := m.client.StopEgress(ctx, &lkproto.StopEgressRequest{EgressId: state.EgressID})
@@ -173,6 +185,28 @@ func (m *EgressManager) StopRoom(ctx context.Context, roomName string) (EgressSt
 	m.history[roomName] = stopped
 	m.mu.Unlock()
 	return stopped, nil
+}
+
+// waitForMinRecordingDuration blocks until minRecordingDuration has elapsed
+// since startedAt, so StopEgress is never called before the compositor has
+// had a chance to receive its first frame.
+func waitForMinRecordingDuration(ctx context.Context, startedAt string) error {
+	started, err := time.Parse(time.RFC3339, startedAt)
+	if err != nil {
+		return nil
+	}
+	remaining := minRecordingDuration - time.Since(started)
+	if remaining <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(remaining)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (m *EgressManager) Status(roomName string) (EgressState, bool) {

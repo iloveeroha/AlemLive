@@ -22,6 +22,7 @@ import {
   Filter,
   Folder,
   Grid2X2,
+  HelpCircle,
   Highlighter,
   Link,
   ListChecks,
@@ -429,6 +430,24 @@ function roomRecordingLabel(state) {
     default:
       return 'Запись'
   }
+}
+function parseReportTimeToSeconds(value) {
+  const parts = String(value || '')
+    .trim()
+    .split(':')
+    .map((part) => Number.parseInt(part, 10))
+
+  if (parts.length < 2 || parts.some((part) => Number.isNaN(part))) {
+    return null
+  }
+
+  return parts.reduce((total, part) => total * 60 + part, 0)
+}
+
+function chapterKey(chapterItem) {
+  return [chapterItem.start, chapterItem.time, chapterItem.end, chapterItem.title]
+    .filter(Boolean)
+    .join('-')
 }
 
 const authSessionKey = 'alemlive-auth-session-v2'
@@ -937,6 +956,7 @@ function ConferenceChatPanel({ onClose }) {
 function App() {
   const initialReportId = getInitialReportId()
   const manualDisconnectRef = useRef(false)
+  const recordingVideoRef = useRef(null)
   const [activeView, setActiveView] = useState(() => getInitialView(initialReportId))
   const [selectedReportId, setSelectedReportId] = useState(initialReportId || '')
   const [activeReportTab, setActiveReportTab] = useState('notes')
@@ -982,6 +1002,9 @@ function App() {
   const [reportFilters, setReportFilters] = useState(null)
   const [reportDetails, setReportDetails] = useState({})
   const [reportActions, setReportActions] = useState({})
+  const [personalNotes, setPersonalNotes] = useState({})
+  const [isPersonalNoteSaving, setIsPersonalNoteSaving] = useState(false)
+  const [showNotesChapterDescriptions, setShowNotesChapterDescriptions] = useState(true)
   const [reportsError, setReportsError] = useState('')
   const [reportsLoading, setReportsLoading] = useState(false)
   const [reportsRefreshKey, setReportsRefreshKey] = useState(0)
@@ -1692,6 +1715,21 @@ function App() {
     window.setTimeout(() => copilotInputRef.current?.focus(), 0)
     setReportActionMessage('Copilot открыт и готов отвечать по отчёту')
   }
+  function seekRecordingTo(time) {
+    const seconds = parseReportTimeToSeconds(time)
+    if (seconds === null) {
+      return
+    }
+
+    const player = recordingVideoRef.current
+    if (player) {
+      player.currentTime = seconds
+      player.play().catch(() => {})
+      setReportActionMessage(`Видео переведено к ${time}`)
+    } else if (selectedReportRecordingUrl) {
+      setReportActionMessage(`Откройте запись и перейдите к ${time}`)
+    }
+  }
 
   function collapseCopilotPanel() {
     setIsCopilotCollapsed(true)
@@ -2076,6 +2114,32 @@ function App() {
       setCopilotMessages((current) => [...current, { role: 'assistant', text: error.message }])
     } finally {
       setIsCopilotSending(false)
+    }
+  }
+
+  function askAboutMoment(question, time) {
+    if (time) {
+      seekRecordingTo(time)
+    }
+    focusCopilotPanel()
+    askReportCopilot(question)
+  }
+
+  async function savePersonalNote(reportId, note) {
+    if (!reportId) {
+      return
+    }
+
+    setIsPersonalNoteSaving(true)
+    try {
+      await apiRequest(`/api/reports/${reportId}/personal-note`, {
+        method: 'PUT',
+        body: JSON.stringify({ note }),
+      })
+    } catch {
+      // Keep the locally typed note even if saving failed; the next edit will retry.
+    } finally {
+      setIsPersonalNoteSaving(false)
     }
   }
 
@@ -2776,6 +2840,7 @@ function App() {
     const detailSpeakerStats = selectedReportDetail?.speakerStats || speakerStats
     const detailHighlights = selectedReportDetail?.highlights || highlights
     const detailChapters = selectedReportDetail?.chapters || chapters
+    const detailKeyQuestions = selectedReportDetail?.keyQuestions || []
 
     if (activeReportTab === 'notes') {
       return (
@@ -2828,12 +2893,117 @@ function App() {
                     <CheckCircle2 size={17} />
                   </span>
                   <div>
+                    {item.time && <time className="action-item-time">{item.time}</time>}
                     <h4>{item.task || item.title}</h4>
-                    <p>{item.owner} · {item.due}</p>
+                    <p>{[item.owner, item.due].filter(Boolean).join(' · ')}</p>
+                    <button
+                      type="button"
+                      className="ask-alem-link"
+                      onClick={() => askAboutMoment(`Расскажи подробнее про задачу: ${item.task || item.title}`, item.time)}
+                    >
+                      Спросить Alem
+                    </button>
                   </div>
                 </article>
               ))}
             </div>
+          </section>
+
+          {detailKeyQuestions.length > 0 && (
+            <section className="key-questions-panel">
+              <div className="section-kicker">
+                <HelpCircle size={18} />
+                Ключевые вопросы
+              </div>
+              <div className="key-questions-list">
+                {detailKeyQuestions.map((item, index) => (
+                  <article className="key-question-item" key={`${item.question}-${index}`}>
+                    <div className="key-question-head">
+                      {item.time && <time>{item.time}</time>}
+                      <p>{item.question}</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="ask-alem-link"
+                      onClick={() => askAboutMoment(item.question, item.time)}
+                    >
+                      Спросить Alem
+                    </button>
+                    {item.answer && (
+                      <div className="key-question-answer">
+                        <Sparkles size={14} />
+                        <span><strong>Предложенный ответ:</strong> {item.answer}</span>
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {detailChapters.length > 0 && (
+            <section className="notes-chapters-panel">
+              <div className="notes-chapters-header">
+                <div className="section-kicker">
+                  <ListChecks size={18} />
+                  Главы и темы
+                </div>
+                <label className="chapter-description-toggle">
+                  Описания
+                  <button
+                    type="button"
+                    className={showNotesChapterDescriptions ? 'toggle-switch on' : 'toggle-switch'}
+                    onClick={() => setShowNotesChapterDescriptions((current) => !current)}
+                    aria-pressed={showNotesChapterDescriptions}
+                    aria-label="Показать описания глав"
+                  >
+                    <span />
+                  </button>
+                </label>
+              </div>
+              <div className="notes-chapters-list">
+                {detailChapters.map((chapterItem) => (
+                  <article className="notes-chapter-item" key={chapterKey(chapterItem)}>
+                    <button
+                      type="button"
+                      className="notes-chapter-title"
+                      onClick={() => seekRecordingTo(chapterItem.start || chapterItem.time)}
+                    >
+                      <time>{chapterItem.time || chapterItem.start}</time>
+                      <h4>{chapterItem.title}</h4>
+                    </button>
+                    {showNotesChapterDescriptions && (chapterItem.text || chapterItem.points?.length > 0) && (
+                      <div className="notes-chapter-description">
+                        {chapterItem.text && <p>{chapterItem.text}</p>}
+                        {chapterItem.points?.length > 0 && (
+                          <ul>
+                            {chapterItem.points.map((point, pointIndex) => (
+                              <li key={pointIndex}>{point}</li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="personal-notes-panel">
+            <div className="section-kicker">
+              <Edit3 size={18} />
+              Ваши заметки
+            </div>
+            <span className="private-pill">Только вы можете это видеть</span>
+            <textarea
+              className="personal-note-input"
+              value={personalNotes[selectedReportId] || ''}
+              placeholder="Добавьте личную заметку об этой встрече..."
+              onChange={(event) => setPersonalNotes((current) => ({ ...current, [selectedReportId]: event.target.value }))}
+              onBlur={(event) => savePersonalNote(selectedReportId, event.target.value)}
+            />
+            {isPersonalNoteSaving && <span className="personal-note-status">Сохраняем...</span>}
           </section>
         </div>
       )
@@ -3012,6 +3182,7 @@ function App() {
               <div className={selectedReportMirrorCorrection ? 'report-video-frame mirror-corrected' : 'report-video-frame'}>
                 <video
                   className="report-video-player"
+                  ref={recordingVideoRef}
                   key={selectedReportRecordingUrl}
                   src={selectedReportRecordingUrl}
                   controls
