@@ -1,0 +1,167 @@
+{
+  "reports": [
+    {
+      "report": {
+        "id": "meeting-123123-20260622-114054",
+        "title": "Встреча - 123123",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "22.06.2026",
+        "time": "11:40",
+        "participants": 1,
+        "participantNames": "era",
+        "score": 66,
+        "engagementScore": 58,
+        "moodScore": 75,
+        "folder": "Сохранённые встречи",
+        "owner": "era",
+        "ownerInitial": "E",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:30",
+        "status": "ready",
+        "processingState": "ready",
+        "recordingStatus": "completed",
+        "transcriptionStatus": "completed",
+        "analysisStatus": "failed",
+        "createdAt": "2026-06-22T11:40:54Z"
+      },
+      "summary": [
+        {
+          "title": "Что важно знать после встречи",
+          "text": "Эра провела короткую тестовую запись в LiveKit 22 июня 2026 г. Транскрипция готова, однако автоматический AI‑анализ сейчас недоступен. Чтобы увидеть содержание, откройте вкладку транскрипта. После встречи команде следует вручную проверить полученный текст и подтвердить задачи."
+        }
+      ],
+      "actionItems": [
+        {
+          "id": "action-1",
+          "title": "Проверить транскрипт и подтвердить задачи вручную",
+          "task": "Проверить транскрипт и подтвердить задачи вручную",
+          "description": "",
+          "owner": "Team",
+          "due": "После встречи",
+          "priority": "Medium",
+          "status": "open"
+        }
+      ],
+      "transcriptLines": [
+        {
+          "id": "t1",
+          "time": "00:00",
+          "speaker": "era",
+          "text": "Раз, раз, раз. Тест, тест, тест. Запись с лайфхита. Ой, запись конференции, как он работает. Раз, раз, раз. По идее, все."
+        }
+      ],
+      "transcript": [
+        {
+          "id": "t1",
+          "time": "00:00",
+          "speaker": "era",
+          "text": "Раз, раз, раз. Тест, тест, тест. Запись с лайфхита. Ой, запись конференции, как он работает. Раз, раз, раз. По идее, все."
+        }
+      ],
+      "speakerStats": [
+        {
+          "name": "era",
+          "role": "Speaker",
+          "talkTime": 100,
+          "talkTimeText": "100%",
+          "talk": 100,
+          "sentiment": "Информационная встреча",
+          "pace": "",
+          "firstSeenTime": "00:00",
+          "score": 87,
+          "mood": 75,
+          "engagement": 100,
+          "micMutedPercent": 0,
+          "cameraOffPercent": 0
+        }
+      ],
+      "highlights": [
+        {
+          "time": "00:00",
+          "title": "Транскрипт готов",
+          "text": "Speech-to-text завершился. Для финальных выводов нужен повторный AI-анализ.",
+          "type": "Action"
+        }
+      ],
+      "chapters": [
+        {
+          "start": "00:00",
+          "end": "00:30",
+          "title": "Разговор",
+          "text": "Автоматически распознанная запись встречи."
+        }
+      ],
+      "trend": [
+        {
+          "time": "00:00",
+          "score": 67,
+          "engagement": 60,
+          "mood": 75
+        }
+      ],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Кратко перескажи встречу на русском."
+      ],
+      "recordingUrl": "/api/reports/meeting-123123-20260622-114054/recording/stream",
+      "recordingSourceUrl": "http://minio:9000/alemlive-recordings/alemlive/123123/20260622-114100.mp4",
+      "roomName": "123123",
+      "keywords": [
+        "тест",
+        "запись",
+        "лайфхита",
+        "конференции",
+        "работает",
+        "идее"
+      ]
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260622-113401",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "22.06.2026",
+        "time": "11:34",
+        "participants": 0,
+        "participantNames": "",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "era",
+        "ownerInitial": "E",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:35",
+        "status": "failed",
+        "processingState": "failed",
+        "recordingStatus": "failed",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-22T11:34:01Z"
+      },
+      "summary": [
+        {
+          "title": "Ошибка записи",
+          "text": "LiveKit Egress не смог подготовить файл записи. Встреча сохранена, но транскрипция и AI-анализ не запускались."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "roomName": "alem-meeting"
+    }
+  ]
+}

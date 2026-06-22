@@ -24,3 +24,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Flutter / mobile generated files
+mobile/.dart_tool/
+mobile/.flutter-plugins-dependencies
+mobile/android/local.properties
+mobile/ios/Flutter/
+mobile/ios/Runner/GeneratedPluginRegistrant.*
+mobile/ios/Flutter/ephemeral/
+
+# Local data artifacts
+backend/data/recordings/
