@@ -16,8 +16,8 @@ class AiApiClient {
     required String question,
   }) async {
     final response = await _dio.post<Map<String, dynamic>>(
-      '/api/reports/$reportId/ask-ai',
-      data: {'question': question},
+      '/api/reports/$reportId/chat',
+      data: {'message': question},
     );
     return response.data ?? <String, dynamic>{};
   }

@@ -4,6 +4,7 @@ import 'package:alem_live_mobile/core/widgets/loading_view.dart';
 import 'package:alem_live_mobile/features/reports/data/models/report_model.dart';
 import 'package:alem_live_mobile/features/reports/domain/entities/report.dart';
 import 'package:alem_live_mobile/features/reports/domain/usecases/reports_usecases.dart';
+import 'package:alem_live_mobile/features/reports/presentation/screens/reports_screen.dart';
 import 'package:alem_live_mobile/features/reports/presentation/widgets/action_items_tab.dart';
 import 'package:alem_live_mobile/features/reports/presentation/widgets/activity_tab.dart';
 import 'package:alem_live_mobile/features/reports/presentation/widgets/ai_question_tab.dart';
@@ -13,6 +14,7 @@ import 'package:alem_live_mobile/features/reports/presentation/widgets/report_vi
 import 'package:alem_live_mobile/features/reports/presentation/widgets/transcript_tab.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
 class ReportNavigationArgs {
@@ -52,7 +54,14 @@ class _ReportDetailScreenState extends ConsumerState<ReportDetailScreen> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFF),
-      appBar: AppBar(title: const Text('AI-отчет')),
+      appBar: AppBar(
+        leading: IconButton(
+          tooltip: 'К списку отчетов',
+          onPressed: () => context.go(ReportsScreen.routePath),
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        title: const Text('AI-отчет'),
+      ),
       body: reportAsync.when(
         loading: () => const LoadingView(message: 'Загружаем отчет...'),
         error: (error, _) => ErrorView(

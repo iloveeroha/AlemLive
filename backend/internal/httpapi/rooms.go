@@ -396,7 +396,7 @@ func (s *Server) leaveRoomState(roomID string, participantID string) (roomStateS
 
 	ownerChanged := false
 	if room.OwnerID == participantID {
-		room.OwnerID = firstParticipantID(room.Participants)
+		room.OwnerID = firstJoinedParticipantID(room.Participants)
 		ownerChanged = room.OwnerID != ""
 	}
 
@@ -675,16 +675,22 @@ func (participant *roomParticipantState) clone() *roomParticipantState {
 	return &copy
 }
 
-func firstParticipantID(participants map[string]*roomParticipantState) string {
-	ids := make([]string, 0, len(participants))
-	for id := range participants {
-		ids = append(ids, id)
+func firstJoinedParticipantID(participants map[string]*roomParticipantState) string {
+	var first *roomParticipantState
+	for _, participant := range participants {
+		if participant == nil {
+			continue
+		}
+		if first == nil ||
+			participant.JoinedAt.Before(first.JoinedAt) ||
+			(participant.JoinedAt.Equal(first.JoinedAt) && participant.ID < first.ID) {
+			first = participant
+		}
 	}
-	sort.Strings(ids)
-	if len(ids) == 0 {
+	if first == nil {
 		return ""
 	}
-	return ids[0]
+	return first.ID
 }
 
 func roomIDFromName(value string) string {

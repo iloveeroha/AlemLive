@@ -572,6 +572,7 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 	s.generatedReportStore[detail.Report.ID] = detail
 	if detail.RoomName != "" {
 		s.latestRoomReports[detail.RoomName] = detail.Report.ID
+		s.latestRoomReports[roomIDFromName(detail.RoomName)] = detail.Report.ID
 	}
 	s.saveReportsLocked()
 }

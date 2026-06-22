@@ -11,6 +11,7 @@ import (
 	"github.com/iloveeroha/AlemLive/backend/internal/config"
 	livekitservice "github.com/iloveeroha/AlemLive/backend/internal/livekit"
 	"github.com/iloveeroha/AlemLive/backend/internal/llm"
+	lkproto "github.com/livekit/protocol/livekit"
 )
 
 func TestEgressRecordingURLsUseInternalDownloadAndPublicPlayback(t *testing.T) {
@@ -163,4 +164,74 @@ func TestDownloadRecordingWithRetryWaitsForObject(t *testing.T) {
 	if fileName != "recording.mp4" || contentType != "video/mp4" || string(data) != "video bytes" {
 		t.Fatalf("unexpected recording download: %s %s %q", fileName, contentType, string(data))
 	}
+}
+
+func TestRoomRecordingStatusMarksAbortedEgressReportFailed(t *testing.T) {
+	now := time.Date(2026, 6, 19, 7, 0, 0, 0, time.UTC)
+	egress := livekitservice.NewEgressManager(livekitservice.EgressConfig{
+		Enabled:   true,
+		ServerURL: "ws://livekit:7880",
+		APIKey:    "devkey",
+		APISecret: "devsecret",
+		S3: livekitservice.S3Config{
+			Bucket: "alemlive-recordings",
+			Region: "us-east-1",
+		},
+	})
+	egress.UpdateFromInfo(&lkproto.EgressInfo{
+		RoomName: "Failed Room",
+		EgressId: "egress-id",
+		Status:   lkproto.EgressStatus_EGRESS_ABORTED,
+	})
+
+	server := &Server{
+		cfg:                  config.Config{TokenTTL: time.Hour},
+		clock:                func() time.Time { return now },
+		egress:               egress,
+		generatedReportStore: map[string]reportDetailResponse{},
+		deletedReportIDs:     map[string]struct{}{},
+		activeMeetings:       map[string]meetingSession{},
+		latestRoomReports:    map[string]string{},
+	}
+	conference := server.recordConferenceEvent("Failed Room", "Owner", "created", now)
+	if conference.ReportID == "" {
+		t.Fatal("expected conference report to be created")
+	}
+
+	payload := server.roomRecordingStatusPayload(roomStateSnapshot{
+		ID:             roomIDFromName("Failed Room"),
+		Name:           "Failed Room",
+		RecordingState: roomRecordingRecording,
+		ReportID:       conference.ReportID,
+	})
+
+	if payload["active"] != false {
+		t.Fatalf("expected aborted egress to be inactive, got %#v", payload["active"])
+	}
+	if payload["state"] != roomRecordingError {
+		t.Fatalf("expected room recording error, got %#v", payload["state"])
+	}
+
+	detail, ok := server.reportDetailByID(conference.ReportID)
+	if !ok {
+		t.Fatal("expected report detail")
+	}
+	if detail.Report.Status != "error" ||
+		detail.Report.ProcessingState != "failed" ||
+		detail.Report.RecordingStatus != "failed" {
+		t.Fatalf("expected failed report status, got %#v", detail.Report)
+	}
+}
+
+func TestReportRoomLookupKeysIncludeMeetingReportSlug(t *testing.T) {
+	keys := reportRoomLookupKeys(reportDetailResponse{
+		Report: reportRow{ID: "meeting-smokeroom2-20260619-064249"},
+	})
+
+	for _, key := range keys {
+		if key == "smokeroom2" {
+			return
+		}
+	}
+	t.Fatalf("expected room slug key, got %#v", keys)
 }

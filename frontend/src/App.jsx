@@ -48,7 +48,7 @@ import {
   Video,
   Zap,
 } from 'lucide-react'
-import { LiveKitRoom, VideoConference, useChat, useLocalParticipant, useParticipants } from '@livekit/components-react'
+import { LiveKitRoom, VideoConference, useChat, useParticipants } from '@livekit/components-react'
 import '@livekit/components-styles'
 import { ensureCryptoRandomUUID } from './crypto-polyfill.js'
 import './App.css'
@@ -855,79 +855,6 @@ function shouldWarnAboutMediaSecurity() {
   return window.location.protocol !== 'https:' && !['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
 }
 
-function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, onDeviceError }) {
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, lastMicrophoneError, lastCameraError } = useLocalParticipant()
-  const [pendingDevice, setPendingDevice] = useState('')
-
-  useEffect(() => {
-    onDeviceStateChange('mic', isMicrophoneEnabled)
-  }, [isMicrophoneEnabled, onDeviceStateChange])
-
-  useEffect(() => {
-    onDeviceStateChange('camera', isCameraEnabled)
-  }, [isCameraEnabled, onDeviceStateChange])
-
-  useEffect(() => {
-    if (lastMicrophoneError) {
-      onDeviceError('mic', lastMicrophoneError)
-    }
-  }, [lastMicrophoneError, onDeviceError])
-
-  useEffect(() => {
-    if (lastCameraError) {
-      onDeviceError('camera', lastCameraError)
-    }
-  }, [lastCameraError, onDeviceError])
-
-  async function toggleLiveKitDevice(name) {
-    if (!localParticipant || pendingDevice) {
-      return
-    }
-
-    const nextEnabled = name === 'mic' ? !isMicrophoneEnabled : !isCameraEnabled
-
-    try {
-      setPendingDevice(name)
-      if (name === 'mic') {
-        await localParticipant.setMicrophoneEnabled(nextEnabled)
-      } else {
-        await localParticipant.setCameraEnabled(nextEnabled)
-      }
-
-      onDevicePreferenceChange(name, nextEnabled)
-    } catch (error) {
-      onDeviceError(name, error)
-    } finally {
-      setPendingDevice('')
-    }
-  }
-
-  return (
-    <>
-      <button
-        className={isMicrophoneEnabled ? 'icon-button active' : 'icon-button'}
-        type="button"
-        onClick={() => toggleLiveKitDevice('mic')}
-        disabled={pendingDevice === 'mic'}
-        aria-label={isMicrophoneEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
-        aria-pressed={isMicrophoneEnabled}
-      >
-        {isMicrophoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
-      </button>
-      <button
-        className={isCameraEnabled ? 'icon-button active' : 'icon-button'}
-        type="button"
-        onClick={() => toggleLiveKitDevice('camera')}
-        disabled={pendingDevice === 'camera'}
-        aria-label={isCameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
-        aria-pressed={isCameraEnabled}
-      >
-        {isCameraEnabled ? <Video size={18} /> : <CameraOff size={18} />}
-      </button>
-    </>
-  )
-}
-
 function ConferenceChatPanel({ onClose }) {
   const { chatMessages, send, isSending } = useChat()
   const [message, setMessage] = useState('')
@@ -1437,12 +1364,25 @@ function App() {
       return undefined
     }
 
-    refreshRoomRecordingStatus(meetingMeta.room)
+    let isMounted = true
+    const roomName = meetingMeta.room
+
+    async function refresh() {
+      const payload = await apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/recording/status`).catch(() => null)
+      if (isMounted && payload) {
+        setRoomRecordingStatus(payload)
+      }
+    }
+
+    refresh()
     const timer = window.setInterval(() => {
-      refreshRoomRecordingStatus(meetingMeta.room)
+      refresh()
     }, 5000)
 
-    return () => window.clearInterval(timer)
+    return () => {
+      isMounted = false
+      window.clearInterval(timer)
+    }
   }, [isConnected, meetingMeta.room])
 
   function updateField(event) {
@@ -1484,20 +1424,6 @@ function App() {
 
   function toggleDevice(name) {
     updateDevicePreference(name, !devices[name])
-  }
-
-  function handleLiveKitDeviceStateChange(name, enabled) {
-    updateDevicePreference(name, enabled, { notifyBackend: false })
-  }
-
-  function handleLiveKitDevicePreferenceChange(name, enabled) {
-    setMeetingNotice('')
-    updateDevicePreference(name, enabled)
-  }
-
-  function handleLiveKitDeviceError(_name, error) {
-    setMeetingNotice(getMediaErrorMessage(error))
-    updateDevicePreference(_name, false, { notifyBackend: false })
   }
 
   function handleLiveKitError(error) {
@@ -1579,18 +1505,6 @@ function App() {
         event,
       }),
     }).catch(() => null)
-  }
-
-  async function refreshRoomRecordingStatus(roomName = meetingMeta.room) {
-    if (!roomName) {
-      return null
-    }
-
-    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/recording/status`).catch(() => null)
-    if (payload) {
-      setRoomRecordingStatus(payload)
-    }
-    return payload
   }
 
   async function toggleRoomRecording() {
@@ -1685,31 +1599,6 @@ function App() {
   function joinMeeting(event) {
     event.preventDefault()
     startMeeting(entryMode)
-  }
-
-  async function leaveMeeting() {
-    manualDisconnectRef.current = true
-    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, {
-      method: 'POST',
-      body: JSON.stringify({
-        userName: meetingMeta.name,
-        event: 'left',
-      }),
-    }).catch(() => null)
-    if (payload?.reportId) {
-      setSelectedReportId(payload.reportId)
-      setReportsRefreshKey((current) => current + 1)
-      apiRequest(`/api/reports/${payload.reportId}`).then((detail) => {
-        if (detail?.report) {
-          setReportDetails((current) => ({ ...current, [payload.reportId]: detail }))
-          setReports((current) => [detail.report, ...current.filter((report) => report.id !== detail.report.id)])
-        }
-      }).catch(() => null)
-      setWorkspaceNotice(`Отчет встречи сохранен: ${payload.reportId}`)
-    }
-    setMeeting(null)
-    setIsMeetingMaximized(false)
-    setMeetingNotice('')
   }
 
   async function copyRoomName() {

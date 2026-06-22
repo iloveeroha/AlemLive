@@ -62,13 +62,59 @@ func (s *Server) loadReports() {
 	})
 	for _, row := range s.generatedReports {
 		detail := s.generatedReportStore[row.ID]
-		if detail.RoomName != "" && s.latestRoomReports[detail.RoomName] == "" {
-			s.latestRoomReports[detail.RoomName] = detail.Report.ID
+		for _, roomKey := range reportRoomLookupKeys(detail) {
+			if s.latestRoomReports[roomKey] == "" {
+				s.latestRoomReports[roomKey] = detail.Report.ID
+			}
 		}
 	}
 	if changed {
 		s.saveReportsLocked()
 	}
+}
+
+func reportRoomLookupKeys(detail reportDetailResponse) []string {
+	seen := map[string]struct{}{}
+	keys := []string{}
+	add := func(value string) {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			return
+		}
+		if _, ok := seen[value]; ok {
+			return
+		}
+		seen[value] = struct{}{}
+		keys = append(keys, value)
+	}
+
+	add(detail.RoomName)
+	add(roomIDFromName(detail.RoomName))
+	if roomFromID := roomNameFromMeetingReportID(detail.Report.ID); roomFromID != "" {
+		add(roomFromID)
+	}
+	return keys
+}
+
+func roomNameFromMeetingReportID(reportID string) string {
+	const prefix = "meeting-"
+	if !strings.HasPrefix(reportID, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(reportID, prefix)
+	parts := strings.Split(rest, "-")
+	if len(parts) < 3 {
+		return ""
+	}
+	datePart := parts[len(parts)-2]
+	timePart := parts[len(parts)-1]
+	if len(datePart) != 8 || len(timePart) != 6 {
+		return ""
+	}
+	if _, err := time.Parse("20060102-150405", datePart+"-"+timePart); err != nil {
+		return ""
+	}
+	return strings.Join(parts[:len(parts)-2], "-")
 }
 
 func normalizeLoadedReport(detail *reportDetailResponse) bool {

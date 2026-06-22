@@ -156,6 +156,14 @@ func (m *EgressManager) StopRoom(ctx context.Context, roomName string) (EgressSt
 
 	info, err := m.client.StopEgress(ctx, &lkproto.StopEgressRequest{EgressId: state.EgressID})
 	if err != nil {
+		failed := state
+		failed.Status = lkproto.EgressStatus_EGRESS_FAILED.String()
+		failed.Error = err.Error()
+		failed.EndedAt = time.Now().UTC().Format(time.RFC3339)
+		m.mu.Lock()
+		delete(m.active, roomName)
+		m.history[roomName] = failed
+		m.mu.Unlock()
 		return EgressState{}, err
 	}
 

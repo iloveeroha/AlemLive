@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -111,6 +112,121 @@ func TestKeycloakEnabledRequiresBearerToken(t *testing.T) {
 	}
 }
 
+func TestAuthRegisterCreatesKeycloakUser(t *testing.T) {
+	keycloak := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/realms/master/protocol/openid-connect/token":
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("parse admin token form: %v", err)
+			}
+			if r.FormValue("client_id") != "admin-cli" || r.FormValue("username") != "admin" || r.FormValue("password") != "admin" {
+				t.Fatalf("unexpected admin token form: %#v", r.Form)
+			}
+			writeJSON(w, http.StatusOK, map[string]any{"access_token": "admin-token"})
+		case "/admin/realms/alemlive/users":
+			if r.Method != http.MethodPost {
+				t.Fatalf("unexpected admin method: %s", r.Method)
+			}
+			if got := r.Header.Get("Authorization"); got != "Bearer admin-token" {
+				t.Fatalf("unexpected admin authorization: %s", got)
+			}
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode created user: %v", err)
+			}
+			if payload["username"] != "new-user" || payload["enabled"] != true {
+				t.Fatalf("unexpected created user payload: %#v", payload)
+			}
+			w.WriteHeader(http.StatusCreated)
+		case "/realms/alemlive/protocol/openid-connect/token":
+			if err := r.ParseForm(); err != nil {
+				t.Fatalf("parse login form: %v", err)
+			}
+			if r.FormValue("client_id") != "alemlive" || r.FormValue("username") != "new-user" || r.FormValue("password") != "123456" {
+				t.Fatalf("unexpected login form: %#v", r.Form)
+			}
+			writeJSON(w, http.StatusOK, map[string]any{
+				"access_token": testJWT(map[string]any{
+					"sub":                "keycloak-user-id",
+					"preferred_username": "new-user",
+					"name":               "New User",
+					"email":              "new-user@example.com",
+				}),
+				"expires_in": 300,
+			})
+		default:
+			t.Fatalf("unexpected keycloak path: %s", r.URL.Path)
+		}
+	}))
+	defer keycloak.Close()
+
+	handler := NewServer(config.Config{
+		TokenTTL:              time.Hour,
+		KeycloakIssuerURL:     keycloak.URL + "/realms/alemlive",
+		KeycloakTokenURL:      keycloak.URL + "/realms/alemlive/protocol/openid-connect/token",
+		KeycloakClientID:      "alemlive",
+		KeycloakAdminBaseURL:  keycloak.URL,
+		KeycloakAdminRealm:    "alemlive",
+		KeycloakAdminUsername: "admin",
+		KeycloakAdminPassword: "admin",
+		LocalAuthEnabled:      false,
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/register", bytes.NewBufferString(`{"username":"new-user","password":"123456"}`))
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode register response: %v", err)
+	}
+	user, ok := payload["user"].(map[string]any)
+	if !ok || user["username"] != "new-user" || payload["accessToken"] == "" {
+		t.Fatalf("unexpected register response: %#v", payload)
+	}
+}
+
+func TestAuthLoginDoesNotFallbackToLocalTokenWhenLocalAuthDisabled(t *testing.T) {
+	keycloak := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/realms/alemlive/protocol/openid-connect/token" {
+			t.Fatalf("unexpected keycloak path: %s", r.URL.Path)
+		}
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_grant"})
+	}))
+	defer keycloak.Close()
+
+	handler := NewServer(config.Config{
+		TokenTTL:          time.Hour,
+		KeycloakIssuerURL: keycloak.URL + "/realms/alemlive",
+		KeycloakTokenURL:  keycloak.URL + "/realms/alemlive/protocol/openid-connect/token",
+		KeycloakClientID:  "alemlive",
+		LocalAuthEnabled:  false,
+	})
+
+	response := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/api/auth/login", bytes.NewBufferString(`{"username":"ghost","password":"123456"}`))
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("expected status 401, got %d: %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "local.") {
+		t.Fatalf("login unexpectedly returned a local token: %s", response.Body.String())
+	}
+}
+
+func testJWT(claims map[string]any) string {
+	header := map[string]any{"alg": "RS256", "typ": "JWT", "kid": "test"}
+	headerJSON, _ := json.Marshal(header)
+	claimsJSON, _ := json.Marshal(claims)
+	return base64.RawURLEncoding.EncodeToString(headerJSON) + "." +
+		base64.RawURLEncoding.EncodeToString(claimsJSON) + ".signature"
+}
+
 func TestRoomActions(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
 
@@ -213,6 +329,60 @@ func TestMobileRoomFlowEndpoints(t *testing.T) {
 	defer statusResponse.Body.Close()
 	if statusResponse.StatusCode != http.StatusOK {
 		t.Fatalf("expected recording status 200, got %d", statusResponse.StatusCode)
+	}
+}
+
+func TestRoomOwnerTransfersByJoinOrder(t *testing.T) {
+	handler := NewServer(config.Config{TokenTTL: time.Hour})
+
+	createResponse := httptest.NewRecorder()
+	createBody := bytes.NewBufferString(`{"roomName":"Owner Order","userId":"zz-owner","userName":"Owner","initialMicEnabled":true,"initialCameraEnabled":true}`)
+	handler.ServeHTTP(createResponse, httptest.NewRequest(http.MethodPost, "/api/rooms/create", createBody))
+	if createResponse.Code != http.StatusOK {
+		t.Fatalf("expected create status 200, got %d: %s", createResponse.Code, createResponse.Body.String())
+	}
+
+	var created struct {
+		RoomID string `json:"roomId"`
+	}
+	if err := json.NewDecoder(createResponse.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+	if created.RoomID == "" {
+		t.Fatalf("expected room id in create response")
+	}
+
+	firstJoinBody := bytes.NewBufferString(`{"roomName":"Owner Order","userId":"mm-next","userName":"Next Owner"}`)
+	firstJoinResponse := httptest.NewRecorder()
+	handler.ServeHTTP(firstJoinResponse, httptest.NewRequest(http.MethodPost, "/api/rooms/join", firstJoinBody))
+	if firstJoinResponse.Code != http.StatusOK {
+		t.Fatalf("expected first join status 200, got %d: %s", firstJoinResponse.Code, firstJoinResponse.Body.String())
+	}
+
+	time.Sleep(time.Millisecond)
+
+	secondJoinBody := bytes.NewBufferString(`{"roomName":"Owner Order","userId":"aa-later","userName":"Alphabetically First"}`)
+	secondJoinResponse := httptest.NewRecorder()
+	handler.ServeHTTP(secondJoinResponse, httptest.NewRequest(http.MethodPost, "/api/rooms/join", secondJoinBody))
+	if secondJoinResponse.Code != http.StatusOK {
+		t.Fatalf("expected second join status 200, got %d: %s", secondJoinResponse.Code, secondJoinResponse.Body.String())
+	}
+
+	leaveResponse := httptest.NewRecorder()
+	leaveRequest := httptest.NewRequest(http.MethodPost, "/api/rooms/"+created.RoomID+"/leave?userId=zz-owner", nil)
+	handler.ServeHTTP(leaveResponse, leaveRequest)
+	if leaveResponse.Code != http.StatusOK {
+		t.Fatalf("expected leave status 200, got %d: %s", leaveResponse.Code, leaveResponse.Body.String())
+	}
+
+	var left struct {
+		OwnerID string `json:"ownerId"`
+	}
+	if err := json.NewDecoder(leaveResponse.Body).Decode(&left); err != nil {
+		t.Fatalf("decode leave response: %v", err)
+	}
+	if left.OwnerID != "mm-next" {
+		t.Fatalf("expected owner to transfer by join order to mm-next, got %q", left.OwnerID)
 	}
 }
 

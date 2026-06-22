@@ -66,6 +66,11 @@ type authCredentialsRequest struct {
 	Password string `json:"password"`
 }
 
+type keycloakTokenPayload struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+}
+
 type localAuthClaims struct {
 	Subject           string `json:"sub"`
 	Name              string `json:"name"`
@@ -161,6 +166,17 @@ func (s *Server) authRegister(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if s.authEnabled() {
+		response, err := s.registerWithKeycloak(r, credentials)
+		if err == nil {
+			writeJSON(w, http.StatusOK, response)
+			return
+		}
+		if !s.cfg.LocalAuthEnabled {
+			writeError(w, keycloakErrorStatus(err), keycloakErrorMessage(err, "Could not register user"))
+			return
+		}
+	}
 	if !s.cfg.LocalAuthEnabled {
 		writeError(w, http.StatusServiceUnavailable, "Registration is handled by the identity provider")
 		return
@@ -172,6 +188,31 @@ func (s *Server) authRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, response)
+}
+
+type keycloakHTTPError struct {
+	status  int
+	message string
+}
+
+func (err keycloakHTTPError) Error() string {
+	return err.message
+}
+
+func keycloakErrorStatus(err error) int {
+	var keycloakErr keycloakHTTPError
+	if errors.As(err, &keycloakErr) && keycloakErr.status > 0 {
+		return keycloakErr.status
+	}
+	return http.StatusBadGateway
+}
+
+func keycloakErrorMessage(err error, fallback string) string {
+	var keycloakErr keycloakHTTPError
+	if errors.As(err, &keycloakErr) && strings.TrimSpace(keycloakErr.message) != "" {
+		return keycloakErr.message
+	}
+	return fallback
 }
 
 func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
@@ -258,6 +299,169 @@ func (s *Server) loginWithKeycloak(r *http.Request, credentials authCredentialsR
 		"expiresIn":   tokenPayload["expires_in"],
 		"user":        authUserPayload(user),
 	}, nil
+}
+
+func (s *Server) registerWithKeycloak(r *http.Request, credentials authCredentialsRequest) (map[string]any, error) {
+	adminToken, err := s.keycloakAdminAccessToken(r.Context())
+	if err != nil {
+		return nil, err
+	}
+
+	adminBaseURL := s.keycloakAdminBaseURL()
+	realm := firstNonEmpty(s.cfg.KeycloakAdminRealm, realmNameFromURL(s.cfg.KeycloakIssuerURL))
+	if adminBaseURL == "" || realm == "" {
+		return nil, errors.New("keycloak admin endpoint is not configured")
+	}
+
+	username := strings.TrimSpace(credentials.Username)
+	body, err := json.Marshal(map[string]any{
+		"username":        username,
+		"email":           keycloakUserEmail(username),
+		"emailVerified":   true,
+		"firstName":       username,
+		"lastName":        "AlemLive",
+		"enabled":         true,
+		"requiredActions": []string{},
+		"credentials": []map[string]any{
+			{
+				"type":      "password",
+				"value":     credentials.Password,
+				"temporary": false,
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	usersURL := adminBaseURL + "/admin/realms/" + url.PathEscape(realm) + "/users"
+	request, err := http.NewRequestWithContext(r.Context(), http.MethodPost, usersURL, strings.NewReader(string(body)))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+adminToken)
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode == http.StatusConflict {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+		return nil, keycloakHTTPError{status: http.StatusConflict, message: "User already exists"}
+	}
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+		return nil, keycloakHTTPError{status: http.StatusBadGateway, message: "Could not create Keycloak user"}
+	}
+
+	return s.loginWithKeycloak(r, credentials)
+}
+
+func keycloakUserEmail(username string) string {
+	username = strings.TrimSpace(strings.ToLower(username))
+	if strings.Contains(username, "@") {
+		return username
+	}
+	var b strings.Builder
+	for _, r := range username {
+		switch {
+		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+			b.WriteRune(r)
+		case r == '.', r == '_', r == '-':
+			b.WriteRune(r)
+		default:
+			b.WriteRune('-')
+		}
+	}
+	local := strings.Trim(b.String(), ".-_")
+	if local == "" {
+		local = "user"
+	}
+	return local + "@alemlive.local"
+}
+
+func (s *Server) keycloakAdminAccessToken(ctx context.Context) (string, error) {
+	adminBaseURL := s.keycloakAdminBaseURL()
+	username := strings.TrimSpace(s.cfg.KeycloakAdminUsername)
+	password := strings.TrimSpace(s.cfg.KeycloakAdminPassword)
+	if adminBaseURL == "" || username == "" || password == "" {
+		return "", errors.New("keycloak admin credentials are not configured")
+	}
+
+	form := url.Values{}
+	form.Set("grant_type", "password")
+	form.Set("client_id", "admin-cli")
+	form.Set("username", username)
+	form.Set("password", password)
+
+	tokenURL := adminBaseURL + "/realms/master/protocol/openid-connect/token"
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return "", err
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, 1<<20))
+		return "", errors.New("keycloak admin login failed")
+	}
+
+	var token keycloakTokenPayload
+	if err := json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&token); err != nil {
+		return "", err
+	}
+	if token.AccessToken == "" {
+		return "", errors.New("keycloak admin token response did not include access token")
+	}
+	return token.AccessToken, nil
+}
+
+func (s *Server) keycloakAdminBaseURL() string {
+	if s.cfg.KeycloakAdminBaseURL != "" {
+		return s.cfg.KeycloakAdminBaseURL
+	}
+	if baseURL := baseURLBeforeRealm(s.cfg.KeycloakTokenURL); baseURL != "" {
+		return baseURL
+	}
+	return baseURLBeforeRealm(s.cfg.KeycloakIssuerURL)
+}
+
+func baseURLBeforeRealm(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	index := strings.Index(parsed.Path, "/realms/")
+	if index < 0 {
+		return ""
+	}
+	parsed.Path = strings.TrimRight(parsed.Path[:index], "/")
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return strings.TrimRight(parsed.String(), "/")
+}
+
+func realmNameFromURL(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return ""
+	}
+	parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+	for index, part := range parts {
+		if part == "realms" && index+1 < len(parts) {
+			return parts[index+1]
+		}
+	}
+	return ""
 }
 
 func (s *Server) localAuthResponse(username string) (map[string]any, error) {

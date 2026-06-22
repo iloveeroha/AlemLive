@@ -31,7 +31,7 @@ func (s *Server) recordingStatus(roomName string) map[string]any {
 		return response
 	}
 	if state, ok := s.egress.Status(roomName); ok {
-		response["active"] = state.EgressID != "" && !strings.Contains(strings.ToLower(state.Status), "complete")
+		response["active"] = state.EgressID != "" && isLiveKitRecordingActive(state.Status)
 		response["status"] = state.Status
 		response["recording"] = state
 		return response
@@ -111,10 +111,16 @@ func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName,
 			if errors.Is(err, livekitservice.ErrEgressNotConfigured) {
 				recordingState = roomRecordingIdle
 			}
-			s.setRoomRecordingState(snapshot.ID, recordingState, reportID)
 			if recordingState == roomRecordingError {
+				if id := s.markRoomReportRecordingError(
+					liveKitRoomName,
+					"LiveKit Egress recording failed",
+				); id != "" {
+					reportID = id
+				}
 				s.setConferenceReportPipelineState(reportID, liveKitRoomName, roomRecordingError)
 			}
+			s.setRoomRecordingState(snapshot.ID, recordingState, reportID)
 			payload := map[string]any{
 				"roomId":     snapshot.ID,
 				"roomName":   liveKitRoomName,
@@ -150,23 +156,47 @@ func (s *Server) roomRecording(w http.ResponseWriter, r *http.Request, roomName,
 func (s *Server) roomRecordingStatusPayload(snapshot roomStateSnapshot) map[string]any {
 	state := firstNonEmpty(snapshot.RecordingState, roomRecordingIdle)
 	status := s.recordingStatus(firstNonEmpty(snapshot.Name, snapshot.ID))
+	reportID := snapshot.ReportID
 	if egressState := normalizeRoomRecordingState(status); egressState != "" {
 		if state == roomRecordingIdle || egressState != roomRecordingIdle {
 			state = egressState
 		}
+		if egressState == roomRecordingError {
+			if id := s.markRoomReportRecordingError(
+				firstNonEmpty(snapshot.Name, snapshot.ID),
+				"LiveKit Egress recording failed",
+			); id != "" {
+				reportID = id
+			}
+		}
 	}
-	s.setRoomRecordingState(snapshot.ID, state, snapshot.ReportID)
+	s.setRoomRecordingState(snapshot.ID, state, reportID)
 
 	return map[string]any{
 		"roomId":     snapshot.ID,
 		"roomName":   snapshot.Name,
 		"status":     state,
 		"state":      state,
-		"reportId":   snapshot.ReportID,
+		"reportId":   reportID,
 		"configured": status["configured"],
 		"active":     status["active"],
 		"recording":  status["recording"],
 	}
+}
+
+func isLiveKitRecordingActive(status string) bool {
+	status = strings.ToLower(strings.TrimSpace(status))
+	if status == "" || status == "idle" || status == "disabled" {
+		return false
+	}
+	if strings.Contains(status, "complete") ||
+		strings.Contains(status, "fail") ||
+		strings.Contains(status, "abort") ||
+		strings.Contains(status, "error") ||
+		strings.Contains(status, "limit") {
+		return false
+	}
+	return true
 }
 
 func normalizeRoomRecordingState(payload map[string]any) string {
@@ -482,6 +512,54 @@ func reportStreamURL(reportID string) string {
 		return ""
 	}
 	return "/api/reports/" + reportID + "/recording/stream"
+}
+
+func (s *Server) markRoomReportRecordingError(roomName, message string) string {
+	roomName = strings.TrimSpace(roomName)
+	if roomName == "" {
+		return ""
+	}
+	message = firstNonEmpty(strings.TrimSpace(message), "LiveKit Egress recording failed")
+
+	s.reportsMu.Lock()
+	defer s.reportsMu.Unlock()
+
+	reportID := s.latestRoomReports[roomName]
+	if reportID == "" {
+		reportID = s.latestRoomReports[roomIDFromName(roomName)]
+	}
+	if reportID == "" {
+		return ""
+	}
+	detail, ok := s.generatedReportStore[reportID]
+	if !ok {
+		return ""
+	}
+
+	detail.Report.Status = "error"
+	detail.Report.ProcessingState = "failed"
+	detail.Report.RecordingStatus = "failed"
+	if detail.Report.TranscriptionStatus == "" || detail.Report.TranscriptionStatus == "pending" {
+		detail.Report.TranscriptionStatus = "not_started"
+	}
+	if detail.Report.AnalysisStatus == "" || detail.Report.AnalysisStatus == "pending" {
+		detail.Report.AnalysisStatus = "not_started"
+	}
+	detail.Summary = []summarySection{
+		{Title: "Recording failed", Text: message},
+	}
+	detail.RoomName = roomName
+	detail.Transcript = detail.TranscriptLines
+
+	s.generatedReportStore[reportID] = detail
+	for i, row := range s.generatedReports {
+		if row.ID == reportID {
+			s.generatedReports[i] = detail.Report
+			break
+		}
+	}
+	s.saveReportsLocked()
+	return reportID
 }
 
 func (s *Server) publishRoomRecordingReady(roomName, reportID string) {
