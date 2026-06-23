@@ -36,4 +36,8 @@ class ReportsApiClient {
     );
     return response.data ?? <String, dynamic>{};
   }
+
+  String videoPath({required String reportId}) {
+    return '/api/reports/$reportId/recording/stream';
+  }
 }

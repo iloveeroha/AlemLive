@@ -74,4 +74,9 @@ class ReportsRepositoryImpl implements ReportsRepository {
       return (await detail(reportId: reportId)).status;
     }
   }
+
+  @override
+  String videoPath({required String reportId}) {
+    return apiClient.videoPath(reportId: reportId);
+  }
 }

@@ -125,6 +125,7 @@ class LiveKitRoomController extends ChangeNotifier {
         await _ensurePermission(Permission.microphone, 'микрофон');
       }
       await _localParticipant?.setMicrophoneEnabled(nextValue);
+      await _publishLocalMicState(nextValue);
       _syncParticipants();
     } catch (error) {
       _showActionError(error);
@@ -144,6 +145,7 @@ class LiveKitRoomController extends ChangeNotifier {
         await _ensurePermission(Permission.camera, 'камеру');
       }
       await _localParticipant?.setCameraEnabled(nextValue);
+      await _publishLocalCameraState(nextValue);
       _syncParticipants();
     } catch (error) {
       _showActionError(error);
@@ -166,6 +168,7 @@ class LiveKitRoomController extends ChangeNotifier {
 
     try {
       await _localParticipant?.setScreenShareEnabled(nextValue);
+      await _publishLocalScreenShareState(nextValue);
       _setState(
         state.copyWith(
           screenSharing: nextValue,
@@ -230,6 +233,60 @@ class LiveKitRoomController extends ChangeNotifier {
       }
     } catch (error) {
       _showActionError(error);
+    }
+  }
+
+  Future<void> _publishLocalMicState(bool enabled) async {
+    final participantId = currentUserId;
+    if (participantId == null || participantId.trim().isEmpty) {
+      return;
+    }
+    if (enabled) {
+      await useCases.unmuteParticipant(
+        roomId: args.roomId,
+        participantId: participantId,
+      );
+    } else {
+      await useCases.muteParticipant(
+        roomId: args.roomId,
+        participantId: participantId,
+      );
+    }
+  }
+
+  Future<void> _publishLocalCameraState(bool enabled) async {
+    final participantId = currentUserId;
+    if (participantId == null || participantId.trim().isEmpty) {
+      return;
+    }
+    if (enabled) {
+      await useCases.cameraOnRequest(
+        roomId: args.roomId,
+        participantId: participantId,
+      );
+    } else {
+      await useCases.cameraOff(
+        roomId: args.roomId,
+        participantId: participantId,
+      );
+    }
+  }
+
+  Future<void> _publishLocalScreenShareState(bool enabled) async {
+    final participantId = currentUserId;
+    if (participantId == null || participantId.trim().isEmpty) {
+      return;
+    }
+    if (enabled) {
+      await useCases.screenShareStarted(
+        roomId: args.roomId,
+        participantId: participantId,
+      );
+    } else {
+      await useCases.screenShareStopped(
+        roomId: args.roomId,
+        participantId: participantId,
+      );
     }
   }
 
@@ -568,6 +625,8 @@ class LiveKitRoomController extends ChangeNotifier {
           (base.isCurrentUser && ownerId == currentUserId),
       isMicEnabled: backend?.isMicEnabled ?? base.isMicEnabled,
       isCameraEnabled: backend?.isCameraEnabled ?? base.isCameraEnabled,
+      isScreenSharing:
+          base.isScreenSharing || (backend?.isScreenSharing ?? false),
     );
   }
 
@@ -584,8 +643,13 @@ class LiveKitRoomController extends ChangeNotifier {
     final cameraPublication = participant.getTrackPublicationBySource(
       TrackSource.camera,
     );
+    final screenSharePublication = participant.getTrackPublicationBySource(
+      TrackSource.screenShareVideo,
+    );
     final cameraTrack = cameraPublication?.track;
+    final screenShareTrack = screenSharePublication?.track;
     final hasCamera = participant.isCameraEnabled();
+    final isScreenSharing = participant.isScreenShareEnabled();
 
     return RoomParticipantView(
       participant: RoomParticipant(
@@ -595,8 +659,13 @@ class LiveKitRoomController extends ChangeNotifier {
         isOwner: isOwner,
         isMicEnabled: participant.isMicrophoneEnabled(),
         isCameraEnabled: hasCamera,
+        isScreenSharing: isScreenSharing,
       ),
-      videoTrack: hasCamera && cameraTrack is VideoTrack ? cameraTrack : null,
+      videoTrack: isScreenSharing && screenShareTrack is VideoTrack
+          ? screenShareTrack
+          : hasCamera && cameraTrack is VideoTrack
+          ? cameraTrack
+          : null,
     );
   }
 
@@ -637,6 +706,7 @@ class LiveKitRoomController extends ChangeNotifier {
               isOwner: ownerId == 'current-user',
               isMicEnabled: args.initialMicEnabled,
               isCameraEnabled: args.initialCameraEnabled,
+              isScreenSharing: false,
             ),
           ),
           RoomParticipantView(
@@ -647,6 +717,7 @@ class LiveKitRoomController extends ChangeNotifier {
               isOwner: ownerId == 'owner',
               isMicEnabled: true,
               isCameraEnabled: true,
+              isScreenSharing: false,
             ),
           ),
           const RoomParticipantView(
@@ -657,6 +728,7 @@ class LiveKitRoomController extends ChangeNotifier {
               isOwner: false,
               isMicEnabled: false,
               isCameraEnabled: true,
+              isScreenSharing: false,
             ),
           ),
           const RoomParticipantView(
@@ -667,6 +739,7 @@ class LiveKitRoomController extends ChangeNotifier {
               isOwner: false,
               isMicEnabled: true,
               isCameraEnabled: false,
+              isScreenSharing: false,
             ),
           ),
         ],

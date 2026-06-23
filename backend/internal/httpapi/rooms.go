@@ -12,6 +12,8 @@ import (
 	"time"
 	"unicode"
 
+	lkproto "github.com/livekit/protocol/livekit"
+
 	"github.com/gorilla/websocket"
 	"github.com/iloveeroha/AlemLive/backend/internal/livekit"
 )
@@ -56,10 +58,15 @@ type roomParticipantState struct {
 	Name            string
 	MicEnabled      bool
 	CameraEnabled   bool
+	ScreenSharing   bool
 	JoinedAt        time.Time
 	LastChangedAt   time.Time
 	ControlAction   string
 	ControlInFlight bool
+}
+
+type transferOwnerRequest struct {
+	ParticipantID string `json:"participantId"`
 }
 
 type roomState struct {
@@ -260,7 +267,7 @@ func (s *Server) roomParticipants(w http.ResponseWriter, r *http.Request, roomID
 
 	participantID := strings.TrimSpace(parts[0])
 	action := strings.TrimSpace(parts[1])
-	snapshot, participant, eventType, err := s.applyParticipantControl(roomID, participantID, action)
+	snapshot, participant, eventType, err := s.applyParticipantControl(r.Context(), roomID, participantID, action)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -275,6 +282,35 @@ func (s *Server) roomParticipants(w http.ResponseWriter, r *http.Request, roomID
 	if eventType != "" {
 		s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: eventType, Payload: payload})
 	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (s *Server) transferRoomOwner(w http.ResponseWriter, r *http.Request, roomID string) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+
+	var req transferOwnerRequest
+	if r.Body != nil {
+		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req)
+	}
+	participantID := strings.TrimSpace(firstNonEmpty(req.ParticipantID, r.URL.Query().Get("participantId")))
+	if participantID == "" {
+		writeError(w, http.StatusBadRequest, "participantId is required")
+		return
+	}
+
+	snapshot, err := s.transferRoomOwnerState(roomID, participantID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	payload := map[string]any{
+		"roomId":  snapshot.ID,
+		"ownerId": snapshot.OwnerID,
+	}
+	s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "owner_changed", Payload: payload})
 	writeJSON(w, http.StatusOK, payload)
 }
 
@@ -432,43 +468,105 @@ func (s *Server) roomSnapshot(roomID string) roomStateSnapshot {
 	return room.snapshot()
 }
 
-func (s *Server) applyParticipantControl(roomID, participantID, action string) (roomStateSnapshot, *roomParticipantState, string, error) {
+func (s *Server) transferRoomOwnerState(roomID, participantID string) (roomStateSnapshot, error) {
 	now := s.clock().UTC()
+	roomID = strings.TrimSpace(roomID)
+	participantID = strings.TrimSpace(participantID)
 
 	s.roomsMu.Lock()
 	defer s.roomsMu.Unlock()
 
 	room := s.rooms[roomID]
 	if room == nil {
+		return roomStateSnapshot{}, errRoomNotFound
+	}
+	if room.Participants[participantID] == nil {
+		return roomStateSnapshot{}, errParticipantNotFound
+	}
+	room.OwnerID = participantID
+	room.UpdatedAt = now
+	return room.snapshot(), nil
+}
+
+func (s *Server) applyParticipantControl(ctx context.Context, roomID, participantID, action string) (roomStateSnapshot, *roomParticipantState, string, error) {
+	now := s.clock().UTC()
+
+	s.roomsMu.Lock()
+	room := s.rooms[roomID]
+	if room == nil {
+		s.roomsMu.Unlock()
 		return roomStateSnapshot{}, nil, "", errRoomNotFound
 	}
 	participant := room.Participants[participantID]
 	if participant == nil {
+		s.roomsMu.Unlock()
 		return roomStateSnapshot{}, nil, "", errParticipantNotFound
 	}
 
 	eventType := ""
+	var liveKitSource lkproto.TrackSource
+	var liveKitMuted bool
+	shouldMuteLiveKit := false
 	switch action {
 	case "mute":
 		participant.MicEnabled = false
 		eventType = "participant_mic_changed"
+		liveKitSource = lkproto.TrackSource_MICROPHONE
+		liveKitMuted = true
+		shouldMuteLiveKit = true
 	case "unmute":
 		participant.MicEnabled = true
 		eventType = "participant_mic_changed"
+		liveKitSource = lkproto.TrackSource_MICROPHONE
+		liveKitMuted = false
+		shouldMuteLiveKit = true
 	case "camera-off":
 		participant.CameraEnabled = false
 		eventType = "participant_camera_changed"
+		liveKitSource = lkproto.TrackSource_CAMERA
+		liveKitMuted = true
+		shouldMuteLiveKit = true
 	case "camera-on-request":
 		participant.CameraEnabled = true
 		eventType = "participant_camera_changed"
+		liveKitSource = lkproto.TrackSource_CAMERA
+		liveKitMuted = false
+		shouldMuteLiveKit = true
+	case "screen-share-start":
+		participant.ScreenSharing = true
+		eventType = "participant_screen_share_changed"
+	case "screen-share-stop":
+		participant.ScreenSharing = false
+		eventType = "participant_screen_share_changed"
 	default:
+		s.roomsMu.Unlock()
 		return roomStateSnapshot{}, nil, "", errUnsupportedParticipantAction
 	}
 
 	participant.ControlAction = action
 	participant.LastChangedAt = now
 	room.UpdatedAt = now
-	return room.snapshot(), participant.clone(), eventType, nil
+	roomName := room.Name
+	snapshot := room.snapshot()
+	participantCopy := participant.clone()
+	s.roomsMu.Unlock()
+
+	if shouldMuteLiveKit {
+		liveKitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+		_ = livekit.MuteParticipantTracks(
+			liveKitCtx,
+			s.cfg.LiveKitURL,
+			s.cfg.LiveKitAPIKey,
+			s.cfg.LiveKitSecret,
+			roomName,
+			participantID,
+			liveKitSource,
+			liveKitMuted,
+		)
+	}
+
+	return snapshot, participantCopy, eventType, nil
 }
 
 func (s *Server) setRoomRecordingState(roomID, state, reportID string) roomStateSnapshot {
@@ -662,8 +760,10 @@ func (participant *roomParticipantState) payload(currentUser, owner bool) map[st
 		"isOwner":         owner,
 		"isMicEnabled":    participant.MicEnabled,
 		"isCameraEnabled": participant.CameraEnabled,
+		"isScreenSharing": participant.ScreenSharing,
 		"micEnabled":      participant.MicEnabled,
 		"cameraEnabled":   participant.CameraEnabled,
+		"screenSharing":   participant.ScreenSharing,
 		"controlAction":   participant.ControlAction,
 	}
 }

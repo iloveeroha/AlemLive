@@ -6,4 +6,6 @@ abstract interface class ReportsRepository {
   Future<Report> detail({required String reportId});
 
   Future<ReportProcessingStatus> status({required String reportId});
+
+  String videoPath({required String reportId});
 }

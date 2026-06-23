@@ -37,6 +37,16 @@ class ParticipantVideoTile extends StatelessWidget {
           Positioned.fill(
             child: _VideoContent(participantView: participantView),
           ),
+          if (participant.isScreenSharing)
+            Positioned(
+              top: 10,
+              left: participant.isOwner ? 112 : 10,
+              child: const _Badge(
+                icon: Icons.screen_share_rounded,
+                label: 'Экран',
+                backgroundColor: Colors.black,
+              ),
+            ),
           Positioned(
             left: 10,
             right: 10,
@@ -99,7 +109,7 @@ class _VideoContent extends StatelessWidget {
       );
     }
 
-    if (!participant.isCameraEnabled) {
+    if (!participant.isCameraEnabled && !participant.isScreenSharing) {
       return Center(
         child: CircleAvatar(
           radius: 34,

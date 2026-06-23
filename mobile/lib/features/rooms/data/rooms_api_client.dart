@@ -84,6 +84,16 @@ class RoomsApiClient {
     return response.data ?? <String, dynamic>{};
   }
 
+  Future<void> transferOwner({
+    required String roomId,
+    required String participantId,
+  }) async {
+    await _dio.post<void>(
+      '/api/rooms/$roomId/transfer-owner',
+      data: {'participantId': participantId},
+    );
+  }
+
   Future<void> participantControl({
     required String roomId,
     required String participantId,

@@ -41,7 +41,8 @@ class RoomParticipantView {
   final VideoTrack? videoTrack;
 
   bool get canRenderVideo {
-    return participant.isCameraEnabled && videoTrack != null;
+    return (participant.isCameraEnabled || participant.isScreenSharing) &&
+        videoTrack != null;
   }
 }
 

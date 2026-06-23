@@ -238,6 +238,14 @@ class RoomSyncController extends ChangeNotifier {
               _boolValue(event.payload, 'isCameraEnabled') ??
               _boolValue(event.payload, 'enabled'),
         );
+      case RoomEventType.participantScreenShareChanged:
+        _updateParticipantMedia(
+          _participantId(event.payload),
+          screenSharing:
+              _boolValue(event.payload, 'screenSharing') ??
+              _boolValue(event.payload, 'isScreenSharing') ??
+              _boolValue(event.payload, 'enabled'),
+        );
       case RoomEventType.ownerChanged:
         _applyOwnerChanged(event.payload);
       case RoomEventType.recordingStarted:
@@ -307,6 +315,7 @@ class RoomSyncController extends ChangeNotifier {
     String? participantId, {
     bool? micEnabled,
     bool? cameraEnabled,
+    bool? screenSharing,
   }) {
     if (participantId == null || participantId.isEmpty) {
       return;
@@ -321,11 +330,13 @@ class RoomSyncController extends ChangeNotifier {
           isOwner: participantId == state.ownerId,
           isMicEnabled: micEnabled ?? true,
           isCameraEnabled: cameraEnabled ?? true,
+          isScreenSharing: screenSharing ?? false,
         );
     _upsertParticipant(
       participant.copyWith(
         isMicEnabled: micEnabled,
         isCameraEnabled: cameraEnabled,
+        isScreenSharing: screenSharing,
         isOwner: participantId == state.ownerId,
       ),
     );
@@ -372,6 +383,10 @@ class RoomSyncController extends ChangeNotifier {
           _boolValue(data, 'cameraEnabled') ??
           _boolValue(data, 'isCameraEnabled') ??
           true,
+      isScreenSharing:
+          _boolValue(data, 'screenSharing') ??
+          _boolValue(data, 'isScreenSharing') ??
+          false,
     );
   }
 

@@ -2,6 +2,49 @@
   "reports": [
     {
       "report": {
+        "id": "meeting-alem-meeting-20260623-065124",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "23.06.2026",
+        "time": "06:51",
+        "participants": 0,
+        "participantNames": "",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "Мади Орысбек",
+        "ownerInitial": "М",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:10",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-23T06:51:24Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
         "id": "meeting-123123-20260622-114054",
         "title": "Встреча - 123123",
         "source": "LiveKit",
@@ -11,8 +54,6 @@
         "participants": 1,
         "participantNames": "era",
         "score": 66,
-        "engagementScore": 58,
-        "moodScore": 75,
         "folder": "Сохранённые встречи",
         "owner": "era",
         "ownerInitial": "E",
@@ -28,8 +69,8 @@
       },
       "summary": [
         {
-          "title": "Что важно знать после встречи",
-          "text": "Эра провела короткую тестовую запись в LiveKit 22 июня 2026 г. Транскрипция готова, однако автоматический AI‑анализ сейчас недоступен. Чтобы увидеть содержание, откройте вкладку транскрипта. После встречи команде следует вручную проверить полученный текст и подтвердить задачи."
+          "title": "Транскрипт получен",
+          "text": "Аудио распознано, но AI-анализ сейчас недоступен. Откройте вкладку транскрипта для исходного текста или повторите AI-запрос позже."
         }
       ],
       "actionItems": [
@@ -68,13 +109,7 @@
           "talkTimeText": "100%",
           "talk": 100,
           "sentiment": "Информационная встреча",
-          "pace": "",
-          "firstSeenTime": "00:00",
-          "score": 87,
-          "mood": 75,
-          "engagement": 100,
-          "micMutedPercent": 0,
-          "cameraOffPercent": 0
+          "pace": ""
         }
       ],
       "highlights": [
@@ -93,15 +128,6 @@
           "text": "Автоматически распознанная запись встречи."
         }
       ],
-      "trend": [
-        {
-          "time": "00:00",
-          "score": 67,
-          "engagement": 60,
-          "mood": 75
-        }
-      ],
-      "interruptions": 0,
       "aiQuestions": [
         "Какие решения приняли на встрече?",
         "Какие задачи появились после встречи?",
@@ -109,15 +135,7 @@
       ],
       "recordingUrl": "/api/reports/meeting-123123-20260622-114054/recording/stream",
       "recordingSourceUrl": "http://minio:9000/alemlive-recordings/alemlive/123123/20260622-114100.mp4",
-      "roomName": "123123",
-      "keywords": [
-        "тест",
-        "запись",
-        "лайфхита",
-        "конференции",
-        "работает",
-        "идее"
-      ]
+      "roomName": "123123"
     },
     {
       "report": {
@@ -155,7 +173,6 @@
       "speakerStats": [],
       "highlights": [],
       "chapters": [],
-      "interruptions": 0,
       "aiQuestions": [
         "Какие решения приняли на встрече?",
         "Какие задачи появились после встречи?",

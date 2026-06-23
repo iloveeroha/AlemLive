@@ -58,6 +58,16 @@ class RoomsUseCases {
     return _repository.recordingStatus(roomId: roomId);
   }
 
+  Future<void> transferOwner({
+    required String roomId,
+    required String participantId,
+  }) {
+    return _repository.transferOwner(
+      roomId: roomId,
+      participantId: participantId,
+    );
+  }
+
   Future<void> muteParticipant({
     required String roomId,
     required String participantId,
@@ -90,6 +100,26 @@ class RoomsUseCases {
     required String participantId,
   }) {
     return _repository.cameraOnRequest(
+      roomId: roomId,
+      participantId: participantId,
+    );
+  }
+
+  Future<void> screenShareStarted({
+    required String roomId,
+    required String participantId,
+  }) {
+    return _repository.screenShareStarted(
+      roomId: roomId,
+      participantId: participantId,
+    );
+  }
+
+  Future<void> screenShareStopped({
+    required String roomId,
+    required String participantId,
+  }) {
+    return _repository.screenShareStopped(
       roomId: roomId,
       participantId: participantId,
     );

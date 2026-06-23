@@ -28,6 +28,21 @@ class AuthRepositoryImpl implements AuthRepository {
   final AppConfig config;
 
   @override
+  Future<User?> restoreSession() async {
+    final token = await storage.readAccessToken();
+    if (token == null || token.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      return await me();
+    } catch (_) {
+      await storage.clearSession();
+      return null;
+    }
+  }
+
+  @override
   Future<User> login({
     required String username,
     required String password,

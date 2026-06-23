@@ -25,6 +25,11 @@ abstract interface class RoomsRepository {
 
   Future<RecordingStatus> recordingStatus({required String roomId});
 
+  Future<void> transferOwner({
+    required String roomId,
+    required String participantId,
+  });
+
   Future<void> muteParticipant({
     required String roomId,
     required String participantId,
@@ -41,6 +46,16 @@ abstract interface class RoomsRepository {
   });
 
   Future<void> cameraOnRequest({
+    required String roomId,
+    required String participantId,
+  });
+
+  Future<void> screenShareStarted({
+    required String roomId,
+    required String participantId,
+  });
+
+  Future<void> screenShareStopped({
     required String roomId,
     required String participantId,
   });

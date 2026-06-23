@@ -132,6 +132,11 @@ class _ParticipantRow extends StatelessWidget {
                         icon: Icons.star_rounded,
                         label: 'Создатель',
                       ),
+                    if (participant.isScreenSharing)
+                      const _StateLabel(
+                        icon: Icons.screen_share_rounded,
+                        label: 'Экран',
+                      ),
                   ],
                 ),
               ],

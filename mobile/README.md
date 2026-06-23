@@ -1,17 +1,76 @@
-# alem_live_mobile
+# AlemLive Mobile
 
-A new Flutter project.
+Flutter mobile client for AlemLive: auth, rooms, LiveKit calls, chat,
+participants, screen sharing, recording controls, reports, transcript tabs and
+AI questions.
 
-## Getting Started
+## Run
 
-This project is a starting point for a Flutter application.
+Start the local backend stack from the repository root:
 
-A few resources to get you started if this is your first Flutter project:
+```powershell
+docker compose up -d --build
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Then run Flutter:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```powershell
+cd mobile
+flutter pub get
+flutter run
+```
+
+For Android emulator, point the app to the host machine:
+
+```powershell
+flutter run `
+  --dart-define=BACKEND_BASE_URL=http://10.0.2.2:8088 `
+  --dart-define=LIVEKIT_URL=ws://10.0.2.2:7880
+```
+
+For a real device on the same Wi-Fi network, replace `YOUR_PC_IP`:
+
+```powershell
+flutter run `
+  --dart-define=BACKEND_BASE_URL=http://YOUR_PC_IP:8088 `
+  --dart-define=LIVEKIT_URL=ws://YOUR_PC_IP:7880
+```
+
+## Packages
+
+- `flutter_riverpod` for state management
+- `go_router` for navigation
+- `dio` for backend API calls
+- `flutter_secure_storage` for auth token storage
+- `livekit_client` for video rooms, chat data messages and media controls
+- `permission_handler` for camera, microphone and screen sharing permissions
+- `video_player` for report recordings
+
+## Structure
+
+```text
+lib/
+  app/
+  core/
+    network/
+    storage/
+    widgets/
+  features/
+    ai/
+    auth/
+    home/
+    reports/
+    rooms/
+```
+
+The app uses clean feature boundaries with `data`, `domain`, and
+`presentation` layers where the feature needs them.
+
+## Checks
+
+```powershell
+flutter analyze
+flutter test
+cd android
+.\gradlew.bat assembleDebug
+```

@@ -8,6 +8,7 @@ class RoomParticipant extends Equatable {
     required this.isOwner,
     required this.isMicEnabled,
     required this.isCameraEnabled,
+    this.isScreenSharing = false,
   });
 
   final String id;
@@ -16,6 +17,7 @@ class RoomParticipant extends Equatable {
   final bool isOwner;
   final bool isMicEnabled;
   final bool isCameraEnabled;
+  final bool isScreenSharing;
 
   String get initials {
     final parts = name.trim().split(RegExp(r'\s+'));
@@ -29,6 +31,7 @@ class RoomParticipant extends Equatable {
     bool? isMicEnabled,
     bool? isCameraEnabled,
     bool? isOwner,
+    bool? isScreenSharing,
   }) {
     return RoomParticipant(
       id: id,
@@ -37,6 +40,7 @@ class RoomParticipant extends Equatable {
       isOwner: isOwner ?? this.isOwner,
       isMicEnabled: isMicEnabled ?? this.isMicEnabled,
       isCameraEnabled: isCameraEnabled ?? this.isCameraEnabled,
+      isScreenSharing: isScreenSharing ?? this.isScreenSharing,
     );
   }
 
@@ -48,5 +52,6 @@ class RoomParticipant extends Equatable {
     isOwner,
     isMicEnabled,
     isCameraEnabled,
+    isScreenSharing,
   ];
 }
