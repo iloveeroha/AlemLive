@@ -301,6 +301,7 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	room = canonicalRoomName(room)
 
 	identity, err = validateField("userName", identity)
 	if err != nil {

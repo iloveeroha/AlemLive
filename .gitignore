@@ -2,6 +2,7 @@
 .env
 backend/.env
 backend/data/
+keycloak-data-backup-*/
 
 # Frontend
 node_modules
@@ -22,3 +23,17 @@ pnpm-debug.log*
 !.vscode/extensions.json
 .idea
 .DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Flutter / mobile generated files
+mobile/.dart_tool/
+mobile/.flutter-plugins-dependencies
+mobile/build/
+mobile/android/local.properties
+mobile/ios/Flutter/
+mobile/ios/Runner/GeneratedPluginRegistrant.*
+mobile/ios/Flutter/ephemeral/

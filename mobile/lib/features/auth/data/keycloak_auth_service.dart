@@ -31,7 +31,7 @@ class KeycloakAuthService {
   Future<Map<String, dynamic>> login() async {
     final config = AuthConfig.fromJson(await apiClient.authConfig());
     if (!config.canStartKeycloakLogin) {
-      throw const AppException('Keycloak не настроен');
+      throw const AppException('Keycloak is not configured');
     }
 
     final verifier = _randomPKCEValue();
@@ -57,13 +57,13 @@ class KeycloakAuthService {
       mode: LaunchMode.externalApplication,
     );
     if (!launched) {
-      throw const AppException('Не удалось открыть Keycloak');
+      throw const AppException('Could not open Keycloak');
     }
 
     final callback = await callbackFuture.timeout(
       const Duration(minutes: 3),
       onTimeout: () {
-        throw const AppException('Вход через Keycloak отменен или истек');
+        throw const AppException('Keycloak login was cancelled or timed out');
       },
     );
     final error =
@@ -75,7 +75,7 @@ class KeycloakAuthService {
 
     final code = callback.queryParameters['code'];
     if (code == null || code.isEmpty) {
-      throw const AppException('Keycloak не вернул код авторизации');
+      throw const AppException('Keycloak did not return an authorization code');
     }
 
     return apiClient.exchangeAuthCode(
@@ -107,7 +107,7 @@ class KeycloakAuthService {
       onError: (Object error) {
         if (!completer.isCompleted) {
           completer.completeError(
-            AppException('Не удалось получить callback Keycloak: $error'),
+            AppException('Could not receive Keycloak callback: $error'),
           );
         }
       },

@@ -166,7 +166,7 @@ func TestMobileRoomFlowEndpoints(t *testing.T) {
 	if err := json.NewDecoder(createResponse.Body).Decode(&created); err != nil {
 		t.Fatalf("decode create response: %v", err)
 	}
-	if created.RoomID == "" || created.RoomName != "Mobile Sync" || created.OwnerID == "" || !created.IsOwner {
+	if created.RoomID == "" || created.RoomName != "mobile-sync" || created.OwnerID == "" || !created.IsOwner {
 		t.Fatalf("unexpected create payload: %#v", created)
 	}
 	if len(created.Participants) != 1 {

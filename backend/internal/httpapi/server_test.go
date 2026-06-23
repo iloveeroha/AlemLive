@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -23,7 +24,7 @@ func TestCreateLiveKitToken(t *testing.T) {
 		TokenTTL:         time.Hour,
 	})
 
-	body := bytes.NewBufferString(`{"roomName":"alem-meeting","userName":"Madi"}`)
+	body := bytes.NewBufferString(`{"roomName":" Alem Meeting ","userName":"Madi"}`)
 	request := httptest.NewRequest(http.MethodPost, "/api/livekit/token", body)
 	response := httptest.NewRecorder()
 
@@ -44,9 +45,34 @@ func TestCreateLiveKitToken(t *testing.T) {
 	if payload["token"] == "" {
 		t.Fatal("token should not be empty")
 	}
+	if payload["roomName"] != "alem-meeting" {
+		t.Fatalf("unexpected canonical roomName: %#v", payload)
+	}
+	claims := decodeTestJWTClaims(t, payload["token"])
+	video, ok := claims["video"].(map[string]any)
+	if !ok || video["room"] != "alem-meeting" {
+		t.Fatalf("unexpected token video room: %#v", claims)
+	}
 	if payload["reportId"] == "" {
 		t.Fatal("reportId should not be empty")
 	}
+}
+
+func decodeTestJWTClaims(t *testing.T, token string) map[string]any {
+	t.Helper()
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		t.Fatalf("expected jwt with 3 parts, got %d", len(parts))
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		t.Fatalf("decode jwt payload: %v", err)
+	}
+	var claims map[string]any
+	if err := json.Unmarshal(raw, &claims); err != nil {
+		t.Fatalf("unmarshal jwt payload: %v", err)
+	}
+	return claims
 }
 
 func TestConfigReturnsPublicLiveKitURL(t *testing.T) {

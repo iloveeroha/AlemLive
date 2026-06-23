@@ -35,6 +35,7 @@ APP_HOST=YOUR_LAN_IP
 LIVEKIT_NODE_IP=YOUR_LAN_IP
 KEYCLOAK_PUBLIC_URL=http://YOUR_LAN_IP:8080
 LIVEKIT_EGRESS_PUBLIC_BASE_URL=http://YOUR_LAN_IP:9000/alemlive-recordings
+LIVEKIT_PUBLIC_URL=
 ```
 
 Rebuild after changing `APP_HOST`, because it is used in the frontend HTTPS certificate:
@@ -43,7 +44,9 @@ Rebuild after changing `APP_HOST`, because it is used in the frontend HTTPS cert
 docker compose up -d --build
 ```
 
-For Keycloak redirects, keep `keycloak/alemlive-realm.json` in sync with the current LAN IP or update the `alemlive` client from the Keycloak admin console. This dev setup imports the realm on container creation; if Keycloak is recreated, local test users may need to be registered again.
+Leave `LIVEKIT_PUBLIC_URL` empty for browser usage through the frontend HTTPS proxy. Set it only when a client needs to connect directly to LiveKit, for example a mobile app.
+
+For Keycloak redirects, keep `keycloak/alemlive-realm.json` in sync with the current LAN IP or update the `alemlive` client from the Keycloak admin console. The Docker Compose stack stores Keycloak data in the `keycloak_data` volume, so users survive normal restarts. If you delete the volume, local test users must be registered again.
 
 ## Required Env
 
@@ -60,7 +63,7 @@ Root `.env` controls Docker Compose and public URLs:
 - `LLM_API_KEY`
 - `STT_API_KEY`
 - `HF_TOKEN`
-- `DIARIZATION_BASE_URL`
+- `DIARIZATION_BASE_URL` (defaults to `http://diarization:8091` in Docker Compose)
 
 Backend `.env` controls local `go run` and backend defaults:
 
@@ -97,6 +100,8 @@ Invoke-RestMethod http://localhost:8088/healthz
 Invoke-RestMethod http://localhost:8088/api/config
 Invoke-RestMethod http://localhost:8091/healthz
 ```
+
+`/healthz` for diarization returns `configured: false` when `HF_TOKEN` is missing, invalid, or the pyannote model terms were not accepted on Hugging Face.
 
 MinIO:
 

@@ -1121,16 +1121,17 @@ function getHashRoute(hash) {
 
 function getInitialRoomName() {
   if (typeof window === 'undefined') {
-    return import.meta.env.VITE_LIVEKIT_ROOM ?? 'alem-meeting'
+    return normalizeRoomName(import.meta.env.VITE_LIVEKIT_ROOM ?? 'alem-meeting')
   }
 
   const roomFromURL = new URLSearchParams(window.location.search).get('room')
-  return roomFromURL || import.meta.env.VITE_LIVEKIT_ROOM || 'alem-meeting'
+  return normalizeRoomName(roomFromURL || import.meta.env.VITE_LIVEKIT_ROOM || 'alem-meeting')
 }
 
 function getMeetingShareURL(roomName) {
+  const normalizedRoomName = normalizeRoomName(roomName)
   if (typeof window === 'undefined') {
-    return `/?room=${encodeURIComponent(roomName)}#meeting`
+    return `/?room=${encodeURIComponent(normalizedRoomName)}#meeting`
   }
 
   const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
@@ -1138,7 +1139,18 @@ function getMeetingShareURL(roomName) {
   const protocol = needsHTTPS ? 'https:' : window.location.protocol
   const port = needsHTTPS && window.location.port === '5173' ? '5174' : window.location.port
   const host = port ? `${window.location.hostname}:${port}` : window.location.hostname
-  return `${protocol}//${host}/?room=${encodeURIComponent(roomName)}#meeting`
+  return `${protocol}//${host}/?room=${encodeURIComponent(normalizedRoomName)}#meeting`
+}
+
+function normalizeRoomName(value) {
+  const normalized = String(value || '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return normalized || 'alem-meeting'
 }
 
 function getParticipantRole(participant) {
@@ -1247,79 +1259,6 @@ function MediaStateReporter({ roomName }) {
   }, [roomName, isCameraEnabled])
 
   return null
-}
-
-function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, onDeviceError }) {
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, lastMicrophoneError, lastCameraError } = useLocalParticipant()
-  const [pendingDevice, setPendingDevice] = useState('')
-
-  useEffect(() => {
-    onDeviceStateChange('mic', isMicrophoneEnabled)
-  }, [isMicrophoneEnabled, onDeviceStateChange])
-
-  useEffect(() => {
-    onDeviceStateChange('camera', isCameraEnabled)
-  }, [isCameraEnabled, onDeviceStateChange])
-
-  useEffect(() => {
-    if (lastMicrophoneError) {
-      onDeviceError('mic', lastMicrophoneError)
-    }
-  }, [lastMicrophoneError, onDeviceError])
-
-  useEffect(() => {
-    if (lastCameraError) {
-      onDeviceError('camera', lastCameraError)
-    }
-  }, [lastCameraError, onDeviceError])
-
-  async function toggleLiveKitDevice(name) {
-    if (!localParticipant || pendingDevice) {
-      return
-    }
-
-    const nextEnabled = name === 'mic' ? !isMicrophoneEnabled : !isCameraEnabled
-
-    try {
-      setPendingDevice(name)
-      if (name === 'mic') {
-        await localParticipant.setMicrophoneEnabled(nextEnabled)
-      } else {
-        await localParticipant.setCameraEnabled(nextEnabled)
-      }
-
-      onDevicePreferenceChange(name, nextEnabled)
-    } catch (error) {
-      onDeviceError(name, error)
-    } finally {
-      setPendingDevice('')
-    }
-  }
-
-  return (
-    <>
-      <button
-        className={isMicrophoneEnabled ? 'icon-button active' : 'icon-button'}
-        type="button"
-        onClick={() => toggleLiveKitDevice('mic')}
-        disabled={pendingDevice === 'mic'}
-        aria-label={isMicrophoneEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
-        aria-pressed={isMicrophoneEnabled}
-      >
-        {isMicrophoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
-      </button>
-      <button
-        className={isCameraEnabled ? 'icon-button active' : 'icon-button'}
-        type="button"
-        onClick={() => toggleLiveKitDevice('camera')}
-        disabled={pendingDevice === 'camera'}
-        aria-label={isCameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
-        aria-pressed={isCameraEnabled}
-      >
-        {isCameraEnabled ? <Video size={18} /> : <CameraOff size={18} />}
-      </button>
-    </>
-  )
 }
 
 function ConferenceChatPanel({ onClose }) {
@@ -1474,7 +1413,6 @@ function App() {
   const [isCopilotSending, setIsCopilotSending] = useState(false)
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false)
   const [isDetailActionsOpen, setIsDetailActionsOpen] = useState(false)
-  const [isMeetingMaximized, setIsMeetingMaximized] = useState(false)
   const [isConferenceChatOpen, setIsConferenceChatOpen] = useState(true)
   const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false)
   const [copilotPanelWidth, setCopilotPanelWidth] = useState(420)
@@ -1493,6 +1431,8 @@ function App() {
   const [highlightThumbnails, setHighlightThumbnails] = useState({})
   const [chapterThumbnails, setChapterThumbnails] = useState({})
   const reportUploadInputRef = useRef(null)
+  const meetingActiveRef = useRef(false)
+  const authSessionRef = useRef(null)
 
   const canStart = form.userName.trim() && form.roomName.trim()
   const isConnected = Boolean(meeting)
@@ -1692,6 +1632,11 @@ function App() {
     if (route.reportId) {
       setSelectedReportId(route.reportId)
     }
+
+    const roomFromURL = new URLSearchParams(window.location.search).get('room')
+    if (roomFromURL) {
+      setForm((current) => ({ ...current, roomName: normalizeRoomName(roomFromURL) }))
+    }
   }
 
   const meetingMeta = useMemo(() => {
@@ -1706,8 +1651,13 @@ function App() {
   }, [form.roomName, form.userName, meeting, profile])
 
   useEffect(() => {
+    authSessionRef.current = authSession
     setCurrentAccessToken(authSession?.accessToken || '')
   }, [authSession])
+
+  useEffect(() => {
+    meetingActiveRef.current = activeView === 'meeting' && Boolean(meeting)
+  }, [activeView, meeting])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -2015,17 +1965,6 @@ function App() {
   }, [authReady, hasProcessingReports, isAuthenticated, selectedReportId])
 
   useEffect(() => {
-    if (typeof document === 'undefined') {
-      return undefined
-    }
-
-    document.body.classList.toggle('meeting-maximized-active', isMeetingMaximized)
-    return () => {
-      document.body.classList.remove('meeting-maximized-active')
-    }
-  }, [isMeetingMaximized])
-
-  useEffect(() => {
     if (!isConnected || !meetingMeta.room) {
       setRoomRecordingStatus({ state: 'idle', configured: false })
       return undefined
@@ -2080,27 +2019,12 @@ function App() {
     updateDevicePreference(name, !devices[name])
   }
 
-  function handleLiveKitDeviceStateChange(name, enabled) {
-    updateDevicePreference(name, enabled, { notifyBackend: false })
-  }
-
-  function handleLiveKitDevicePreferenceChange(name, enabled) {
-    setMeetingNotice('')
-    updateDevicePreference(name, enabled)
-  }
-
-  function handleLiveKitDeviceError(_name, error) {
-    setMeetingNotice(getMediaErrorMessage(error))
-    updateDevicePreference(_name, false, { notifyBackend: false })
-  }
-
   function handleLiveKitError(error) {
     setMeetingNotice(getMediaErrorMessage(error))
   }
 
   function handleLiveKitDisconnected() {
     setMeeting(null)
-    setIsMeetingMaximized(false)
     if (manualDisconnectRef.current) {
       manualDisconnectRef.current = false
       setMeetingNotice('')
@@ -2115,6 +2039,14 @@ function App() {
 
   useEffect(() => {
     function handleAuthExpired(event) {
+      if (meetingActiveRef.current) {
+        if (authSessionRef.current) {
+          saveAuthSession(authSessionRef.current)
+        }
+        setMeetingNotice(event.detail || 'Авторизация временно недоступна, встреча продолжается')
+        setAuthError(event.detail || 'Авторизация временно недоступна')
+        return
+      }
       setAuthSession(null)
       setAuthError(event.detail || 'Сессия истекла. Войдите заново.')
       setAuthReady(true)
@@ -2150,6 +2082,11 @@ function App() {
         })
         .catch(() => {
           if (isMounted) {
+            if (meetingActiveRef.current) {
+              setMeetingNotice('Не удалось обновить Keycloak-сессию, встреча продолжается')
+              setAuthError('Не удалось обновить Keycloak-сессию')
+              return
+            }
             setAuthSession(null)
             setAuthError('Сессия истекла. Войдите заново.')
           }
@@ -2233,8 +2170,8 @@ function App() {
     manualDisconnectRef.current = false
     setMeetingNotice('')
 
-    const nextRoomName = form.roomName.trim()
-    const nextUserName = form.userName.trim()
+    const nextRoomName = normalizeRoomName(form.roomName)
+    const nextUserName = meetingMeta.name
 
     if (!nextUserName || !nextRoomName) {
       setJoinError('Введите имя и название комнаты')
@@ -2263,7 +2200,6 @@ function App() {
         audio: devices.mic,
         video: devices.camera,
       })
-      setIsMeetingMaximized(true)
       setIsConferenceChatOpen(true)
       recordMeetingEvent(mode === 'create' ? 'created' : 'joined', {
         roomName: payload.roomName || nextRoomName,
@@ -2279,31 +2215,6 @@ function App() {
   function joinMeeting(event) {
     event.preventDefault()
     startMeeting(entryMode)
-  }
-
-  async function leaveMeeting() {
-    manualDisconnectRef.current = true
-    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, {
-      method: 'POST',
-      body: JSON.stringify({
-        userName: meetingMeta.name,
-        event: 'left',
-      }),
-    }).catch(() => null)
-    if (payload?.reportId) {
-      setSelectedReportId(payload.reportId)
-      setReportsRefreshKey((current) => current + 1)
-      apiRequest(`/api/reports/${payload.reportId}`).then((detail) => {
-        if (detail?.report) {
-          setReportDetails((current) => ({ ...current, [payload.reportId]: detail }))
-          setReports((current) => [detail.report, ...current.filter((report) => report.id !== detail.report.id)])
-        }
-      }).catch(() => null)
-      setWorkspaceNotice(`Отчет встречи сохранен: ${payload.reportId}`)
-    }
-    setMeeting(null)
-    setIsMeetingMaximized(false)
-    setMeetingNotice('')
   }
 
   async function copyRoomName() {
@@ -3068,7 +2979,6 @@ function App() {
     const meetingGridClassName = [
       'meeting-grid',
       isConnected ? 'meeting-grid-connected' : '',
-      isMeetingMaximized ? 'meeting-grid-maximized' : '',
       isConnected && !isConferenceChatOpen ? 'meeting-chat-collapsed' : '',
     ]
       .filter(Boolean)

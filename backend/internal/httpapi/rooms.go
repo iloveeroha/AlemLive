@@ -175,6 +175,7 @@ func (s *Server) createRoom(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	roomName = canonicalRoomName(roomName)
 
 	user := s.roomUserFromRequest(r, req.UserID, req.UserName)
 	snapshot, joined := s.joinRoomState(roomName, user, true, req.InitialMicEnabled, req.InitialCameraEnabled)
@@ -210,6 +211,7 @@ func (s *Server) joinRoom(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	roomName = canonicalRoomName(roomName)
 
 	micEnabled := true
 	if req.InitialMicEnabled != nil {
@@ -877,4 +879,8 @@ func roomIDFromName(value string) string {
 
 func normalizeParticipantNameKey(name string) string {
 	return strings.ToLower(strings.TrimSpace(name))
+}
+
+func canonicalRoomName(value string) string {
+	return roomIDFromName(value)
 }
