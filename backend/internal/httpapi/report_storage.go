@@ -50,7 +50,7 @@ func (s *Server) loadReports() {
 		if _, deleted := s.deletedReportIDs[detail.Report.ID]; deleted {
 			continue
 		}
-		if normalizeLoadedReport(&detail) {
+		if s.normalizeLoadedReport(&detail) {
 			changed = true
 		}
 		s.generatedReports = append(s.generatedReports, detail.Report)
@@ -62,10 +62,8 @@ func (s *Server) loadReports() {
 	})
 	for _, row := range s.generatedReports {
 		detail := s.generatedReportStore[row.ID]
-		for _, roomKey := range reportRoomLookupKeys(detail) {
-			if s.latestRoomReports[roomKey] == "" {
-				s.latestRoomReports[roomKey] = detail.Report.ID
-			}
+		if detail.RoomName != "" && s.latestRoomReports[detail.RoomName] == "" {
+			s.latestRoomReports[detail.RoomName] = detail.Report.ID
 		}
 	}
 	if changed {
@@ -73,51 +71,7 @@ func (s *Server) loadReports() {
 	}
 }
 
-func reportRoomLookupKeys(detail reportDetailResponse) []string {
-	seen := map[string]struct{}{}
-	keys := []string{}
-	add := func(value string) {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return
-		}
-		if _, ok := seen[value]; ok {
-			return
-		}
-		seen[value] = struct{}{}
-		keys = append(keys, value)
-	}
-
-	add(detail.RoomName)
-	add(roomIDFromName(detail.RoomName))
-	if roomFromID := roomNameFromMeetingReportID(detail.Report.ID); roomFromID != "" {
-		add(roomFromID)
-	}
-	return keys
-}
-
-func roomNameFromMeetingReportID(reportID string) string {
-	const prefix = "meeting-"
-	if !strings.HasPrefix(reportID, prefix) {
-		return ""
-	}
-	rest := strings.TrimPrefix(reportID, prefix)
-	parts := strings.Split(rest, "-")
-	if len(parts) < 3 {
-		return ""
-	}
-	datePart := parts[len(parts)-2]
-	timePart := parts[len(parts)-1]
-	if len(datePart) != 8 || len(timePart) != 6 {
-		return ""
-	}
-	if _, err := time.Parse("20060102-150405", datePart+"-"+timePart); err != nil {
-		return ""
-	}
-	return strings.Join(parts[:len(parts)-2], "-")
-}
-
-func normalizeLoadedReport(detail *reportDetailResponse) bool {
+func (s *Server) normalizeLoadedReport(detail *reportDetailResponse) bool {
 	changed := false
 	if detail.Report.OccurredAt.IsZero() && detail.Report.CreatedAt != "" {
 		if parsed, err := time.Parse(time.RFC3339, detail.Report.CreatedAt); err == nil {
@@ -150,7 +104,7 @@ func normalizeLoadedReport(detail *reportDetailResponse) bool {
 	if normalizeReportPipelineStatuses(&detail.Report, detail.RecordingFile != "" || detail.RecordingURL != "", len(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)) > 0) {
 		changed = true
 	}
-	if repairLoadedReportAnalysis(detail) {
+	if s.repairLoadedReportAnalysis(detail) {
 		changed = true
 	}
 	return changed
@@ -239,7 +193,7 @@ func normalizeReportPipelineStatuses(report *reportRow, hasRecording, hasTranscr
 	return changed
 }
 
-func repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
+func (s *Server) repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
 	lines := reportTranscriptToLines(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript))
 	if len(lines) == 0 {
 		return false
@@ -259,7 +213,7 @@ func repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
 	if needsFallbackRepair {
 		detail.Report.AnalysisStatus = "failed"
 		analysis := fallbackAnalysisFromTranscript(firstNonEmpty(detail.RoomName, detail.Report.Title, detail.Report.ID), transcriptText, lines, detail.Report.OccurredAt)
-		updated := reportDetailFromAnalysis(detail.Report, analysis)
+		updated := s.reportDetailFromAnalysis(detail.Report, analysis)
 		updated.RecordingURL = detail.RecordingURL
 		updated.RecordingSourceURL = detail.RecordingSourceURL
 		updated.RecordingFile = detail.RecordingFile

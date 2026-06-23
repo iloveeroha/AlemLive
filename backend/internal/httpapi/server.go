@@ -1,10 +1,8 @@
 package httpapi
 
 import (
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -55,7 +53,6 @@ type tokenResponse struct {
 	Token     string `json:"token"`
 	RoomName  string `json:"roomName"`
 	UserName  string `json:"userName"`
-	Identity  string `json:"identity,omitempty"`
 	ExpiresAt string `json:"expiresAt"`
 	ReportID  string `json:"reportId,omitempty"`
 }
@@ -93,11 +90,12 @@ type keyQuestion struct {
 }
 
 type transcriptLine struct {
-	Time    string  `json:"time"`
-	Speaker string  `json:"speaker"`
-	Text    string  `json:"text"`
-	Start   float64 `json:"-"`
-	End     float64 `json:"-"`
+	Time      string  `json:"time"`
+	Speaker   string  `json:"speaker"`
+	Text      string  `json:"text"`
+	Sentiment string  `json:"sentiment,omitempty"`
+	Start     float64 `json:"-"`
+	End       float64 `json:"-"`
 }
 
 type meetingInsights struct {
@@ -296,8 +294,7 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	room := firstNonEmpty(req.RoomName, req.Room)
-	displayName := firstNonEmpty(req.UserName, req.Identity)
-	identitySeed := req.Identity
+	identity := firstNonEmpty(req.UserName, req.Identity)
 
 	room, err := validateField("roomName", room)
 	if err != nil {
@@ -305,19 +302,13 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if authUser, ok := userFromContext(r.Context()); ok {
-		displayName = firstNonEmpty(authUser.Name, authUser.Username, authUser.Email, displayName)
-		identitySeed = firstNonEmpty(identitySeed, authUser.ID, authUser.Username, authUser.Email, displayName)
-	} else {
-		displayName, err = validateField("userName", displayName)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
-			return
-		}
+	identity, err = validateField("userName", identity)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
 	}
 
-	identity := liveKitParticipantIdentity(firstNonEmpty(identitySeed, displayName), displayName)
-	user := roomUser{ID: identity, Name: displayName}
+	user := roomUser{ID: identity, Name: identity}
 	snapshot, _ := s.joinRoomState(room, user, req.IsHost, true, true)
 	conferenceEvent := "joined"
 	if req.IsHost {
@@ -342,7 +333,6 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		s.cfg.LiveKitAPIKey,
 		s.cfg.LiveKitSecret,
 		identity,
-		displayName,
 		room,
 		string(metadata),
 		s.cfg.TokenTTL,
@@ -357,17 +347,10 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		ServerURL: s.publicLiveKitURL(r),
 		Token:     token,
 		RoomName:  room,
-		UserName:  displayName,
-		Identity:  identity,
+		UserName:  identity,
 		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
 		ReportID:  conference.ReportID,
 	})
-}
-
-func liveKitParticipantIdentity(seed, displayName string) string {
-	raw := firstNonEmpty(seed, displayName, "guest")
-	sum := sha256.Sum256([]byte(raw))
-	return fmt.Sprintf("participant-%x", sum[:12])
 }
 
 func (s *Server) publicLiveKitURL(r *http.Request) string {
@@ -558,12 +541,33 @@ func demoMeetingAnalysis(room string, now time.Time) meetingAnalysis {
 			{Time: "21:35", Title: "Docker launch agreed", Text: "Стек должен стартовать через docker compose up -d --build.", Type: "Action"},
 		},
 		Chapters: []chapter{
-			{Start: "00:00", End: "03:19", Title: "Setup and room check", Text: "Проверка LiveKit комнаты и подключения участников."},
-			{Start: "03:20", End: "08:44", Title: "Product requirements", Text: "Разбор вкладок Notes, Transcript, Insights, Highlights и Chapters."},
-			{Start: "08:45", End: "14:09", Title: "Backend security", Text: "Обсуждение токенов, секретов и server-side boundary."},
-			{Start: "14:10", End: "21:34", Title: "AI processing pipeline", Text: "Как transcript превращается в summary, highlights и action items."},
-			{Start: "21:35", End: "25:00", Title: "Deployment", Text: "Docker Compose и production frontend через nginx."},
+			{
+				Start: "00:00", End: "03:19", Title: "Setup and room check",
+				Text:   "Проверка LiveKit комнаты и подключения участников перед началом основной части встречи.",
+				Points: []string{"Подключение участников к LiveKit комнате", "Проверка аудио и видео перед началом"},
+			},
+			{
+				Start: "03:20", End: "08:44", Title: "Product requirements",
+				Text:   "Команда разобрала вкладки отчёта о встрече: Notes, Transcript, Insights, Highlights и Chapters.",
+				Points: []string{"Структура вкладок post-meeting отчёта", "Что показывается в каждой вкладке"},
+			},
+			{
+				Start: "08:45", End: "14:09", Title: "Backend security",
+				Text:   "Обсуждение токенов, секретов и границы между фронтендом и backend.",
+				Points: []string{"LiveKit токены выдаются только сервером", "Секреты не попадают в браузер"},
+			},
+			{
+				Start: "14:10", End: "21:34", Title: "AI processing pipeline",
+				Text:   "Как транскрипт превращается в summary, highlights и action items с помощью LLM.",
+				Points: []string{"STT переводит запись в текст", "LLM формирует сводку, главы и задачи"},
+			},
+			{
+				Start: "21:35", End: "25:00", Title: "Deployment",
+				Text:   "Docker Compose поднимает весь стек и production frontend через nginx.",
+				Points: []string{"docker compose up -d --build запускает весь стек", "Frontend раздаётся через nginx"},
+			},
 		},
+		Keywords: []string{"livekit", "комната", "backend", "docker", "транскрипт", "токены"},
 	}
 }
 

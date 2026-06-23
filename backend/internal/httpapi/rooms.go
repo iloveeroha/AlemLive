@@ -12,8 +12,6 @@ import (
 	"time"
 	"unicode"
 
-	lkproto "github.com/livekit/protocol/livekit"
-
 	"github.com/gorilla/websocket"
 	"github.com/iloveeroha/AlemLive/backend/internal/livekit"
 )
@@ -58,15 +56,75 @@ type roomParticipantState struct {
 	Name            string
 	MicEnabled      bool
 	CameraEnabled   bool
-	ScreenSharing   bool
 	JoinedAt        time.Time
 	LastChangedAt   time.Time
 	ControlAction   string
 	ControlInFlight bool
+
+	MicMutedDuration    time.Duration
+	CameraOffDuration   time.Duration
+	MicLastChangedAt    time.Time
+	CameraLastChangedAt time.Time
 }
 
-type transferOwnerRequest struct {
-	ParticipantID string `json:"participantId"`
+// setMicEnabled updates the participant's microphone state, accruing muted
+// duration for the time it spent disabled since the last change.
+func (p *roomParticipantState) setMicEnabled(enabled bool, now time.Time) {
+	if !p.MicEnabled {
+		base := p.MicLastChangedAt
+		if base.IsZero() {
+			base = p.JoinedAt
+		}
+		p.MicMutedDuration += now.Sub(base)
+	}
+	p.MicEnabled = enabled
+	p.MicLastChangedAt = now
+}
+
+// setCameraEnabled updates the participant's camera state, accruing
+// off-duration for the time it spent disabled since the last change.
+func (p *roomParticipantState) setCameraEnabled(enabled bool, now time.Time) {
+	if !p.CameraEnabled {
+		base := p.CameraLastChangedAt
+		if base.IsZero() {
+			base = p.JoinedAt
+		}
+		p.CameraOffDuration += now.Sub(base)
+	}
+	p.CameraEnabled = enabled
+	p.CameraLastChangedAt = now
+}
+
+// finalizeDevicePercentages closes out any currently-open muted/off period up
+// to now and returns the share of the session spent muted/off.
+func (p *roomParticipantState) finalizeDevicePercentages(now time.Time) mediaPercentages {
+	total := now.Sub(p.JoinedAt)
+	if total <= 0 {
+		return mediaPercentages{}
+	}
+
+	micMuted := p.MicMutedDuration
+	if !p.MicEnabled {
+		base := p.MicLastChangedAt
+		if base.IsZero() {
+			base = p.JoinedAt
+		}
+		micMuted += now.Sub(base)
+	}
+
+	cameraOff := p.CameraOffDuration
+	if !p.CameraEnabled {
+		base := p.CameraLastChangedAt
+		if base.IsZero() {
+			base = p.JoinedAt
+		}
+		cameraOff += now.Sub(base)
+	}
+
+	return mediaPercentages{
+		MicMutedPercent:  clampScore(int(micMuted.Nanoseconds() * 100 / total.Nanoseconds())),
+		CameraOffPercent: clampScore(int(cameraOff.Nanoseconds() * 100 / total.Nanoseconds())),
+	}
 }
 
 type roomState struct {
@@ -79,6 +137,8 @@ type roomState struct {
 	Closed         bool
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
+
+	DeviceStatsArchive map[string]mediaPercentages
 }
 
 type roomEventEnvelope struct {
@@ -241,6 +301,37 @@ func (s *Server) leaveRoom(w http.ResponseWriter, r *http.Request, roomID string
 	writeJSON(w, http.StatusOK, response)
 }
 
+func (s *Server) roomDeviceState(w http.ResponseWriter, r *http.Request, roomName string) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+
+	var req struct {
+		Device  string `json:"device"`
+		Enabled bool   `json:"enabled"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4*1024))
+	if err := decoder.Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	device := strings.ToLower(strings.TrimSpace(req.Device))
+	if device != "mic" && device != "camera" {
+		writeError(w, http.StatusBadRequest, "device must be mic or camera")
+		return
+	}
+
+	user := s.roomUserFromRequest(r, "", "")
+	if err := s.applySelfDeviceState(roomName, user.ID, device, req.Enabled); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok"})
+}
+
 func (s *Server) roomParticipants(w http.ResponseWriter, r *http.Request, roomID string, parts []string) {
 	if len(parts) == 0 {
 		if r.Method != http.MethodGet {
@@ -267,7 +358,7 @@ func (s *Server) roomParticipants(w http.ResponseWriter, r *http.Request, roomID
 
 	participantID := strings.TrimSpace(parts[0])
 	action := strings.TrimSpace(parts[1])
-	snapshot, participant, eventType, err := s.applyParticipantControl(r.Context(), roomID, participantID, action)
+	snapshot, participant, eventType, err := s.applyParticipantControl(roomID, participantID, action)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -282,35 +373,6 @@ func (s *Server) roomParticipants(w http.ResponseWriter, r *http.Request, roomID
 	if eventType != "" {
 		s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: eventType, Payload: payload})
 	}
-	writeJSON(w, http.StatusOK, payload)
-}
-
-func (s *Server) transferRoomOwner(w http.ResponseWriter, r *http.Request, roomID string) {
-	if r.Method != http.MethodPost {
-		methodNotAllowed(w, http.MethodPost)
-		return
-	}
-
-	var req transferOwnerRequest
-	if r.Body != nil {
-		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 16*1024)).Decode(&req)
-	}
-	participantID := strings.TrimSpace(firstNonEmpty(req.ParticipantID, r.URL.Query().Get("participantId")))
-	if participantID == "" {
-		writeError(w, http.StatusBadRequest, "participantId is required")
-		return
-	}
-
-	snapshot, err := s.transferRoomOwnerState(roomID, participantID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	payload := map[string]any{
-		"roomId":  snapshot.ID,
-		"ownerId": snapshot.OwnerID,
-	}
-	s.broadcastRoomEvent(snapshot.ID, roomEventEnvelope{Type: "owner_changed", Payload: payload})
 	writeJSON(w, http.StatusOK, payload)
 }
 
@@ -394,8 +456,8 @@ func (s *Server) joinRoomState(roomName string, user roomUser, owner bool, micEn
 		room.Participants[user.ID] = participant
 	}
 	participant.Name = firstNonEmpty(user.Name, participant.Name, user.ID)
-	participant.MicEnabled = micEnabled
-	participant.CameraEnabled = cameraEnabled
+	participant.setMicEnabled(micEnabled, now)
+	participant.setCameraEnabled(cameraEnabled, now)
 	participant.LastChangedAt = now
 
 	snapshot := room.snapshot()
@@ -427,12 +489,18 @@ func (s *Server) leaveRoomState(roomID string, participantID string) (roomStateS
 	}
 
 	left := room.Participants[participantID]
+	if left != nil {
+		if room.DeviceStatsArchive == nil {
+			room.DeviceStatsArchive = map[string]mediaPercentages{}
+		}
+		room.DeviceStatsArchive[normalizeParticipantNameKey(left.Name)] = left.finalizeDevicePercentages(now)
+	}
 	delete(room.Participants, participantID)
 	room.UpdatedAt = now
 
 	ownerChanged := false
 	if room.OwnerID == participantID {
-		room.OwnerID = firstJoinedParticipantID(room.Participants)
+		room.OwnerID = firstParticipantID(room.Participants)
 		ownerChanged = room.OwnerID != ""
 	}
 
@@ -468,105 +536,104 @@ func (s *Server) roomSnapshot(roomID string) roomStateSnapshot {
 	return room.snapshot()
 }
 
-func (s *Server) transferRoomOwnerState(roomID, participantID string) (roomStateSnapshot, error) {
+func (s *Server) applyParticipantControl(roomID, participantID, action string) (roomStateSnapshot, *roomParticipantState, string, error) {
 	now := s.clock().UTC()
-	roomID = strings.TrimSpace(roomID)
-	participantID = strings.TrimSpace(participantID)
 
 	s.roomsMu.Lock()
 	defer s.roomsMu.Unlock()
 
 	room := s.rooms[roomID]
 	if room == nil {
-		return roomStateSnapshot{}, errRoomNotFound
-	}
-	if room.Participants[participantID] == nil {
-		return roomStateSnapshot{}, errParticipantNotFound
-	}
-	room.OwnerID = participantID
-	room.UpdatedAt = now
-	return room.snapshot(), nil
-}
-
-func (s *Server) applyParticipantControl(ctx context.Context, roomID, participantID, action string) (roomStateSnapshot, *roomParticipantState, string, error) {
-	now := s.clock().UTC()
-
-	s.roomsMu.Lock()
-	room := s.rooms[roomID]
-	if room == nil {
-		s.roomsMu.Unlock()
 		return roomStateSnapshot{}, nil, "", errRoomNotFound
 	}
 	participant := room.Participants[participantID]
 	if participant == nil {
-		s.roomsMu.Unlock()
 		return roomStateSnapshot{}, nil, "", errParticipantNotFound
 	}
 
 	eventType := ""
-	var liveKitSource lkproto.TrackSource
-	var liveKitMuted bool
-	shouldMuteLiveKit := false
 	switch action {
 	case "mute":
-		participant.MicEnabled = false
+		participant.setMicEnabled(false, now)
 		eventType = "participant_mic_changed"
-		liveKitSource = lkproto.TrackSource_MICROPHONE
-		liveKitMuted = true
-		shouldMuteLiveKit = true
 	case "unmute":
-		participant.MicEnabled = true
+		participant.setMicEnabled(true, now)
 		eventType = "participant_mic_changed"
-		liveKitSource = lkproto.TrackSource_MICROPHONE
-		liveKitMuted = false
-		shouldMuteLiveKit = true
 	case "camera-off":
-		participant.CameraEnabled = false
+		participant.setCameraEnabled(false, now)
 		eventType = "participant_camera_changed"
-		liveKitSource = lkproto.TrackSource_CAMERA
-		liveKitMuted = true
-		shouldMuteLiveKit = true
 	case "camera-on-request":
-		participant.CameraEnabled = true
+		participant.setCameraEnabled(true, now)
 		eventType = "participant_camera_changed"
-		liveKitSource = lkproto.TrackSource_CAMERA
-		liveKitMuted = false
-		shouldMuteLiveKit = true
-	case "screen-share-start":
-		participant.ScreenSharing = true
-		eventType = "participant_screen_share_changed"
-	case "screen-share-stop":
-		participant.ScreenSharing = false
-		eventType = "participant_screen_share_changed"
 	default:
-		s.roomsMu.Unlock()
 		return roomStateSnapshot{}, nil, "", errUnsupportedParticipantAction
 	}
 
 	participant.ControlAction = action
 	participant.LastChangedAt = now
 	room.UpdatedAt = now
-	roomName := room.Name
-	snapshot := room.snapshot()
-	participantCopy := participant.clone()
-	s.roomsMu.Unlock()
+	return room.snapshot(), participant.clone(), eventType, nil
+}
 
-	if shouldMuteLiveKit {
-		liveKitCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		defer cancel()
-		_ = livekit.MuteParticipantTracks(
-			liveKitCtx,
-			s.cfg.LiveKitURL,
-			s.cfg.LiveKitAPIKey,
-			s.cfg.LiveKitSecret,
-			roomName,
-			participantID,
-			liveKitSource,
-			liveKitMuted,
-		)
+// applySelfDeviceState records a participant's own mic/camera toggle,
+// reported by their client during the call, so the session can later
+// compute the real share of time spent muted/off.
+func (s *Server) applySelfDeviceState(roomName, participantID, device string, enabled bool) error {
+	now := s.clock().UTC()
+	roomID := roomIDFromName(roomName)
+
+	s.roomsMu.Lock()
+	defer s.roomsMu.Unlock()
+
+	room := s.rooms[roomID]
+	if room == nil {
+		return errRoomNotFound
+	}
+	participant := room.Participants[participantID]
+	if participant == nil {
+		return errParticipantNotFound
 	}
 
-	return snapshot, participantCopy, eventType, nil
+	switch device {
+	case "mic":
+		participant.setMicEnabled(enabled, now)
+	case "camera":
+		participant.setCameraEnabled(enabled, now)
+	default:
+		return errUnsupportedParticipantAction
+	}
+
+	room.UpdatedAt = now
+	return nil
+}
+
+// roomDevicePercentages merges archived (already left) and currently
+// connected participants' mic/camera percentages for a room, keyed by
+// normalized participant name so they can be matched against speaker stats.
+func (s *Server) roomDevicePercentages(roomName string) map[string]mediaPercentages {
+	roomName = strings.TrimSpace(roomName)
+	if roomName == "" {
+		return nil
+	}
+	roomID := roomIDFromName(roomName)
+	now := s.clock().UTC()
+
+	s.roomsMu.Lock()
+	defer s.roomsMu.Unlock()
+
+	room := s.rooms[roomID]
+	if room == nil {
+		return nil
+	}
+
+	result := make(map[string]mediaPercentages, len(room.DeviceStatsArchive)+len(room.Participants))
+	for key, value := range room.DeviceStatsArchive {
+		result[key] = value
+	}
+	for _, participant := range room.Participants {
+		result[normalizeParticipantNameKey(participant.Name)] = participant.finalizeDevicePercentages(now)
+	}
+	return result
 }
 
 func (s *Server) setRoomRecordingState(roomID, state, reportID string) roomStateSnapshot {
@@ -628,7 +695,6 @@ func (s *Server) roomLiveKitCredentials(r *http.Request, snapshot roomStateSnaps
 		s.cfg.LiveKitAPIKey,
 		s.cfg.LiveKitSecret,
 		user.ID,
-		user.Name,
 		snapshot.Name,
 		string(metadata),
 		s.cfg.TokenTTL,
@@ -760,10 +826,8 @@ func (participant *roomParticipantState) payload(currentUser, owner bool) map[st
 		"isOwner":         owner,
 		"isMicEnabled":    participant.MicEnabled,
 		"isCameraEnabled": participant.CameraEnabled,
-		"isScreenSharing": participant.ScreenSharing,
 		"micEnabled":      participant.MicEnabled,
 		"cameraEnabled":   participant.CameraEnabled,
-		"screenSharing":   participant.ScreenSharing,
 		"controlAction":   participant.ControlAction,
 	}
 }
@@ -776,22 +840,16 @@ func (participant *roomParticipantState) clone() *roomParticipantState {
 	return &copy
 }
 
-func firstJoinedParticipantID(participants map[string]*roomParticipantState) string {
-	var first *roomParticipantState
-	for _, participant := range participants {
-		if participant == nil {
-			continue
-		}
-		if first == nil ||
-			participant.JoinedAt.Before(first.JoinedAt) ||
-			(participant.JoinedAt.Equal(first.JoinedAt) && participant.ID < first.ID) {
-			first = participant
-		}
+func firstParticipantID(participants map[string]*roomParticipantState) string {
+	ids := make([]string, 0, len(participants))
+	for id := range participants {
+		ids = append(ids, id)
 	}
-	if first == nil {
+	sort.Strings(ids)
+	if len(ids) == 0 {
 		return ""
 	}
-	return first.ID
+	return ids[0]
 }
 
 func roomIDFromName(value string) string {
@@ -815,4 +873,8 @@ func roomIDFromName(value string) string {
 
 	sum := sha1.Sum([]byte(value))
 	return "room-" + hex.EncodeToString(sum[:])[:12]
+}
+
+func normalizeParticipantNameKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
 }

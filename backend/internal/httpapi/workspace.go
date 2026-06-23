@@ -202,8 +202,8 @@ func (s *Server) roomAction(w http.ResponseWriter, r *http.Request) {
 		s.roomRecording(w, r, roomName, subAction)
 	case "participants":
 		s.roomParticipants(w, r, roomName, parts[2:])
-	case "transfer-owner":
-		s.transferRoomOwner(w, r, roomName)
+	case "device-state":
+		s.roomDeviceState(w, r, roomName)
 	case "events":
 		s.roomEvents(w, r, roomName)
 	case "leave":

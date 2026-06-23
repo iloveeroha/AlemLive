@@ -1,5 +1,4 @@
 import 'package:alem_live_mobile/features/auth/presentation/login_screen.dart';
-import 'package:alem_live_mobile/features/auth/presentation/auth_controller.dart';
 import 'package:alem_live_mobile/features/auth/presentation/register_screen.dart';
 import 'package:alem_live_mobile/features/home/presentation/home_screen.dart';
 import 'package:alem_live_mobile/features/reports/presentation/screens/report_detail_screen.dart';
@@ -10,32 +9,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final authState = ref.watch(authControllerProvider);
-
   return GoRouter(
     initialLocation: LoginScreen.routePath,
-    redirect: (context, state) {
-      if (authState.isChecking) {
-        return null;
-      }
-
-      final isAuthRoute =
-          state.matchedLocation == LoginScreen.routePath ||
-          state.matchedLocation == RegisterScreen.routePath;
-      final isProtectedRoute =
-          state.matchedLocation == HomeScreen.routePath ||
-          state.matchedLocation == RoomScreen.routePath ||
-          state.matchedLocation == ReportsScreen.routePath ||
-          state.matchedLocation == ReportDetailScreen.routePath;
-
-      if (authState.isAuthenticated && isAuthRoute) {
-        return HomeScreen.routePath;
-      }
-      if (!authState.isAuthenticated && isProtectedRoute) {
-        return LoginScreen.routePath;
-      }
-      return null;
-    },
     routes: [
       GoRoute(
         path: LoginScreen.routePath,

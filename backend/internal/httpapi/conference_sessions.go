@@ -171,7 +171,6 @@ func (s *Server) newMeetingSessionLocked(roomName, userName string, now time.Tim
 	s.generatedReports = append([]reportRow{report}, s.generatedReports...)
 	s.generatedReportStore[reportID] = detail
 	s.latestRoomReports[roomName] = reportID
-	s.latestRoomReports[roomIDFromName(roomName)] = reportID
 
 	return meetingSession{
 		ReportID:     reportID,
@@ -274,7 +273,6 @@ func (s *Server) updateConferenceReportLocked(session meetingSession, now time.T
 		}
 	}
 	s.latestRoomReports[session.RoomName] = session.ReportID
-	s.latestRoomReports[roomIDFromName(session.RoomName)] = session.ReportID
 	s.saveReportsLocked()
 }
 
@@ -336,27 +334,14 @@ func (s *Server) setConferenceReportPipelineState(reportID, roomName, state stri
 	}
 	if roomName != "" {
 		s.latestRoomReports[roomName] = reportID
-		s.latestRoomReports[roomIDFromName(roomName)] = reportID
 	}
 	s.saveReportsLocked()
 }
 
 func (s *Server) latestReportIDForRoom(roomName string) string {
-	roomName = strings.TrimSpace(roomName)
 	s.reportsMu.Lock()
 	defer s.reportsMu.Unlock()
-	if reportID := s.latestRoomReports[roomName]; reportID != "" {
-		return reportID
-	}
-	if reportID := s.latestRoomReports[roomIDFromName(roomName)]; reportID != "" {
-		return reportID
-	}
-	for id, detail := range s.generatedReportStore {
-		if detail.RoomName == roomName || roomIDFromName(detail.RoomName) == roomIDFromName(roomName) {
-			return id
-		}
-	}
-	return ""
+	return s.latestRoomReports[roomName]
 }
 
 func (s *Server) reportDetailForUpdate(reportID string) (reportDetailResponse, bool) {

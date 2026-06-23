@@ -1,5 +1,4 @@
 import 'package:alem_live_mobile/features/reports/domain/entities/action_item.dart';
-import 'package:alem_live_mobile/features/reports/domain/entities/report_summary.dart';
 import 'package:alem_live_mobile/features/reports/domain/entities/speaker_activity.dart';
 import 'package:alem_live_mobile/features/reports/domain/entities/transcript_segment.dart';
 import 'package:equatable/equatable.dart';
@@ -34,10 +33,6 @@ class Report extends Equatable {
   final List<SpeakerActivity> speakerActivity;
   final List<TranscriptSegment> transcript;
   final String? recordingUrl;
-
-  ReportSummary get reportSummary {
-    return ReportSummary(text: summary, topics: topics, takeaways: takeaways);
-  }
 
   bool get hasRecording {
     final url = recordingUrl;

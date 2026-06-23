@@ -17,7 +17,6 @@ enum RoomEventType {
   participantLeft,
   participantMicChanged,
   participantCameraChanged,
-  participantScreenShareChanged,
   ownerChanged,
   recordingStarted,
   recordingStopped,
@@ -35,8 +34,6 @@ class RoomEventMessage {
       'participant_left' => RoomEventType.participantLeft,
       'participant_mic_changed' => RoomEventType.participantMicChanged,
       'participant_camera_changed' => RoomEventType.participantCameraChanged,
-      'participant_screen_share_changed' =>
-        RoomEventType.participantScreenShareChanged,
       'owner_changed' => RoomEventType.ownerChanged,
       'recording_started' => RoomEventType.recordingStarted,
       'recording_stopped' => RoomEventType.recordingStopped,

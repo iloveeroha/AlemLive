@@ -735,7 +735,8 @@ func TestNormalizeLoadedReportMarksFallbackAnalysisFailed(t *testing.T) {
 		Chapters:        fallbackChapters([]transcriptLine{{Time: "00:00", Speaker: "Speaker", Text: "Recognized text"}}),
 	}
 
-	if !normalizeLoadedReport(&detail) {
+	s := &Server{clock: time.Now}
+	if !s.normalizeLoadedReport(&detail) {
 		t.Fatal("expected fallback report to be normalized")
 	}
 	if detail.Report.AnalysisStatus != "failed" {
@@ -760,7 +761,8 @@ func TestNormalizeLoadedReportClearsStaleProcessingWithoutRecording(t *testing.T
 		Summary: []summarySection{{Title: "Old", Text: "Old processing status"}},
 	}
 
-	if !normalizeLoadedReport(&detail) {
+	s := &Server{clock: time.Now}
+	if !s.normalizeLoadedReport(&detail) {
 		t.Fatal("expected stale report to be normalized")
 	}
 	if detail.Report.ProcessingState != "saved" ||

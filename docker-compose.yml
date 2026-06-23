@@ -140,7 +140,6 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      - keycloak_data:/opt/keycloak/data
       - ./keycloak:/opt/keycloak/data/import:ro
     restart: unless-stopped
 
@@ -156,12 +155,8 @@ services:
       KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/certs"
       KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
       KEYCLOAK_CLIENT_ID: "alemlive"
-      KEYCLOAK_ADMIN_BASE_URL: "http://keycloak:8080"
-      KEYCLOAK_ADMIN_REALM: "alemlive"
-      KEYCLOAK_ADMIN_USERNAME: "${KEYCLOAK_ADMIN_USERNAME:-admin}"
-      KEYCLOAK_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-admin}"
-      LOCAL_AUTH_ENABLED: "${LOCAL_AUTH_ENABLED:-false}"
-      LOCAL_AUTH_SECRET: "${LOCAL_AUTH_SECRET:-alemlive-local-auth-secret-change-me}"
+      LOCAL_AUTH_ENABLED: "true"
+      LOCAL_AUTH_SECRET: "alemlive-local-auth-secret-change-me"
       LIVEKIT_URL: "ws://livekit:7880"
       LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}"
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
@@ -223,4 +218,3 @@ services:
 volumes:
   minio_data:
   livekit_config:
-  keycloak_data:

@@ -23,6 +23,21 @@ type aiChatRequest struct {
 	ReportID string          `json:"reportId"`
 	Context  string          `json:"context"`
 	History  []aiChatMessage `json:"history"`
+	Language string          `json:"language"`
+}
+
+var chatLanguageNames = map[string]string{
+	"ru": "Russian",
+	"en": "English",
+	"kk": "Kazakh",
+}
+
+func chatLanguageInstruction(code string) string {
+	name, ok := chatLanguageNames[strings.ToLower(strings.TrimSpace(code))]
+	if !ok {
+		name = chatLanguageNames["ru"]
+	}
+	return "Respond in " + name + " plain text only. No Markdown: no **, no #, no bullet lists, no code fences."
 }
 
 type aiChatMessage struct {
@@ -208,9 +223,10 @@ func (s *Server) generateMeetingAnalysis(ctx context.Context, room string, now f
     "interruptions": [{"label": "string", "value": 0, "unit": "times"}],
     "engagement": [{"label": "string", "value": 0, "unit": "items"}]
   },
-  "highlights": [{"time": "00:00", "title": "string", "text": "string", "type": "Decision|Risk|Action"}],
-  "chapters": [{"start": "00:00", "end": "00:00", "title": "string", "text": "string"}]
+  "highlights": [{"time": "00:00", "title": "string", "text": "string", "type": "Topic|Action|Question"}],
+  "chapters": [{"start": "00:00", "end": "00:00", "title": "string", "text": "string", "points": ["string", "string"]}]
 }
+Для каждой главы text — это абзац-описание о чём говорили, а points — 2-4 коротких пункта с конкретными темами или решениями внутри главы.
 Пиши на русском языке. Сохрани roomName и generatedAt из контекста.`
 
 	answer, err := s.ai.Chat(ctx, []llm.Message{

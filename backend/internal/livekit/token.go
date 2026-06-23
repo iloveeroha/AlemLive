@@ -28,11 +28,10 @@ type claims struct {
 	Video     VideoGrant `json:"video"`
 }
 
-func GenerateToken(apiKey, secret, identity, displayName, room, metadata string, ttl time.Duration, now time.Time) (string, time.Time, error) {
+func GenerateToken(apiKey, secret, identity, room, metadata string, ttl time.Duration, now time.Time) (string, time.Time, error) {
 	apiKey = strings.TrimSpace(apiKey)
 	secret = strings.TrimSpace(secret)
 	identity = strings.TrimSpace(identity)
-	displayName = strings.TrimSpace(displayName)
 	room = strings.TrimSpace(room)
 
 	if apiKey == "" {
@@ -57,7 +56,7 @@ func GenerateToken(apiKey, secret, identity, displayName, room, metadata string,
 		Subject:   identity,
 		NotBefore: now.Unix(),
 		ExpiresAt: expiresAt.Unix(),
-		Name:      firstNonEmpty(displayName, identity),
+		Name:      identity,
 		Metadata:  metadata,
 		Video: VideoGrant{
 			Room:           room,
@@ -74,15 +73,6 @@ func GenerateToken(apiKey, secret, identity, displayName, room, metadata string,
 	}
 
 	return token, expiresAt, nil
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
-		}
-	}
-	return ""
 }
 
 func signJWT(payload claims, secret []byte) (string, error) {

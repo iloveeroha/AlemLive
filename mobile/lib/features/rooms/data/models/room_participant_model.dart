@@ -8,7 +8,6 @@ class RoomParticipantModel extends RoomParticipant {
     required super.isOwner,
     required super.isMicEnabled,
     required super.isCameraEnabled,
-    super.isScreenSharing,
   });
 
   factory RoomParticipantModel.fromJson(Map<String, dynamic> json) {
@@ -19,7 +18,6 @@ class RoomParticipantModel extends RoomParticipant {
       isOwner: json['isOwner'] as bool? ?? false,
       isMicEnabled: json['isMicEnabled'] as bool? ?? false,
       isCameraEnabled: json['isCameraEnabled'] as bool? ?? false,
-      isScreenSharing: json['isScreenSharing'] as bool? ?? false,
     );
   }
 
@@ -31,7 +29,6 @@ class RoomParticipantModel extends RoomParticipant {
       'isOwner': isOwner,
       'isMicEnabled': isMicEnabled,
       'isCameraEnabled': isCameraEnabled,
-      'isScreenSharing': isScreenSharing,
     };
   }
 }

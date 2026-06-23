@@ -29,49 +29,6 @@ func EnsureRoom(ctx context.Context, serverURL, apiKey, apiSecret, roomName stri
 	return err
 }
 
-func MuteParticipantTracks(ctx context.Context, serverURL, apiKey, apiSecret, roomName, participantID string, source lkproto.TrackSource, muted bool) error {
-	serverURL = strings.TrimSpace(serverURL)
-	apiKey = strings.TrimSpace(apiKey)
-	apiSecret = strings.TrimSpace(apiSecret)
-	roomName = strings.TrimSpace(roomName)
-	participantID = strings.TrimSpace(participantID)
-	if serverURL == "" || apiKey == "" || apiSecret == "" || roomName == "" || participantID == "" {
-		return ErrEgressNotConfigured
-	}
-
-	client := lksdk.NewRoomServiceClient(serverURL, apiKey, apiSecret)
-	participants, err := client.ListParticipants(ctx, &lkproto.ListParticipantsRequest{Room: roomName})
-	if err != nil {
-		return err
-	}
-
-	mutedAny := false
-	for _, participant := range participants.GetParticipants() {
-		if participant.GetIdentity() != participantID {
-			continue
-		}
-		for _, track := range participant.GetTracks() {
-			if track.GetSource() != source || track.GetSid() == "" {
-				continue
-			}
-			if _, err := client.MutePublishedTrack(ctx, &lkproto.MuteRoomTrackRequest{
-				Room:     roomName,
-				Identity: participantID,
-				TrackSid: track.GetSid(),
-				Muted:    muted,
-			}); err != nil {
-				return err
-			}
-			mutedAny = true
-		}
-		break
-	}
-	if !mutedAny {
-		return nil
-	}
-	return nil
-}
-
 func isAlreadyExistsError(err error) bool {
 	if err == nil {
 		return false

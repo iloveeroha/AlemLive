@@ -11,7 +11,6 @@ import (
 	"github.com/iloveeroha/AlemLive/backend/internal/config"
 	livekitservice "github.com/iloveeroha/AlemLive/backend/internal/livekit"
 	"github.com/iloveeroha/AlemLive/backend/internal/llm"
-	lkproto "github.com/livekit/protocol/livekit"
 )
 
 func TestEgressRecordingURLsUseInternalDownloadAndPublicPlayback(t *testing.T) {
@@ -82,52 +81,6 @@ func TestProcessEgressRecordingStoresVideoWithoutSTT(t *testing.T) {
 	}
 	if detail.Report.ProcessingState != "ready" {
 		t.Fatalf("expected ready report without STT, got %#v", detail.Report)
-	}
-}
-
-func TestProcessEgressRecordingUpdatesSavedConferenceReport(t *testing.T) {
-	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	server := &Server{
-		cfg: config.Config{
-			LiveKitS3Endpoint:          "http://minio:9000",
-			LiveKitS3Bucket:            "alemlive-recordings",
-			LiveKitEgressPublicBaseURL: "http://localhost:9000/alemlive-recordings",
-		},
-		clock:                func() time.Time { return now },
-		generatedReportStore: map[string]reportDetailResponse{},
-		deletedReportIDs:     map[string]struct{}{},
-		activeMeetings:       map[string]meetingSession{},
-		latestRoomReports:    map[string]string{},
-	}
-
-	conference := server.recordConferenceEvent("Команда тест", "Мади", "created", now)
-	if conference.ReportID == "" {
-		t.Fatal("expected conference report")
-	}
-	server.recordConferenceEvent("Команда тест", "Мади", "left", now.Add(time.Minute))
-
-	server.processEgressRecording(t.Context(), livekitservice.EgressState{
-		RoomName:  "Команда тест",
-		EgressID:  "egress-id",
-		FilePath:  "alemlive/команда-тест/20260616-120000.mp4",
-		PublicURL: "http://localhost:9000/alemlive-recordings/alemlive/команда-тест/20260616-120000.mp4",
-	}, nil)
-
-	detail, ok := server.reportDetailByID(conference.ReportID)
-	if !ok {
-		t.Fatal("expected original conference report to be updated")
-	}
-	if detail.Report.ID != conference.ReportID {
-		t.Fatalf("expected same report id, got %s", detail.Report.ID)
-	}
-	if detail.RecordingURL != reportStreamURL(conference.ReportID) {
-		t.Fatalf("expected recording stream URL on saved report, got %#v", detail.RecordingURL)
-	}
-	if detail.Report.RecordingStatus != "completed" || detail.Report.ProcessingState != "ready" {
-		t.Fatalf("expected saved report to become video-ready, got %#v", detail.Report)
-	}
-	if _, ok := server.reportDetailByID("egress-egress-id"); ok {
-		t.Fatal("late egress should not create a separate report for the same room")
 	}
 }
 
@@ -209,97 +162,5 @@ func TestDownloadRecordingWithRetryWaitsForObject(t *testing.T) {
 	}
 	if fileName != "recording.mp4" || contentType != "video/mp4" || string(data) != "video bytes" {
 		t.Fatalf("unexpected recording download: %s %s %q", fileName, contentType, string(data))
-	}
-}
-
-func TestRoomRecordingStatusMarksAbortedEgressReportFailed(t *testing.T) {
-	now := time.Date(2026, 6, 19, 7, 0, 0, 0, time.UTC)
-	egress := livekitservice.NewEgressManager(livekitservice.EgressConfig{
-		Enabled:   true,
-		ServerURL: "ws://livekit:7880",
-		APIKey:    "devkey",
-		APISecret: "devsecret",
-		S3: livekitservice.S3Config{
-			Bucket: "alemlive-recordings",
-			Region: "us-east-1",
-		},
-	})
-	egress.UpdateFromInfo(&lkproto.EgressInfo{
-		RoomName: "Failed Room",
-		EgressId: "egress-id",
-		Status:   lkproto.EgressStatus_EGRESS_ABORTED,
-	})
-
-	server := &Server{
-		cfg:                  config.Config{TokenTTL: time.Hour},
-		clock:                func() time.Time { return now },
-		egress:               egress,
-		generatedReportStore: map[string]reportDetailResponse{},
-		deletedReportIDs:     map[string]struct{}{},
-		activeMeetings:       map[string]meetingSession{},
-		latestRoomReports:    map[string]string{},
-	}
-	conference := server.recordConferenceEvent("Failed Room", "Owner", "created", now)
-	if conference.ReportID == "" {
-		t.Fatal("expected conference report to be created")
-	}
-
-	payload := server.roomRecordingStatusPayload(roomStateSnapshot{
-		ID:             roomIDFromName("Failed Room"),
-		Name:           "Failed Room",
-		RecordingState: roomRecordingRecording,
-		ReportID:       conference.ReportID,
-	})
-
-	if payload["active"] != false {
-		t.Fatalf("expected aborted egress to be inactive, got %#v", payload["active"])
-	}
-	if payload["state"] != roomRecordingError {
-		t.Fatalf("expected room recording error, got %#v", payload["state"])
-	}
-
-	detail, ok := server.reportDetailByID(conference.ReportID)
-	if !ok {
-		t.Fatal("expected report detail")
-	}
-	if detail.Report.Status != "error" ||
-		detail.Report.ProcessingState != "failed" ||
-		detail.Report.RecordingStatus != "failed" {
-		t.Fatalf("expected failed report status, got %#v", detail.Report)
-	}
-}
-
-func TestReportRoomLookupKeysIncludeMeetingReportSlug(t *testing.T) {
-	keys := reportRoomLookupKeys(reportDetailResponse{
-		Report: reportRow{ID: "meeting-smokeroom2-20260619-064249"},
-	})
-
-	for _, key := range keys {
-		if key == "smokeroom2" {
-			return
-		}
-	}
-	t.Fatalf("expected room slug key, got %#v", keys)
-}
-
-func TestUnicodeRoomNamesStayLinkableAcrossIDs(t *testing.T) {
-	roomName := "Қазақша кездесу"
-	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
-	server := &Server{
-		generatedReportStore: map[string]reportDetailResponse{},
-		deletedReportIDs:     map[string]struct{}{},
-		activeMeetings:       map[string]meetingSession{},
-		latestRoomReports:    map[string]string{},
-	}
-
-	conference := server.recordConferenceEvent(roomName, "Айдана", "created", now)
-	if conference.ReportID == "" {
-		t.Fatal("expected report id")
-	}
-	if !strings.Contains(conference.ReportID, "қазақша-кездесу") {
-		t.Fatalf("expected unicode report id slug, got %s", conference.ReportID)
-	}
-	if got := server.latestReportIDForRoom(roomIDFromName(roomName)); got != conference.ReportID {
-		t.Fatalf("expected lookup by room id to return report %s, got %s", conference.ReportID, got)
 	}
 }

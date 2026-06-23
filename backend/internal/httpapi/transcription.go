@@ -237,8 +237,8 @@ Schema:
     "interruptions": [{"label": "string", "value": 0, "unit": "times"}],
     "engagement": [{"label": "string", "value": 0, "unit": "items"}]
   },
-  "highlights": [{"time": "00:00", "title": "string", "text": "string", "type": "Decision|Risk|Action"}],
-  "chapters": [{"start": "00:00", "end": "00:00", "title": "string", "text": "string"}]
+  "highlights": [{"time": "00:00", "title": "string", "text": "string", "type": "Topic|Action|Question"}],
+  "chapters": [{"start": "00:00", "end": "00:00", "title": "string", "text": "string", "points": ["string", "string"]}]
 }
 For each chapter, text is a short paragraph describing what was discussed, and points is 2-4 short bullet points with concrete topics or decisions from that chapter.
 For each actionItem, time is the transcript timestamp (mm:ss) closest to where that task was mentioned.
@@ -272,6 +272,10 @@ Use Russian for user-facing text. Preserve roomName. Do not return the full tran
 	}
 	analysis.Transcript = normalizeTranscriptSpeakers(analysis.Transcript)
 	analysis.Transcript = applyParticipantSpeakerNames(analysis.Transcript, participants)
+	analysis.Transcript = annotateTranscriptSentiment(analysis.Transcript)
+	if len(analysis.Keywords) == 0 {
+		analysis.Keywords = extractKeywords(transcriptText, 8)
+	}
 	if strings.TrimSpace(analysis.Insights.Sentiment) == "" {
 		analysis.Insights.Sentiment = "Информационная встреча"
 	}
@@ -447,6 +451,7 @@ func fallbackAnalysisFromTranscript(roomName, transcriptText string, lines []tra
 		lines = transcriptLinesFromText(transcriptText)
 	}
 	lines = normalizeTranscriptSpeakers(lines)
+	lines = annotateTranscriptSentiment(lines)
 	wordCount := len(strings.Fields(transcriptText))
 	summary := fallbackSummarySections(transcriptText)
 	actions := fallbackActionItems(transcriptText)
@@ -475,6 +480,7 @@ func fallbackAnalysisFromTranscript(roomName, transcriptText string, lines []tra
 		},
 		Highlights: highlights,
 		Chapters:   chapters,
+		Keywords:   extractKeywords(transcriptText, 8),
 	}
 }
 

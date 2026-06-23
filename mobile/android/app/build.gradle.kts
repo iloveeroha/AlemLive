@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "kz.alemlive.alem_live_mobile"
-    compileSdk = 36
+    compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

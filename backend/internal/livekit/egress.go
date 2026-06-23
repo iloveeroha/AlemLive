@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
-	"unicode"
 
 	lkproto "github.com/livekit/protocol/livekit"
 	lksdk "github.com/livekit/server-sdk-go/v2"
@@ -168,14 +168,6 @@ func (m *EgressManager) StopRoom(ctx context.Context, roomName string) (EgressSt
 
 	info, err := m.client.StopEgress(ctx, &lkproto.StopEgressRequest{EgressId: state.EgressID})
 	if err != nil {
-		failed := state
-		failed.Status = lkproto.EgressStatus_EGRESS_FAILED.String()
-		failed.Error = err.Error()
-		failed.EndedAt = time.Now().UTC().Format(time.RFC3339)
-		m.mu.Lock()
-		delete(m.active, roomName)
-		m.history[roomName] = failed
-		m.mu.Unlock()
 		return EgressState{}, err
 	}
 
@@ -309,28 +301,16 @@ func isEgressTerminal(status lkproto.EgressStatus) bool {
 		status == lkproto.EgressStatus_EGRESS_LIMIT_REACHED
 }
 
+var unsafePathPart = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
+
 func sanitizePathPart(value string) string {
 	value = strings.Trim(strings.ToLower(value), " ._-")
-	var b strings.Builder
-	lastDash := false
-	for _, r := range value {
-		switch {
-		case unicode.IsLetter(r) || unicode.IsDigit(r):
-			b.WriteRune(r)
-			lastDash = false
-		case (r == '.' || r == '_' || r == '-') && !lastDash:
-			b.WriteRune(r)
-			lastDash = r == '-'
-		case !lastDash:
-			b.WriteRune('-')
-			lastDash = true
-		}
-	}
-	out := strings.Trim(b.String(), " ._-")
-	if out == "" {
+	value = unsafePathPart.ReplaceAllString(value, "-")
+	value = strings.Trim(value, "-")
+	if value == "" {
 		return "room"
 	}
-	return out
+	return value
 }
 
 func firstNonEmptyEgress(values ...string) string {

@@ -36,27 +36,23 @@ class RoomsApiClient {
   }
 
   Future<void> leave({required String roomId}) async {
-    await _dio.post<void>('/api/rooms/${_path(roomId)}/leave');
+    await _dio.post<void>('/api/rooms/$roomId/leave');
   }
 
   Future<Map<String, dynamic>> leaveWithInfo({required String roomId}) async {
     final response = await _dio.post<Map<String, dynamic>>(
-      '/api/rooms/${_path(roomId)}/leave',
+      '/api/rooms/$roomId/leave',
     );
     return response.data ?? <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> roomInfo({required String roomId}) async {
-    final response = await _dio.get<Map<String, dynamic>>(
-      '/api/rooms/${_path(roomId)}',
-    );
+    final response = await _dio.get<Map<String, dynamic>>('/api/rooms/$roomId');
     return response.data ?? <String, dynamic>{};
   }
 
   Future<List<dynamic>> participants({required String roomId}) async {
-    final response = await _dio.get<dynamic>(
-      '/api/rooms/${_path(roomId)}/participants',
-    );
+    final response = await _dio.get<dynamic>('/api/rooms/$roomId/participants');
     final data = response.data;
     if (data is List<dynamic>) {
       return data;
@@ -69,33 +65,23 @@ class RoomsApiClient {
 
   Future<Map<String, dynamic>> startRecording({required String roomId}) async {
     final response = await _dio.post<Map<String, dynamic>>(
-      '/api/rooms/${_path(roomId)}/recording/start',
+      '/api/rooms/$roomId/recording/start',
     );
     return response.data ?? <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> stopRecording({required String roomId}) async {
     final response = await _dio.post<Map<String, dynamic>>(
-      '/api/rooms/${_path(roomId)}/recording/stop',
+      '/api/rooms/$roomId/recording/stop',
     );
     return response.data ?? <String, dynamic>{};
   }
 
   Future<Map<String, dynamic>> recordingStatus({required String roomId}) async {
     final response = await _dio.get<Map<String, dynamic>>(
-      '/api/rooms/${_path(roomId)}/recording/status',
+      '/api/rooms/$roomId/recording/status',
     );
     return response.data ?? <String, dynamic>{};
-  }
-
-  Future<void> transferOwner({
-    required String roomId,
-    required String participantId,
-  }) async {
-    await _dio.post<void>(
-      '/api/rooms/${_path(roomId)}/transfer-owner',
-      data: {'participantId': participantId},
-    );
   }
 
   Future<void> participantControl({
@@ -104,9 +90,7 @@ class RoomsApiClient {
     required String action,
   }) async {
     await _dio.post<void>(
-      '/api/rooms/${_path(roomId)}/participants/${_path(participantId)}/$action',
+      '/api/rooms/$roomId/participants/$participantId/$action',
     );
   }
-
-  String _path(String value) => Uri.encodeComponent(value);
 }

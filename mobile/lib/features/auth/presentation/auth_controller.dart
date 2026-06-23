@@ -8,12 +8,10 @@ final authControllerProvider = NotifierProvider<AuthController, AuthState>(
   AuthController.new,
 );
 
-enum AuthStatus { checking, idle, loading, authenticated, failure }
+enum AuthStatus { idle, loading, authenticated, failure }
 
 class AuthState extends Equatable {
   const AuthState({required this.status, this.user, this.errorMessage});
-
-  const AuthState.checking() : this(status: AuthStatus.checking);
 
   const AuthState.idle() : this(status: AuthStatus.idle);
 
@@ -22,7 +20,6 @@ class AuthState extends Equatable {
   final String? errorMessage;
 
   bool get isLoading => status == AuthStatus.loading;
-  bool get isChecking => status == AuthStatus.checking;
   bool get isAuthenticated => status == AuthStatus.authenticated;
 
   AuthState copyWith({AuthStatus? status, User? user, String? errorMessage}) {
@@ -40,21 +37,7 @@ class AuthState extends Equatable {
 class AuthController extends Notifier<AuthState> {
   @override
   AuthState build() {
-    Future.microtask(restoreSession);
-    return const AuthState.checking();
-  }
-
-  Future<void> restoreSession() async {
-    try {
-      final user = await ref.read(restoreSessionUseCaseProvider).call();
-      if (user == null) {
-        state = const AuthState.idle();
-        return;
-      }
-      state = AuthState(status: AuthStatus.authenticated, user: user);
-    } catch (_) {
-      state = const AuthState.idle();
-    }
+    return const AuthState.idle();
   }
 
   Future<void> login({
@@ -65,12 +48,6 @@ class AuthController extends Notifier<AuthState> {
       () => ref
           .read(loginUseCaseProvider)
           .call(username: username, password: password),
-    );
-  }
-
-  Future<void> loginWithKeycloak() async {
-    await _runAuthAction(
-      () => ref.read(loginWithKeycloakUseCaseProvider).call(),
     );
   }
 

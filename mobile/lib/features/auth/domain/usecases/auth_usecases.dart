@@ -7,16 +7,6 @@ final loginUseCaseProvider = Provider<LoginUseCase>((ref) {
   return LoginUseCase(ref.watch(authRepositoryProvider));
 });
 
-final restoreSessionUseCaseProvider = Provider<RestoreSessionUseCase>((ref) {
-  return RestoreSessionUseCase(ref.watch(authRepositoryProvider));
-});
-
-final loginWithKeycloakUseCaseProvider = Provider<LoginWithKeycloakUseCase>((
-  ref,
-) {
-  return LoginWithKeycloakUseCase(ref.watch(authRepositoryProvider));
-});
-
 final registerUseCaseProvider = Provider<RegisterUseCase>((ref) {
   return RegisterUseCase(ref.watch(authRepositoryProvider));
 });
@@ -36,26 +26,6 @@ class LoginUseCase {
 
   Future<User> call({required String username, required String password}) {
     return _repository.login(username: username, password: password);
-  }
-}
-
-class RestoreSessionUseCase {
-  const RestoreSessionUseCase(this._repository);
-
-  final AuthRepository _repository;
-
-  Future<User?> call() {
-    return _repository.restoreSession();
-  }
-}
-
-class LoginWithKeycloakUseCase {
-  const LoginWithKeycloakUseCase(this._repository);
-
-  final AuthRepository _repository;
-
-  Future<User> call() {
-    return _repository.loginWithKeycloak();
   }
 }
 

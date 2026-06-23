@@ -52,15 +52,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         key: _formKey,
         child: Column(
           children: [
-            PrimaryButton(
-              label: 'Войти через Keycloak',
-              icon: Icons.key_rounded,
-              isLoading: authState.isLoading,
-              onPressed: _loginWithKeycloak,
-            ),
-            const SizedBox(height: 18),
-            const _AuthDivider(),
-            const SizedBox(height: 18),
             AppTextField(
               controller: _usernameController,
               label: 'Имя пользователя',
@@ -103,10 +94,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     return null;
   }
 
-  void _loginWithKeycloak() {
-    ref.read(authControllerProvider.notifier).loginWithKeycloak();
-  }
-
   void _submit() {
     if (!(_formKey.currentState?.validate() ?? false)) {
       return;
@@ -117,29 +104,5 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           username: _usernameController.text,
           password: _passwordController.text,
         );
-  }
-}
-
-class _AuthDivider extends StatelessWidget {
-  const _AuthDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        const Expanded(child: Divider()),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(
-            'или',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Colors.black.withValues(alpha: 0.48),
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
-        const Expanded(child: Divider()),
-      ],
-    );
   }
 }

@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
+  ArrowDownUp,
   ArrowLeft,
   BarChart3,
   Bell,
@@ -12,6 +13,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock3,
   Contact,
   Copy,
@@ -21,9 +23,13 @@ import {
   FileText,
   Filter,
   Folder,
+  Flag,
+  Globe,
   Grid2X2,
+  GripVertical,
   HelpCircle,
   Highlighter,
+  Info,
   Link,
   ListChecks,
   Loader2,
@@ -47,9 +53,10 @@ import {
   TrendingUp,
   Users,
   Video,
+  X,
   Zap,
 } from 'lucide-react'
-import { LiveKitRoom, VideoConference, useChat, useParticipants } from '@livekit/components-react'
+import { LiveKitRoom, VideoConference, useChat, useLocalParticipant, useParticipants } from '@livekit/components-react'
 import '@livekit/components-styles'
 import { ensureCryptoRandomUUID } from './crypto-polyfill.js'
 import './App.css'
@@ -82,6 +89,352 @@ const fallbackReportActions = [
   { id: 'delete', label: 'Удалить отчет', enabled: true, danger: true },
 ]
 
+const speakerAvatarPalette = ['#16a34a', '#7c3aed', '#ea580c', '#db2777', '#2563eb', '#0d9488', '#ca8a04', '#dc2626']
+
+function speakerInitials(name) {
+  const trimmed = (name || '').trim()
+  if (!trimmed) {
+    return '?'
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean)
+  const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase() || '')
+  return initials.join('') || trimmed[0].toUpperCase()
+}
+
+function speakerAvatarColor(name) {
+  const key = (name || '').trim().toLowerCase()
+  let hash = 0
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) % speakerAvatarPalette.length
+  }
+  return speakerAvatarPalette[((hash % speakerAvatarPalette.length) + speakerAvatarPalette.length) % speakerAvatarPalette.length]
+}
+
+function timeToSeconds(value) {
+  const parts = (value || '0:00').split(':').map((part) => parseInt(part, 10) || 0)
+  if (parts.length === 3) {
+    return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  }
+  if (parts.length === 2) {
+    return parts[0] * 60 + parts[1]
+  }
+  return parts[0] || 0
+}
+
+function highlightKey(item) {
+  return `${item.time}-${item.title}`
+}
+
+function chapterKey(chapter) {
+  return `${chapter.start || chapter.time}-${chapter.title}`
+}
+
+function formatDurationLabel(seconds) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return null
+  }
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 1) {
+    return `${Math.round(seconds)} с`
+  }
+  return `${minutes} мин`
+}
+
+function chapterDurationSeconds(chapter, nextChapterStartSeconds) {
+  const startSeconds = timeToSeconds(chapter.start || chapter.time)
+  if (chapter.end) {
+    return timeToSeconds(chapter.end) - startSeconds
+  }
+  if (Number.isFinite(nextChapterStartSeconds)) {
+    return nextChapterStartSeconds - startSeconds
+  }
+  return null
+}
+
+function captureVideoFrame(video, seconds) {
+  return new Promise((resolve, reject) => {
+    if (!video || Number.isNaN(seconds)) {
+      reject(new Error('Invalid video or timestamp'))
+      return
+    }
+
+    function cleanup() {
+      video.removeEventListener('seeked', onSeeked)
+      video.removeEventListener('error', onError)
+    }
+    function onSeeked() {
+      cleanup()
+      try {
+        const canvas = document.createElement('canvas')
+        canvas.width = video.videoWidth || 320
+        canvas.height = video.videoHeight || 180
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        resolve(canvas.toDataURL('image/jpeg', 0.7))
+      } catch (error) {
+        reject(error)
+      }
+    }
+    function onError() {
+      cleanup()
+      reject(new Error('Video failed to seek'))
+    }
+
+    video.addEventListener('seeked', onSeeked)
+    video.addEventListener('error', onError)
+    video.currentTime = Math.max(0, seconds)
+  })
+}
+
+function groupTranscriptByChapters(lines, chapterList) {
+  if (!Array.isArray(chapterList) || chapterList.length === 0) {
+    return [{ chapter: null, lines }]
+  }
+
+  const sortedChapters = chapterList
+    .map((chapter) => ({ ...chapter, startSeconds: timeToSeconds(chapter.start || chapter.time) }))
+    .sort((a, b) => a.startSeconds - b.startSeconds)
+
+  const groups = sortedChapters.map((chapter) => ({ chapter, lines: [] }))
+  const ungrouped = []
+
+  lines.forEach((line) => {
+    const lineSeconds = timeToSeconds(line.time)
+    let target = null
+    for (let i = sortedChapters.length - 1; i >= 0; i -= 1) {
+      if (lineSeconds >= sortedChapters[i].startSeconds) {
+        target = groups[i]
+        break
+      }
+    }
+    if (target) {
+      target.lines.push(line)
+    } else {
+      ungrouped.push(line)
+    }
+  })
+
+  const result = ungrouped.length > 0 ? [{ chapter: null, lines: ungrouped }] : []
+  return [...result, ...groups.filter((group) => group.lines.length > 0)]
+}
+
+function moodDescription(value) {
+  const score = Number(value) || 0
+  if (score >= 80) return 'Позитивная динамика'
+  if (score >= 50) return 'Нейтральная динамика'
+  return 'Настроение требует внимания'
+}
+
+function engagementDescription(value) {
+  const score = Number(value) || 0
+  if (score >= 80) return 'Высокое участие'
+  if (score >= 50) return 'Среднее участие'
+  return 'Низкое участие'
+}
+
+function interruptionsDescription(count) {
+  const value = Number(count) || 0
+  if (value === 0) return 'Перебиваний не обнаружено'
+  if (value <= 3) return 'Низкий уровень перебиваний'
+  if (value <= 7) return 'Средний уровень перебиваний'
+  return 'Высокий уровень перебиваний'
+}
+
+function highlightTypeMeta(type) {
+  const normalized = (type || '').toLowerCase()
+  if (normalized === 'question') {
+    return { label: 'Ключевой вопрос', className: 'highlight-tag-question', Icon: HelpCircle }
+  }
+  if (normalized === 'action') {
+    return { label: 'Действие', className: 'highlight-tag-action', Icon: Flag }
+  }
+  return { label: 'Тема', className: 'highlight-tag-topic', Icon: MessageSquareText }
+}
+
+function scoreLabel(value) {
+  const score = Number(value) || 0
+  if (score >= 80) {
+    return 'ХОРОШО'
+  }
+  if (score >= 50) {
+    return 'СРЕДНЕ'
+  }
+  return 'НИЗКО'
+}
+
+function transcriptLineKey(line) {
+  return line.id || `${line.time}-${line.speaker}`
+}
+
+function findTranscriptMatches(chapterGroups, query) {
+  const trimmed = query.trim().toLowerCase()
+  if (!trimmed) {
+    return []
+  }
+
+  const matches = []
+  chapterGroups.forEach((group) => {
+    const chapterKey = group.chapter?.title || 'ungrouped'
+    group.lines.forEach((line) => {
+      const lower = (line.text || '').toLowerCase()
+      let from = 0
+      let idx = lower.indexOf(trimmed, from)
+      while (idx !== -1) {
+        matches.push({ lineKey: transcriptLineKey(line), chapterKey, charIndex: idx })
+        from = idx + trimmed.length
+        idx = lower.indexOf(trimmed, from)
+      }
+    })
+  })
+  return matches
+}
+
+function splitTextForHighlight(text, query, activeCharIndex) {
+  const value = text || ''
+  const trimmed = query.trim()
+  if (!trimmed) {
+    return [{ text: value, match: false }]
+  }
+
+  const lower = value.toLowerCase()
+  const needle = trimmed.toLowerCase()
+  const segments = []
+  let cursor = 0
+  let idx = lower.indexOf(needle, cursor)
+  if (idx === -1) {
+    return [{ text: value, match: false }]
+  }
+
+  while (idx !== -1) {
+    if (idx > cursor) {
+      segments.push({ text: value.slice(cursor, idx), match: false })
+    }
+    segments.push({ text: value.slice(idx, idx + needle.length), match: true, active: idx === activeCharIndex })
+    cursor = idx + needle.length
+    idx = lower.indexOf(needle, cursor)
+  }
+  if (cursor < value.length) {
+    segments.push({ text: value.slice(cursor), match: false })
+  }
+  return segments
+}
+
+const trendLineColors = { score: '#5c4df4', engagement: '#ef4444', mood: '#d946ef' }
+
+function niceAxisBounds(values) {
+  const min = Math.min(...values)
+  const max = Math.max(...values)
+  const lower = Math.max(0, Math.floor(min / 10) * 10 - 10)
+  const upper = Math.min(100, Math.ceil(max / 10) * 10 + 10)
+  return lower === upper ? [Math.max(0, lower - 10), Math.min(100, upper + 10)] : [lower, upper]
+}
+
+function smoothPath(coords) {
+  if (coords.length < 2) {
+    return ''
+  }
+  let path = `M ${coords[0][0]} ${coords[0][1]}`
+  for (let i = 0; i < coords.length - 1; i += 1) {
+    const [x0, y0] = coords[i]
+    const [x1, y1] = coords[i + 1]
+    const midX = (x0 + x1) / 2
+    path += ` Q ${x0} ${y0} ${midX} ${(y0 + y1) / 2} Q ${x1} ${y1} ${x1} ${y1}`
+  }
+  return path
+}
+
+function TrendChart({ points }) {
+  if (!Array.isArray(points) || points.length < 2) {
+    return null
+  }
+
+  const width = 720
+  const height = 220
+  const allValues = points.flatMap((point) => [point.mood, point.engagement, point.score])
+  const [minValue, maxValue] = niceAxisBounds(allValues)
+  const stepX = width / (points.length - 1)
+  const toY = (value) => height - ((value - minValue) / (maxValue - minValue)) * height
+  const coordsFor = (key) => points.map((point, index) => [index * stepX, toY(point[key])])
+  const buildLine = (key) => smoothPath(coordsFor(key))
+  const buildArea = (key) => {
+    const coords = coordsFor(key)
+    return `${smoothPath(coords)} L ${coords[coords.length - 1][0]} ${height} L ${coords[0][0]} ${height} Z`
+  }
+
+  const gridLines = [minValue, (minValue + maxValue) / 2, maxValue]
+
+  return (
+    <svg className="trend-chart" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="trend-fill-mood" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={trendLineColors.mood} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={trendLineColors.mood} stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="trend-fill-engagement" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={trendLineColors.engagement} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={trendLineColors.engagement} stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="trend-fill-score" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={trendLineColors.score} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={trendLineColors.score} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+
+      {gridLines.map((value) => (
+        <line key={value} className="trend-gridline" x1="0" y1={toY(value)} x2={width} y2={toY(value)} />
+      ))}
+
+      <path d={buildArea('engagement')} fill="url(#trend-fill-engagement)" stroke="none" />
+      <path d={buildArea('mood')} fill="url(#trend-fill-mood)" stroke="none" />
+      <path d={buildArea('score')} fill="url(#trend-fill-score)" stroke="none" />
+
+      <path d={buildLine('mood')} fill="none" stroke={trendLineColors.mood} strokeWidth="2" />
+      <path d={buildLine('engagement')} fill="none" stroke={trendLineColors.engagement} strokeWidth="2" />
+      <path d={buildLine('score')} fill="none" stroke={trendLineColors.score} strokeWidth="2" />
+
+      {gridLines.map((value) => (
+        <text key={`label-${value}`} className="trend-gridline-label" x={width} y={toY(value) - 4}>{Math.round(value)}</text>
+      ))}
+    </svg>
+  )
+}
+
+function PositionSlider({ label, description, value, hasValue, average, min, max, unit }) {
+  const range = max - min
+  const clampPercent = (raw) => Math.max(0, Math.min(100, ((raw - min) / range) * 100))
+  const averagePercent = clampPercent(average)
+  const valuePercent = hasValue ? clampPercent(value) : null
+
+  return (
+    <article className="position-row">
+      <div className="position-info">
+        <strong>{label}</strong>
+        <p>{description}</p>
+      </div>
+      <div className="position-track-wrap">
+        {hasValue && (
+          <span className="position-value" style={{ left: `${valuePercent}%` }}>{value}{unit}</span>
+        )}
+        <div className="position-track">
+          <span className="position-track-fill" style={{ width: `${averagePercent}%` }} />
+          {hasValue && <span className="position-track-dot" style={{ left: `${valuePercent}%` }} />}
+        </div>
+        <div className="position-track-labels">
+          <span>{min}{unit}</span>
+          <span>{max}{unit}</span>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+function averageOf(values) {
+  if (!values.length) {
+    return 0
+  }
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length)
+}
+
 function normalizeReportActions(actions) {
   const incomingActions = Array.isArray(actions) ? actions : []
   const byID = new Map(fallbackReportActions.map((action) => [action.id, action]))
@@ -93,10 +446,6 @@ function normalizeReportActions(actions) {
   })
 
   return Array.from(byID.values())
-}
-
-function firstNonEmpty(...values) {
-  return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''
 }
 
 const reportRows = [
@@ -209,10 +558,26 @@ const highlights = [
 ]
 
 const chapters = [
-  { time: '00:00', title: 'Старт и цель встречи', duration: '4 мин' },
-  { time: '04:01', title: 'LiveKit вход и комнаты', duration: '9 мин' },
-  { time: '13:10', title: 'Структура AI отчёта', duration: '12 мин' },
-  { time: '25:30', title: 'Action items и финальные решения', duration: '7 мин' },
+  {
+    time: '00:00', title: 'Старт и цель встречи', duration: '4 мин',
+    text: 'Команда обозначила цель звонка и кратко прошлась по плану.',
+    points: ['Цель и план встречи', 'Кто участвует и зачем'],
+  },
+  {
+    time: '04:01', title: 'LiveKit вход и комнаты', duration: '9 мин',
+    text: 'Обсудили, как пользователь создаёт и подключается к комнате LiveKit.',
+    points: ['Создание комнаты по названию', 'Автоматическая выдача токена backend'],
+  },
+  {
+    time: '13:10', title: 'Структура AI отчёта', duration: '12 мин',
+    text: 'Разобрали вкладки отчёта: заметки, транскрипт, главы и основные моменты.',
+    points: ['Сводка и action items', 'Главы, транскрипт и основные моменты'],
+  },
+  {
+    time: '25:30', title: 'Action items и финальные решения', duration: '7 мин',
+    text: 'Зафиксировали итоговые задачи и договорённости команды.',
+    points: ['Распределение задач по владельцам', 'Сроки и приоритеты'],
+  },
 ]
 
 const aiQuestions = [
@@ -435,28 +800,9 @@ function roomRecordingLabel(state) {
       return 'Запись'
   }
 }
-function parseReportTimeToSeconds(value) {
-  const parts = String(value || '')
-    .trim()
-    .split(':')
-    .map((part) => Number.parseInt(part, 10))
-
-  if (parts.length < 2 || parts.some((part) => Number.isNaN(part))) {
-    return null
-  }
-
-  return parts.reduce((total, part) => total * 60 + part, 0)
-}
-
-function chapterKey(chapterItem) {
-  return [chapterItem.start, chapterItem.time, chapterItem.end, chapterItem.title]
-    .filter(Boolean)
-    .join('-')
-}
 
 const authSessionKey = 'alemlive-auth-session-v2'
 const authVerifierKey = 'alemlive-auth-verifier'
-const participantSessionKey = 'alemlive-participant-session-id'
 let currentAccessToken = ''
 let authRefreshPromise = null
 
@@ -481,22 +827,6 @@ function getCurrentAccessToken() {
 function getAuthHeaders() {
   const token = getCurrentAccessToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
-}
-
-function getParticipantSessionID() {
-  if (typeof window === 'undefined') {
-    return ''
-  }
-
-  const existing = window.sessionStorage.getItem(participantSessionKey)
-  if (existing) {
-    return existing
-  }
-
-  ensureCryptoRandomUUID()
-  const next = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
-  window.sessionStorage.setItem(participantSessionKey, next)
-  return next
 }
 
 function tokenExpiresAt(token) {
@@ -895,6 +1225,103 @@ function shouldWarnAboutMediaSecurity() {
   return window.location.protocol !== 'https:' && !['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
 }
 
+function MediaStateReporter({ roomName }) {
+  const { isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant()
+
+  function reportDeviceState(device, enabled) {
+    if (!roomName) {
+      return
+    }
+    apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/device-state`, {
+      method: 'POST',
+      body: JSON.stringify({ device, enabled }),
+    }).catch(() => {})
+  }
+
+  useEffect(() => {
+    reportDeviceState('mic', Boolean(isMicrophoneEnabled))
+  }, [roomName, isMicrophoneEnabled])
+
+  useEffect(() => {
+    reportDeviceState('camera', Boolean(isCameraEnabled))
+  }, [roomName, isCameraEnabled])
+
+  return null
+}
+
+function LiveKitDeviceButtons({ onDeviceStateChange, onDevicePreferenceChange, onDeviceError }) {
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, lastMicrophoneError, lastCameraError } = useLocalParticipant()
+  const [pendingDevice, setPendingDevice] = useState('')
+
+  useEffect(() => {
+    onDeviceStateChange('mic', isMicrophoneEnabled)
+  }, [isMicrophoneEnabled, onDeviceStateChange])
+
+  useEffect(() => {
+    onDeviceStateChange('camera', isCameraEnabled)
+  }, [isCameraEnabled, onDeviceStateChange])
+
+  useEffect(() => {
+    if (lastMicrophoneError) {
+      onDeviceError('mic', lastMicrophoneError)
+    }
+  }, [lastMicrophoneError, onDeviceError])
+
+  useEffect(() => {
+    if (lastCameraError) {
+      onDeviceError('camera', lastCameraError)
+    }
+  }, [lastCameraError, onDeviceError])
+
+  async function toggleLiveKitDevice(name) {
+    if (!localParticipant || pendingDevice) {
+      return
+    }
+
+    const nextEnabled = name === 'mic' ? !isMicrophoneEnabled : !isCameraEnabled
+
+    try {
+      setPendingDevice(name)
+      if (name === 'mic') {
+        await localParticipant.setMicrophoneEnabled(nextEnabled)
+      } else {
+        await localParticipant.setCameraEnabled(nextEnabled)
+      }
+
+      onDevicePreferenceChange(name, nextEnabled)
+    } catch (error) {
+      onDeviceError(name, error)
+    } finally {
+      setPendingDevice('')
+    }
+  }
+
+  return (
+    <>
+      <button
+        className={isMicrophoneEnabled ? 'icon-button active' : 'icon-button'}
+        type="button"
+        onClick={() => toggleLiveKitDevice('mic')}
+        disabled={pendingDevice === 'mic'}
+        aria-label={isMicrophoneEnabled ? 'Выключить микрофон' : 'Включить микрофон'}
+        aria-pressed={isMicrophoneEnabled}
+      >
+        {isMicrophoneEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+      </button>
+      <button
+        className={isCameraEnabled ? 'icon-button active' : 'icon-button'}
+        type="button"
+        onClick={() => toggleLiveKitDevice('camera')}
+        disabled={pendingDevice === 'camera'}
+        aria-label={isCameraEnabled ? 'Выключить камеру' : 'Включить камеру'}
+        aria-pressed={isCameraEnabled}
+      >
+        {isCameraEnabled ? <Video size={18} /> : <CameraOff size={18} />}
+      </button>
+    </>
+  )
+}
+
 function ConferenceChatPanel({ onClose }) {
   const { chatMessages, send, isSending } = useChat()
   const [message, setMessage] = useState('')
@@ -977,13 +1404,12 @@ function ConferenceChatPanel({ onClose }) {
 function App() {
   const initialReportId = getInitialReportId()
   const manualDisconnectRef = useRef(false)
-  const recordingVideoRef = useRef(null)
   const [activeView, setActiveView] = useState(() => getInitialView(initialReportId))
   const [selectedReportId, setSelectedReportId] = useState(initialReportId || '')
   const [activeReportTab, setActiveReportTab] = useState('notes')
   const [form, setForm] = useState({
     roomName: getInitialRoomName(),
-    userName: import.meta.env.VITE_LIVEKIT_NAME ?? '',
+    userName: import.meta.env.VITE_LIVEKIT_NAME ?? 'Мади Орысбек',
   })
   const [meeting, setMeeting] = useState(null)
   const [entryMode, setEntryMode] = useState('create')
@@ -1025,7 +1451,16 @@ function App() {
   const [reportActions, setReportActions] = useState({})
   const [personalNotes, setPersonalNotes] = useState({})
   const [isPersonalNoteSaving, setIsPersonalNoteSaving] = useState(false)
+  const [isPersonalizingSummary, setIsPersonalizingSummary] = useState(false)
+  const [copilotLanguage, setCopilotLanguage] = useState('ru')
+  const [collapsedTranscriptChapters, setCollapsedTranscriptChapters] = useState({})
+  const [transcriptSearchQuery, setTranscriptSearchQuery] = useState('')
+  const [transcriptMatchIndex, setTranscriptMatchIndex] = useState(0)
+  const [participationSortDescending, setParticipationSortDescending] = useState(true)
+  const [selectedPositionsParticipant, setSelectedPositionsParticipant] = useState('')
+  const [isEditedNoticeDismissed, setIsEditedNoticeDismissed] = useState(false)
   const [showNotesChapterDescriptions, setShowNotesChapterDescriptions] = useState(true)
+  const transcriptLineRefs = useRef({})
   const [reportsError, setReportsError] = useState('')
   const [reportsLoading, setReportsLoading] = useState(false)
   const [reportsRefreshKey, setReportsRefreshKey] = useState(0)
@@ -1042,30 +1477,187 @@ function App() {
   const [isMeetingMaximized, setIsMeetingMaximized] = useState(false)
   const [isConferenceChatOpen, setIsConferenceChatOpen] = useState(true)
   const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false)
+  const [copilotPanelWidth, setCopilotPanelWidth] = useState(420)
+  const [isWideEnoughToResizeCopilot, setIsWideEnoughToResizeCopilot] = useState(() => (
+    typeof window === 'undefined' || window.innerWidth > 1320
+  ))
+  const isResizingCopilotRef = useRef(false)
   const [reportMirrorOverrides, setReportMirrorOverrides] = useState({})
   const [roomSettings, setRoomSettings] = useState(null)
   const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false)
   const [roomRecordingStatus, setRoomRecordingStatus] = useState({ state: 'idle', configured: false })
   const [isRecordingToggling, setIsRecordingToggling] = useState(false)
   const copilotInputRef = useRef(null)
+  const recordingVideoRef = useRef(null)
+  const thumbnailVideoRef = useRef(null)
+  const [highlightThumbnails, setHighlightThumbnails] = useState({})
+  const [chapterThumbnails, setChapterThumbnails] = useState({})
   const reportUploadInputRef = useRef(null)
 
-  const sessionClaims = useMemo(() => decodeJWTClaims(authSession?.accessToken || ''), [authSession?.accessToken])
-  const authenticatedUserName = firstNonEmpty(
-    profile?.displayName,
-    profile?.name,
-    profile?.username,
-    profile?.email,
-    sessionClaims.name,
-    sessionClaims.preferred_username,
-    sessionClaims.email,
-  )
-  const canStart = authenticatedUserName && form.roomName.trim()
+  const canStart = form.userName.trim() && form.roomName.trim()
   const isConnected = Boolean(meeting)
   const isAuthEnabled = Boolean(authConfig.enabled)
   const isAuthenticated = !isAuthEnabled || Boolean(authSession?.accessToken)
   const selectedReportDetail = reportDetails[selectedReportId]
   const selectedReport = selectedReportDetail?.report || reports.find((report) => report.id === selectedReportId) || reports[0] || reportRows[0]
+  const searchableTranscriptLines = selectedReportDetail?.transcriptLines || selectedReportDetail?.transcript || transcriptLines
+  const searchableChapters = selectedReportDetail?.chapters || chapters
+  const searchableHighlights = selectedReportDetail?.highlights || highlights
+  const selectedReportRecordingUrl = selectedReportDetail?.recordingUrl || ''
+  const transcriptChapterGroups = groupTranscriptByChapters(searchableTranscriptLines, searchableChapters)
+  const transcriptMatches = findTranscriptMatches(transcriptChapterGroups, transcriptSearchQuery)
+  const normalizedTranscriptMatchIndex = transcriptMatches.length > 0
+    ? ((transcriptMatchIndex % transcriptMatches.length) + transcriptMatches.length) % transcriptMatches.length
+    : 0
+  const activeTranscriptMatch = transcriptMatches.length > 0 ? transcriptMatches[normalizedTranscriptMatchIndex] : null
+
+  useEffect(() => {
+    if (!activeTranscriptMatch) {
+      return
+    }
+    setCollapsedTranscriptChapters((current) => {
+      if (!current[activeTranscriptMatch.chapterKey]) {
+        return current
+      }
+      const next = { ...current }
+      delete next[activeTranscriptMatch.chapterKey]
+      return next
+    })
+  }, [activeTranscriptMatch?.lineKey, activeTranscriptMatch?.chapterKey])
+
+  useEffect(() => {
+    if (!activeTranscriptMatch) {
+      return
+    }
+    const node = transcriptLineRefs.current[activeTranscriptMatch.lineKey]
+    node?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }, [activeTranscriptMatch?.lineKey, transcriptMatchIndex, collapsedTranscriptChapters])
+
+  useEffect(() => {
+    if (activeReportTab !== 'highlights' || !selectedReportRecordingUrl) {
+      return undefined
+    }
+    const video = thumbnailVideoRef.current
+    if (!video) {
+      return undefined
+    }
+
+    let cancelled = false
+
+    async function run() {
+      if (video.readyState < 1) {
+        await new Promise((resolve) => {
+          video.addEventListener('loadedmetadata', resolve, { once: true })
+        })
+      }
+      for (const item of searchableHighlights) {
+        if (cancelled) {
+          return
+        }
+        const key = highlightKey(item)
+        if (highlightThumbnails[key]) {
+          continue
+        }
+        try {
+          const dataUrl = await captureVideoFrame(video, timeToSeconds(item.time))
+          if (!cancelled) {
+            setHighlightThumbnails((current) => ({ ...current, [key]: dataUrl }))
+          }
+        } catch {
+          // Skip thumbnails that fail to capture (e.g. seek target out of range).
+        }
+      }
+    }
+
+    run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeReportTab, selectedReportRecordingUrl, searchableHighlights])
+
+  useEffect(() => {
+    if (activeReportTab !== 'chapters' || !selectedReportRecordingUrl) {
+      return undefined
+    }
+    const video = thumbnailVideoRef.current
+    if (!video) {
+      return undefined
+    }
+
+    let cancelled = false
+
+    async function run() {
+      if (video.readyState < 1) {
+        await new Promise((resolve) => {
+          video.addEventListener('loadedmetadata', resolve, { once: true })
+        })
+      }
+      for (const item of searchableChapters) {
+        if (cancelled) {
+          return
+        }
+        const key = chapterKey(item)
+        if (chapterThumbnails[key]) {
+          continue
+        }
+        try {
+          const dataUrl = await captureVideoFrame(video, timeToSeconds(item.start || item.time))
+          if (!cancelled) {
+            setChapterThumbnails((current) => ({ ...current, [key]: dataUrl }))
+          }
+        } catch {
+          // Skip thumbnails that fail to capture (e.g. seek target out of range).
+        }
+      }
+    }
+
+    run()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeReportTab, selectedReportRecordingUrl, searchableChapters])
+
+  useEffect(() => {
+    function handleMouseMove(event) {
+      if (!isResizingCopilotRef.current) {
+        return
+      }
+      const nextWidth = window.innerWidth - event.clientX
+      setCopilotPanelWidth(Math.min(640, Math.max(320, nextWidth)))
+    }
+    function handleMouseUp() {
+      if (!isResizingCopilotRef.current) {
+        return
+      }
+      isResizingCopilotRef.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
+
+  useEffect(() => {
+    function handleResize() {
+      setIsWideEnoughToResizeCopilot(window.innerWidth > 1320)
+    }
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  function startCopilotResize(event) {
+    event.preventDefault()
+    isResizingCopilotRef.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }
+
   const dateFilterOptions = quickDateOptions.map((option) => ({
     ...option,
     label: reportFilters?.quickDateOptions?.find((backendOption) => backendOption.id === option.id)?.label || option.label,
@@ -1078,7 +1670,6 @@ function App() {
   const hasProcessingReports = reports.some((report) => ['processing', 'recording'].includes(report.processingState || report.status))
   const currentRoomRecordingState = roomRecordingStatus?.state || roomRecordingStatus?.status || 'idle'
   const isRoomRecording = currentRoomRecordingState === 'recording'
-  const selectedReportRecordingUrl = selectedReportDetail?.recordingUrl || ''
   const selectedReportMirrorCorrection = reportMirrorOverrides[selectedReportId] ?? Boolean(selectedReportDetail?.recordingMirrorCorrection)
   const selectedReportRecordingMessage = (() => {
     const state = selectedReport?.processingState || selectedReport?.status || ''
@@ -1105,14 +1696,14 @@ function App() {
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
-    const name = meeting?.userName || authenticatedUserName || 'Guest'
+    const name = meeting?.userName || form.userName || profile?.name || 'Guest'
 
     return {
       room,
       name,
       initial: profile?.initial || name.trim().slice(0, 1).toUpperCase() || 'M',
     }
-  }, [authenticatedUserName, form.roomName, meeting, profile])
+  }, [form.roomName, form.userName, meeting, profile])
 
   useEffect(() => {
     setCurrentAccessToken(authSession?.accessToken || '')
@@ -1275,15 +1866,9 @@ function App() {
 
       if (profilePayload.status === 'fulfilled') {
         setProfile(profilePayload.value)
-        const profileName = firstNonEmpty(
-          profilePayload.value.displayName,
-          profilePayload.value.name,
-          profilePayload.value.username,
-          profilePayload.value.email,
-        )
         setForm((current) => ({
           ...current,
-          userName: current.userName || profileName || current.userName,
+          userName: current.userName || profilePayload.value.name || current.userName,
         }))
       }
 
@@ -1389,6 +1974,28 @@ function App() {
   }, [activeView, authReady, isAuthenticated, selectedReportId])
 
   useEffect(() => {
+    if (!authReady || !isAuthenticated || activeView !== 'reportDetail' || !selectedReportId) {
+      return undefined
+    }
+
+    let isMounted = true
+
+    apiRequest(`/api/reports/${selectedReportId}/personal-note`)
+      .then((payload) => {
+        if (isMounted) {
+          setPersonalNotes((current) => ({ ...current, [selectedReportId]: payload.note || '' }))
+        }
+      })
+      .catch(() => {
+        // Personal note is optional; keep the field empty if it cannot be loaded.
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [activeView, authReady, isAuthenticated, selectedReportId])
+
+  useEffect(() => {
     if (!authReady || !isAuthenticated || !hasProcessingReports) {
       return undefined
     }
@@ -1424,25 +2031,12 @@ function App() {
       return undefined
     }
 
-    let isMounted = true
-    const roomName = meetingMeta.room
-
-    async function refresh() {
-      const payload = await apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/recording/status`).catch(() => null)
-      if (isMounted && payload) {
-        setRoomRecordingStatus(payload)
-      }
-    }
-
-    refresh()
+    refreshRoomRecordingStatus(meetingMeta.room)
     const timer = window.setInterval(() => {
-      refresh()
+      refreshRoomRecordingStatus(meetingMeta.room)
     }, 5000)
 
-    return () => {
-      isMounted = false
-      window.clearInterval(timer)
-    }
+    return () => window.clearInterval(timer)
   }, [isConnected, meetingMeta.room])
 
   function updateField(event) {
@@ -1474,7 +2068,7 @@ function App() {
         method: 'POST',
         body: JSON.stringify({
           roomName: form.roomName || meetingMeta.room,
-          userName: authenticatedUserName || meetingMeta.name,
+          userName: form.userName || meetingMeta.name,
           device: name,
           enabled,
         }),
@@ -1484,6 +2078,20 @@ function App() {
 
   function toggleDevice(name) {
     updateDevicePreference(name, !devices[name])
+  }
+
+  function handleLiveKitDeviceStateChange(name, enabled) {
+    updateDevicePreference(name, enabled, { notifyBackend: false })
+  }
+
+  function handleLiveKitDevicePreferenceChange(name, enabled) {
+    setMeetingNotice('')
+    updateDevicePreference(name, enabled)
+  }
+
+  function handleLiveKitDeviceError(_name, error) {
+    setMeetingNotice(getMediaErrorMessage(error))
+    updateDevicePreference(_name, false, { notifyBackend: false })
   }
 
   function handleLiveKitError(error) {
@@ -1567,6 +2175,18 @@ function App() {
     }).catch(() => null)
   }
 
+  async function refreshRoomRecordingStatus(roomName = meetingMeta.room) {
+    if (!roomName) {
+      return null
+    }
+
+    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/recording/status`).catch(() => null)
+    if (payload) {
+      setRoomRecordingStatus(payload)
+    }
+    return payload
+  }
+
   async function toggleRoomRecording() {
     if (!meetingMeta.room || isRecordingToggling) {
       return
@@ -1595,7 +2215,7 @@ function App() {
   async function requestToken(roomName, userName, isHost) {
     const payload = await apiRequest('/api/livekit/token', {
       method: 'POST',
-      body: JSON.stringify({ roomName, userName, identity: getParticipantSessionID(), isHost }),
+      body: JSON.stringify({ roomName, userName, isHost }),
     })
 
     if (!payload.serverUrl || !payload.token) {
@@ -1614,10 +2234,10 @@ function App() {
     setMeetingNotice('')
 
     const nextRoomName = form.roomName.trim()
-    const nextUserName = authenticatedUserName
+    const nextUserName = form.userName.trim()
 
     if (!nextUserName || !nextRoomName) {
-      setJoinError(nextRoomName ? 'Профиль пользователя еще загружается' : 'Введите название комнаты')
+      setJoinError('Введите имя и название комнаты')
       return
     }
 
@@ -1659,6 +2279,31 @@ function App() {
   function joinMeeting(event) {
     event.preventDefault()
     startMeeting(entryMode)
+  }
+
+  async function leaveMeeting() {
+    manualDisconnectRef.current = true
+    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/leave`, {
+      method: 'POST',
+      body: JSON.stringify({
+        userName: meetingMeta.name,
+        event: 'left',
+      }),
+    }).catch(() => null)
+    if (payload?.reportId) {
+      setSelectedReportId(payload.reportId)
+      setReportsRefreshKey((current) => current + 1)
+      apiRequest(`/api/reports/${payload.reportId}`).then((detail) => {
+        if (detail?.report) {
+          setReportDetails((current) => ({ ...current, [payload.reportId]: detail }))
+          setReports((current) => [detail.report, ...current.filter((report) => report.id !== detail.report.id)])
+        }
+      }).catch(() => null)
+      setWorkspaceNotice(`Отчет встречи сохранен: ${payload.reportId}`)
+    }
+    setMeeting(null)
+    setIsMeetingMaximized(false)
+    setMeetingNotice('')
   }
 
   async function copyRoomName() {
@@ -1747,25 +2392,19 @@ function App() {
     }
   }
 
+  function seekRecordingTo(timeLabel) {
+    const node = recordingVideoRef.current
+    if (!node || !timeLabel) {
+      return
+    }
+    node.currentTime = timeToSeconds(timeLabel)
+    node.play().catch(() => {})
+  }
+
   function focusCopilotPanel() {
     setIsCopilotCollapsed(false)
     window.setTimeout(() => copilotInputRef.current?.focus(), 0)
     setReportActionMessage('Copilot открыт и готов отвечать по отчёту')
-  }
-  function seekRecordingTo(time) {
-    const seconds = parseReportTimeToSeconds(time)
-    if (seconds === null) {
-      return
-    }
-
-    const player = recordingVideoRef.current
-    if (player) {
-      player.currentTime = seconds
-      player.play().catch(() => {})
-      setReportActionMessage(`Видео переведено к ${time}`)
-    } else if (selectedReportRecordingUrl) {
-      setReportActionMessage(`Откройте запись и перейдите к ${time}`)
-    }
   }
 
   function collapseCopilotPanel() {
@@ -2144,7 +2783,7 @@ function App() {
     try {
       const payload = await apiRequest(`/api/reports/${selectedReportId}/chat`, {
         method: 'POST',
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, language: copilotLanguage }),
       })
       setCopilotMessages((current) => [...current, { role: 'assistant', text: payload.answer || 'Ответ пустой' }])
     } catch (error) {
@@ -2177,6 +2816,30 @@ function App() {
       // Keep the locally typed note even if saving failed; the next edit will retry.
     } finally {
       setIsPersonalNoteSaving(false)
+    }
+  }
+
+  async function personalizeSummary() {
+    if (!selectedReportId || isPersonalizingSummary) {
+      return
+    }
+
+    setIsPersonalizingSummary(true)
+    try {
+      const payload = await apiRequest(`/api/reports/${selectedReportId}/personalize`, {
+        method: 'POST',
+      })
+      setReportDetails((current) => ({
+        ...current,
+        [selectedReportId]: {
+          ...(current[selectedReportId] || selectedReportDetail || {}),
+          summary: payload.summary,
+        },
+      }))
+    } catch (error) {
+      setReportActionMessage(error.message)
+    } finally {
+      setIsPersonalizingSummary(false)
     }
   }
 
@@ -2526,6 +3189,11 @@ function App() {
                 </div>
 
                 <label>
+                  <span>Ваше имя</span>
+                  <input name="userName" value={form.userName} onChange={updateField} autoComplete="name" />
+                </label>
+
+                <label>
                   <span>Название комнаты</span>
                   <input
                     name="roomName"
@@ -2605,6 +3273,7 @@ function App() {
               data-lk-theme="default"
               className="livekit-context"
             >
+              <MediaStateReporter roomName={meeting.roomName} />
               <div className="meeting-livekit-layout">
                 <section className="meeting-panel">
                   {meetingToolbar}
@@ -2881,17 +3550,17 @@ function App() {
             <div>
               <span>Оценка Alem</span>
               <strong>{selectedReport.score}</strong>
-              <small>ХОРОШО</small>
+              <small>{scoreLabel(selectedReport.score)}</small>
             </div>
             <div>
               <span>Вовлечённость</span>
-              <strong>93</strong>
-              <small>ХОРОШО</small>
+              <strong>{selectedReport.engagementScore}</strong>
+              <small>{scoreLabel(selectedReport.engagementScore)}</small>
             </div>
             <div>
               <span>Настроение</span>
-              <strong>85</strong>
-              <small>ХОРОШО</small>
+              <strong>{selectedReport.moodScore}</strong>
+              <small>{scoreLabel(selectedReport.moodScore)}</small>
             </div>
           </div>
 
@@ -2911,6 +3580,15 @@ function App() {
                 {section.text}
               </p>
             ))}
+            <button
+              className="personalize-summary-button"
+              type="button"
+              onClick={personalizeSummary}
+              disabled={isPersonalizingSummary}
+            >
+              <Sparkles size={16} />
+              {isPersonalizingSummary ? 'Персонализируем...' : 'Персонализировать резюме'}
+            </button>
           </section>
 
           <section className="action-list-panel">
@@ -3042,67 +3720,370 @@ function App() {
     }
 
     if (activeReportTab === 'transcript') {
+      const detailKeywords = selectedReportDetail?.keywords || []
+      const hasSearchQuery = transcriptSearchQuery.trim().length > 0
+      const totalMatches = transcriptMatches.length
+
       return (
         <div className="transcript-report report-pane">
           <div className="transcript-tools">
             <div className="transcript-search">
               <Search size={18} />
-              <span>Поиск по транскрипту: token, комната, отчёт</span>
+              <input
+                value={transcriptSearchQuery}
+                onChange={(event) => {
+                  setTranscriptSearchQuery(event.target.value)
+                  setTranscriptMatchIndex(0)
+                }}
+                placeholder="Поиск по транскрипту: token, комната, отчёт"
+              />
+              {hasSearchQuery && (
+                <div className="transcript-search-nav">
+                  <span className="transcript-search-count">
+                    {totalMatches > 0 ? `${normalizedTranscriptMatchIndex + 1} из ${totalMatches}` : '0 из 0'}
+                  </span>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={totalMatches === 0}
+                    onClick={() => setTranscriptMatchIndex((current) => current - 1)}
+                    aria-label="Предыдущее совпадение"
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    disabled={totalMatches === 0}
+                    onClick={() => setTranscriptMatchIndex((current) => current + 1)}
+                    aria-label="Следующее совпадение"
+                  >
+                    <ChevronDown size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    onClick={() => {
+                      setTranscriptSearchQuery('')
+                      setTranscriptMatchIndex(0)
+                    }}
+                    aria-label="Очистить поиск"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
             </div>
             <span className="report-badge muted">{detailTranscriptLines.length} моментов</span>
           </div>
-          <div className="transcript-list">
-            {detailTranscriptLines.map((line) => (
-              <article className="transcript-line" key={line.id || `${line.time}-${line.speaker}`}>
-                <time>{line.time}</time>
-                <div>
-                  <strong>{line.speaker}</strong>
-                  <p>{line.text}</p>
-                </div>
-              </article>
-            ))}
+
+          {detailKeywords.length > 0 && (
+            <div className="transcript-keywords">
+              <span className="transcript-keywords-label">Ключевые слова</span>
+              <div className="keyword-chip-row">
+                {detailKeywords.map((word) => (
+                  <span
+                    className="keyword-chip"
+                    key={word}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      setTranscriptSearchQuery(word)
+                      setTranscriptMatchIndex(0)
+                    }}
+                  >
+                    {word}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="transcript-list transcript-list-grouped">
+            {transcriptChapterGroups.map((group, groupIndex) => {
+              const chapterKey = group.chapter?.title || `untitled-${groupIndex}`
+              const isCollapsed = Boolean(collapsedTranscriptChapters[chapterKey])
+
+              return (
+                <section className="transcript-chapter-group" key={chapterKey}>
+                  {group.chapter && (
+                    <button
+                      type="button"
+                      className="transcript-chapter-header"
+                      onClick={() => setCollapsedTranscriptChapters((current) => ({ ...current, [chapterKey]: !current[chapterKey] }))}
+                      aria-expanded={!isCollapsed}
+                    >
+                      <span>{group.chapter.title}</span>
+                      {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                    </button>
+                  )}
+                  {!isCollapsed && (
+                    <div className="transcript-bubble-list">
+                      {group.lines.map((line) => {
+                        const lineKey = transcriptLineKey(line)
+                        const isActiveLine = activeTranscriptMatch?.lineKey === lineKey
+                        const segments = hasSearchQuery
+                          ? splitTextForHighlight(line.text, transcriptSearchQuery, isActiveLine ? activeTranscriptMatch.charIndex : -1)
+                          : null
+
+                        return (
+                          <article
+                            className={isActiveLine ? 'transcript-bubble active-match' : 'transcript-bubble'}
+                            key={lineKey}
+                            ref={(node) => { transcriptLineRefs.current[lineKey] = node }}
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => seekRecordingTo(line.time)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault()
+                                seekRecordingTo(line.time)
+                              }
+                            }}
+                            aria-label={`Перейти к моменту ${line.time}, где говорит ${line.speaker}`}
+                          >
+                            <span className="transcript-avatar" style={{ background: speakerAvatarColor(line.speaker) }}>
+                              {speakerInitials(line.speaker)}
+                            </span>
+                            <div className="transcript-bubble-body">
+                              <div className="transcript-bubble-meta">
+                                <strong>{line.speaker}</strong>
+                                <time>{line.time}</time>
+                              </div>
+                              <p className={line.sentiment ? `transcript-bubble-text sentiment-${line.sentiment}` : 'transcript-bubble-text'}>
+                                {segments
+                                  ? segments.map((segment, segmentIndex) => (segment.match ? (
+                                    <mark className={segment.active ? 'search-hit active' : 'search-hit'} key={segmentIndex}>
+                                      {segment.text}
+                                    </mark>
+                                  ) : (
+                                    <span key={segmentIndex}>{segment.text}</span>
+                                  )))
+                                  : line.text}
+                              </p>
+                              {line.sentiment && (
+                                <span className={`sentiment-tag sentiment-tag-${line.sentiment}`}>
+                                  {line.sentiment === 'positive' ? 'Повышено Sentiment' : 'Снижено Sentiment'}
+                                </span>
+                              )}
+                            </div>
+                          </article>
+                        )
+                      })}
+                    </div>
+                  )}
+                </section>
+              )
+            })}
           </div>
         </div>
       )
     }
 
     if (activeReportTab === 'deepDive') {
+      const moodScore = selectedReport.moodScore ?? 0
+      const engagementScore = selectedReport.engagementScore ?? 0
+      const interruptionsCount = selectedReportDetail?.interruptions ?? 0
+      const trendPoints = selectedReportDetail?.trend || []
+      const sortedSpeakers = [...detailSpeakerStats].sort((a, b) => {
+        const aValue = a.talk ?? a.talkTime ?? 0
+        const bValue = b.talk ?? b.talkTime ?? 0
+        return participationSortDescending ? bValue - aValue : aValue - bValue
+      })
+      const positionsParticipant = detailSpeakerStats.find((speaker) => speaker.name === selectedPositionsParticipant) || sortedSpeakers[0]
+      const charismaSpeakers = detailSpeakerStats.filter((speaker) => speaker.hasCharisma)
+      const biasSpeakers = detailSpeakerStats.filter((speaker) => speaker.hasBias)
+      const positionAverages = {
+        mic: averageOf(detailSpeakerStats.map((speaker) => speaker.micMutedPercent ?? 0)),
+        camera: averageOf(detailSpeakerStats.map((speaker) => speaker.cameraOffPercent ?? 0)),
+        score: averageOf(detailSpeakerStats.map((speaker) => speaker.score ?? 0)),
+        mood: averageOf(detailSpeakerStats.map((speaker) => speaker.mood ?? 0)),
+        engagement: averageOf(detailSpeakerStats.map((speaker) => speaker.engagement ?? 0)),
+        charisma: averageOf(charismaSpeakers.map((speaker) => speaker.charisma)),
+        bias: averageOf(biasSpeakers.map((speaker) => speaker.bias)),
+      }
+
       return (
         <div className="deep-report report-pane">
+          {!isEditedNoticeDismissed && (
+            <div className="edited-notice">
+              <Info size={18} />
+              <div>
+                <strong>Этот отчёт был отредактирован</strong>
+                <p>Этот вид основан на оригинальной транскрипции и не может отражать последующие изменения.</p>
+              </div>
+              <button type="button" className="icon-button" onClick={() => setIsEditedNoticeDismissed(true)} aria-label="Скрыть уведомление">
+                <X size={18} />
+              </button>
+            </div>
+          )}
+
+          <section className="participation-panel">
+            <div className="participation-header">
+              <span className="section-kicker-plain">УЧАСТИЕ</span>
+              <button
+                type="button"
+                className="sort-toggle-button"
+                onClick={() => setParticipationSortDescending((current) => !current)}
+              >
+                <ArrowDownUp size={16} />
+                Сортировать по времени выступления
+                <ChevronDown size={16} />
+              </button>
+            </div>
+            <div className="participation-list">
+              {sortedSpeakers.map((speaker) => {
+                const talkValue = speaker.talk ?? speaker.talkTime ?? 0
+                const isSelected = positionsParticipant?.name === speaker.name
+                return (
+                  <article
+                    className={isSelected ? 'participation-row selected' : 'participation-row'}
+                    key={speaker.name}
+                    onClick={() => setSelectedPositionsParticipant(speaker.name)}
+                  >
+                    <span className="participation-name">
+                      <Clock3 size={16} />
+                      {speaker.name}
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-button participation-play"
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        seekRecordingTo(speaker.firstSeenTime)
+                      }}
+                      disabled={!speaker.firstSeenTime}
+                      aria-label={`Перейти к моменту, где говорит ${speaker.name}`}
+                    >
+                      <Play size={15} fill="currentColor" />
+                    </button>
+                    <div className="talk-bar" aria-label={`${speaker.name} говорил ${talkValue}% времени`}>
+                      <span style={{ width: `${talkValue}%` }} />
+                    </div>
+                    <b>{talkValue}%</b>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+
+          {positionsParticipant && (
+            <section className="positions-panel">
+              <div className="participation-header">
+                <span className="section-kicker-plain">ПОЛОЖЕНИЯ</span>
+                <span className="positions-subject">{positionsParticipant.name}</span>
+              </div>
+              <PositionSlider
+                label="Микрофон выключен"
+                description="Процент времени встречи, когда микрофон был выключен"
+                value={positionsParticipant.micMutedPercent ?? 0}
+                hasValue
+                average={positionAverages.mic}
+                min={0}
+                max={100}
+                unit=" %"
+              />
+              <PositionSlider
+                label="Камера отключена"
+                description="Процент времени встречи, когда камера была выключена"
+                value={positionsParticipant.cameraOffPercent ?? 0}
+                hasValue
+                average={positionAverages.camera}
+                min={0}
+                max={100}
+                unit=" %"
+              />
+              <PositionSlider
+                label="Оценка участника"
+                description="Индивидуальный показатель на основе настроения, вовлечённости и доли участия в разговоре"
+                value={positionsParticipant.score ?? 0}
+                hasValue
+                average={positionAverages.score}
+                min={50}
+                max={100}
+                unit=""
+              />
+              <PositionSlider
+                label="Настроение"
+                description="Отношение к встрече на основе sentiment-меток собственных реплик"
+                value={positionsParticipant.mood ?? 0}
+                hasValue
+                average={positionAverages.mood}
+                min={50}
+                max={100}
+                unit=""
+              />
+              <PositionSlider
+                label="Вовлечённость"
+                description="Доля участия в разговоре и количество реплик"
+                value={positionsParticipant.engagement ?? 0}
+                hasValue
+                average={positionAverages.engagement}
+                min={50}
+                max={100}
+                unit=""
+              />
+              <PositionSlider
+                label="Харизма"
+                description="Насколько позитивно или негативно реагировали другие сразу после реплик этого участника"
+                value={positionsParticipant.charisma ?? 0}
+                hasValue={Boolean(positionsParticipant.hasCharisma)}
+                average={positionAverages.charisma}
+                min={50}
+                max={100}
+                unit=""
+              />
+              <PositionSlider
+                label="Предвзятость"
+                description="Насколько позитивно или негативно этот участник реагировал сразу после реплик других"
+                value={positionsParticipant.bias ?? 0}
+                hasValue={Boolean(positionsParticipant.hasBias)}
+                average={positionAverages.bias}
+                min={50}
+                max={100}
+                unit=""
+              />
+            </section>
+          )}
+
           <div className="metric-grid">
             <div className="metric-card">
               <TrendingUp size={20} />
               <span>Sentiment</span>
-              <strong>82%</strong>
-              <p>Позитивная динамика</p>
+              <strong>{moodScore}%</strong>
+              <p>{moodDescription(moodScore)}</p>
             </div>
             <div className="metric-card">
               <Zap size={20} />
               <span>Engagement</span>
-              <strong>74%</strong>
-              <p>Высокое участие</p>
+              <strong>{engagementScore}%</strong>
+              <p>{engagementDescription(engagementScore)}</p>
             </div>
             <div className="metric-card">
               <Clock3 size={20} />
               <span>Interruptions</span>
-              <strong>3</strong>
-              <p>Низкий уровень перебиваний</p>
+              <strong>{interruptionsCount}</strong>
+              <p>{interruptionsDescription(interruptionsCount)}</p>
             </div>
           </div>
-          <div className="speaker-table">
-            {detailSpeakerStats.map((speaker) => (
-              <article className="speaker-row" key={speaker.name}>
-                <div>
-                  <strong>{speaker.name}</strong>
-                  <span>{speaker.sentiment} · {speaker.pace}</span>
+
+          <section className="trend-panel">
+            <div className="trend-legend">
+              <span><i style={{ background: trendLineColors.score }} />Оценка Alem {selectedReport.score}</span>
+              <span><i style={{ background: trendLineColors.engagement }} />Вовлечённость {engagementScore}</span>
+              <span><i style={{ background: trendLineColors.mood }} />Настроение {moodScore}</span>
+            </div>
+            {trendPoints.length > 1 ? (
+              <>
+                <TrendChart points={trendPoints} />
+                <div className="trend-axis">
+                  {trendPoints.map((point) => <span key={point.time}>{point.time}</span>)}
                 </div>
-                <div className="talk-bar" aria-label={`${speaker.name} говорил ${speaker.talk || speaker.talkTime}% времени`}>
-                  <span style={{ width: `${speaker.talk || speaker.talkTime}%` }} />
-                </div>
-                <b>{speaker.talk || speaker.talkTime}%</b>
-              </article>
-            ))}
-          </div>
+              </>
+            ) : (
+              <p className="trend-empty">Недостаточно реплик в транскрипте, чтобы построить график динамики по времени.</p>
+            )}
+          </section>
         </div>
       )
     }
@@ -3110,34 +4091,88 @@ function App() {
     if (activeReportTab === 'highlights') {
       return (
         <div className="highlights-report report-pane">
-          {detailHighlights.map((item) => (
-            <article className="highlight-card" key={item.title}>
-              <span className="highlight-time">{item.time}</span>
-              <div>
-                <h3>{item.title}</h3>
-                <p>{item.note || item.text}</p>
-              </div>
-              <button className="icon-button" type="button" onClick={openReportRecording} aria-label={`Open highlight ${item.title}`}>
-                <Play size={17} fill="currentColor" />
-              </button>
-            </article>
-          ))}
+          {detailHighlights.map((item) => {
+            const meta = highlightTypeMeta(item.type)
+            const thumbnail = highlightThumbnails[highlightKey(item)]
+            return (
+              <article
+                className="highlight-card"
+                key={highlightKey(item)}
+                role="button"
+                tabIndex={0}
+                onClick={() => seekRecordingTo(item.time)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    seekRecordingTo(item.time)
+                  }
+                }}
+                aria-label={`Перейти к моменту ${item.time}: ${item.title}`}
+              >
+                <div className="highlight-card-body">
+                  <span className={`highlight-tag ${meta.className}`}>
+                    <meta.Icon size={14} />
+                    {meta.label}
+                  </span>
+                  <span className="highlight-time">{item.time}</span>
+                  <h3>{item.title}</h3>
+                  {(item.note || item.text) && <p>{item.note || item.text}</p>}
+                </div>
+                <div className="highlight-thumb">
+                  {thumbnail ? <img src={thumbnail} alt="" /> : <div className="highlight-thumb-placeholder" />}
+                  <span className="highlight-thumb-play">
+                    <Play size={14} fill="currentColor" />
+                  </span>
+                </div>
+              </article>
+            )
+          })}
         </div>
       )
     }
 
+    const sortedChapters = [...detailChapters].sort(
+      (a, b) => timeToSeconds(a.start || a.time) - timeToSeconds(b.start || b.time),
+    )
+
     return (
       <div className="chapters-report report-pane">
-        {detailChapters.map((chapter, index) => (
-          <article className="chapter-row" key={chapter.title}>
-            <span className="chapter-index">{index + 1}</span>
-            <time>{chapter.time || chapter.start}</time>
-            <div>
-              <h3>{chapter.title}</h3>
-              <p>{chapter.duration || chapter.text}</p>
-            </div>
-          </article>
-        ))}
+        {sortedChapters.map((chapter, index) => {
+          const key = chapterKey(chapter)
+          const thumbnail = chapterThumbnails[key]
+          const next = sortedChapters[index + 1]
+          const nextStart = next ? timeToSeconds(next.start || next.time) : null
+          const durationLabel = formatDurationLabel(chapterDurationSeconds(chapter, nextStart))
+
+          return (
+            <article
+              className="chapter-row"
+              key={key}
+              role="button"
+              tabIndex={0}
+              onClick={() => seekRecordingTo(chapter.start || chapter.time)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  seekRecordingTo(chapter.start || chapter.time)
+                }
+              }}
+              aria-label={`Перейти к главе ${chapter.title}`}
+            >
+              <div className="chapter-row-body">
+                <time>{chapter.time || chapter.start}</time>
+                <h3>{chapter.title}</h3>
+              </div>
+              <div className="chapter-thumb">
+                {thumbnail ? <img src={thumbnail} alt="" /> : <div className="chapter-thumb-placeholder" />}
+                <span className="chapter-thumb-play">
+                  <Play size={14} fill="currentColor" />
+                </span>
+                {durationLabel && <span className="chapter-thumb-duration">{durationLabel}</span>}
+              </div>
+            </article>
+          )
+        })}
       </div>
     )
   }
@@ -3208,13 +4243,27 @@ function App() {
 
         {reportActionMessage && <div className="report-detail-status">{reportActionMessage}</div>}
 
-        <div className="report-detail-layout">
+        <div
+          className="report-detail-layout"
+          style={isCopilotCollapsed || !isWideEnoughToResizeCopilot ? undefined : { gridTemplateColumns: `minmax(0, 1fr) ${copilotPanelWidth}px` }}
+        >
           <div className="report-recording-column">
+            {selectedReportRecordingUrl && (
+              <video
+                ref={thumbnailVideoRef}
+                key={`thumb-${selectedReportRecordingUrl}`}
+                src={selectedReportRecordingUrl}
+                muted
+                preload="metadata"
+                className="thumbnail-capture-video"
+                aria-hidden="true"
+              />
+            )}
             {selectedReportRecordingUrl ? (
               <div className={selectedReportMirrorCorrection ? 'report-video-frame mirror-corrected' : 'report-video-frame'}>
                 <video
-                  className="report-video-player"
                   ref={recordingVideoRef}
+                  className="report-video-player"
                   key={selectedReportRecordingUrl}
                   src={selectedReportRecordingUrl}
                   controls
@@ -3312,6 +4361,17 @@ function App() {
           </div>
 
           <aside className={isCopilotCollapsed ? 'report-copilot collapsed' : 'report-copilot'}>
+            {!isCopilotCollapsed && isWideEnoughToResizeCopilot && (
+              <div
+                className="copilot-resize-handle"
+                onMouseDown={startCopilotResize}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Изменить ширину панели Alem"
+              >
+                <GripVertical size={14} />
+              </div>
+            )}
             <div className="copilot-tools">
               <button className="icon-button" type="button" onClick={() => runReportLookup('prompts')} aria-label="Edit prompts">
                 <Edit3 size={18} />
@@ -3330,24 +4390,26 @@ function App() {
 
             {!isCopilotCollapsed && (
               <>
-            <div className="copilot-question-list">
-              {(selectedReportDetail?.aiQuestions || aiQuestions).map((question) => (
-                <button className="copilot-question" type="button" key={question} onClick={() => askReportCopilot(question)}>
-                  <Sparkles size={18} />
-                  {question}
-                </button>
-              ))}
-            </div>
-
-            {copilotMessages.length > 0 && (
-              <div className="copilot-chat-log">
-                {copilotMessages.slice(-4).map((message, index) => (
-                  <div className={message.role === 'user' ? 'copilot-message user' : 'copilot-message'} key={`${message.role}-${index}-${message.text}`}>
-                    {message.text}
-                  </div>
+            <div className="copilot-scroll-area">
+              <div className="copilot-question-list">
+                {(selectedReportDetail?.aiQuestions || aiQuestions).map((question) => (
+                  <button className="copilot-question" type="button" key={question} onClick={() => askReportCopilot(question)}>
+                    <Sparkles size={18} />
+                    {question}
+                  </button>
                 ))}
               </div>
-            )}
+
+              {copilotMessages.length > 0 && (
+                <div className="copilot-chat-log">
+                  {copilotMessages.slice(-4).map((message, index) => (
+                    <div className={message.role === 'user' ? 'copilot-message user' : 'copilot-message'} key={`${message.role}-${index}-${message.text}`}>
+                      {message.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <form
               className="copilot-input"
@@ -3356,6 +4418,18 @@ function App() {
                 askReportCopilot(copilotInput)
               }}
             >
+              <span className="copilot-language-select">
+                <Globe size={16} />
+                <select
+                  value={copilotLanguage}
+                  onChange={(event) => setCopilotLanguage(event.target.value)}
+                  aria-label="Язык ответа Alem"
+                >
+                  <option value="ru">RU</option>
+                  <option value="en">EN</option>
+                  <option value="kk">KK</option>
+                </select>
+              </span>
               <input
                 ref={copilotInputRef}
                 value={copilotInput}

@@ -29,6 +29,8 @@ type reportRow struct {
 	Participants        int       `json:"participants"`
 	ParticipantNames    string    `json:"participantNames"`
 	Score               int       `json:"score"`
+	EngagementScore     int       `json:"engagementScore,omitempty"`
+	MoodScore           int       `json:"moodScore,omitempty"`
 	Folder              string    `json:"folder"`
 	Owner               string    `json:"owner"`
 	OwnerInitial        string    `json:"ownerInitial"`
@@ -75,6 +77,8 @@ type reportDetailResponse struct {
 	SpeakerStats              []speakerStat      `json:"speakerStats"`
 	Highlights                []highlight        `json:"highlights"`
 	Chapters                  []chapter          `json:"chapters"`
+	Trend                     []trendPoint       `json:"trend,omitempty"`
+	Interruptions             int                `json:"interruptions"`
 	AIQuestions               []string           `json:"aiQuestions"`
 	RecordingURL              string             `json:"recordingUrl,omitempty"`
 	RecordingSourceURL        string             `json:"recordingSourceUrl,omitempty"`
@@ -82,6 +86,8 @@ type reportDetailResponse struct {
 	RecordingType             string             `json:"recordingType,omitempty"`
 	RecordingMirrorCorrection bool               `json:"recordingMirrorCorrection,omitempty"`
 	RoomName                  string             `json:"roomName,omitempty"`
+	PersonalNotes             map[string]string  `json:"personalNotes,omitempty"`
+	Keywords                  []string           `json:"keywords,omitempty"`
 }
 
 type reportActionItem struct {
@@ -97,20 +103,33 @@ type reportActionItem struct {
 }
 
 type reportTranscript struct {
-	ID      string `json:"id"`
-	Time    string `json:"time"`
-	Speaker string `json:"speaker"`
-	Text    string `json:"text"`
+	ID        string `json:"id"`
+	Time      string `json:"time"`
+	Speaker   string `json:"speaker"`
+	Text      string `json:"text"`
+	Sentiment string `json:"sentiment,omitempty"`
 }
 
 type speakerStat struct {
-	Name         string `json:"name"`
-	Role         string `json:"role"`
-	TalkTime     int    `json:"talkTime"`
-	TalkTimeText string `json:"talkTimeText"`
-	Talk         int    `json:"talk"`
-	Sentiment    string `json:"sentiment"`
-	Pace         string `json:"pace"`
+	Name          string `json:"name"`
+	Role          string `json:"role"`
+	TalkTime      int    `json:"talkTime"`
+	TalkTimeText  string `json:"talkTimeText"`
+	Talk          int    `json:"talk"`
+	Sentiment     string `json:"sentiment"`
+	Pace          string `json:"pace"`
+	FirstSeenTime string `json:"firstSeenTime,omitempty"`
+
+	Score       int  `json:"score"`
+	Mood        int  `json:"mood"`
+	Engagement  int  `json:"engagement"`
+	Charisma    int  `json:"charisma,omitempty"`
+	HasCharisma bool `json:"hasCharisma,omitempty"`
+	Bias        int  `json:"bias,omitempty"`
+	HasBias     bool `json:"hasBias,omitempty"`
+
+	MicMutedPercent  int `json:"micMutedPercent"`
+	CameraOffPercent int `json:"cameraOffPercent"`
 }
 
 type uploadReportRequest struct {
@@ -433,7 +452,6 @@ func (s *Server) processUploadedRecording(reportID string, input recordingUpload
 		return
 	}
 	report := detail.Report
-	report.Score = 90
 	report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
 	report.Status = "ready"
 	report.ProcessingState = "ready"
@@ -441,7 +459,7 @@ func (s *Server) processUploadedRecording(reportID string, input recordingUpload
 	report.TranscriptionStatus = "completed"
 	report.AnalysisStatus = analysisStatus
 
-	readyDetail := reportDetailFromAnalysis(report, analysis)
+	readyDetail := s.reportDetailFromAnalysis(report, analysis)
 	readyDetail.RecordingURL = detail.RecordingURL
 	readyDetail.RecordingSourceURL = detail.RecordingSourceURL
 	readyDetail.RecordingFile = detail.RecordingFile
@@ -494,7 +512,7 @@ func reportProcessingErrorMessage(err error) string {
 	return "STT service error: " + err.Error()
 }
 
-func reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) reportDetailResponse {
+func (s *Server) reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) reportDetailResponse {
 	actionItems := make([]reportActionItem, 0, len(analysis.ActionItems))
 	for i, item := range analysis.ActionItems {
 		id := fmt.Sprintf("action-%d", i+1)
@@ -513,24 +531,56 @@ func reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) report
 	transcript := make([]reportTranscript, 0, len(analysis.Transcript))
 	for i, line := range analysis.Transcript {
 		transcript = append(transcript, reportTranscript{
-			ID:      fmt.Sprintf("t%d", i+1),
-			Time:    line.Time,
-			Speaker: line.Speaker,
-			Text:    line.Text,
+			ID:        fmt.Sprintf("t%d", i+1),
+			Time:      line.Time,
+			Speaker:   line.Speaker,
+			Text:      line.Text,
+			Sentiment: line.Sentiment,
 		})
 	}
 
+	firstSeenTime := map[string]string{}
+	for _, line := range analysis.Transcript {
+		if _, ok := firstSeenTime[line.Speaker]; !ok {
+			firstSeenTime[line.Speaker] = line.Time
+		}
+	}
+
+	devicePercentages := s.roomDevicePercentages(analysis.RoomName)
+
 	speakerStats := make([]speakerStat, 0, len(analysis.Insights.TalkTime))
 	for _, metric := range analysis.Insights.TalkTime {
+		positions := computeParticipantPositions(metric.Label, metric.Value, analysis.Transcript)
+		media := devicePercentages[normalizeParticipantNameKey(metric.Label)]
 		speakerStats = append(speakerStats, speakerStat{
-			Name:         metric.Label,
-			Role:         "Speaker",
-			TalkTime:     metric.Value,
-			TalkTimeText: fmt.Sprintf("%d%s", metric.Value, metric.Unit),
-			Talk:         metric.Value,
-			Sentiment:    analysis.Insights.Sentiment,
-			Pace:         "",
+			Name:             metric.Label,
+			Role:             "Speaker",
+			TalkTime:         metric.Value,
+			TalkTimeText:     fmt.Sprintf("%d%s", metric.Value, metric.Unit),
+			Talk:             metric.Value,
+			Sentiment:        analysis.Insights.Sentiment,
+			Pace:             "",
+			FirstSeenTime:    firstSeenTime[metric.Label],
+			Score:            positions.Score,
+			Mood:             positions.Mood,
+			Engagement:       positions.Engagement,
+			Charisma:         positions.Charisma,
+			HasCharisma:      positions.HasCharisma,
+			Bias:             positions.Bias,
+			HasBias:          positions.HasBias,
+			MicMutedPercent:  media.MicMutedPercent,
+			CameraOffPercent: media.CameraOffPercent,
 		})
+	}
+
+	score, engagement, mood := computeMeetingScores(analysis.Transcript, len(speakerStats))
+	report.Score = score
+	report.EngagementScore = engagement
+	report.MoodScore = mood
+
+	interruptions := 0
+	for _, metric := range analysis.Insights.Interruptions {
+		interruptions += metric.Value
 	}
 
 	return reportDetailResponse{
@@ -543,6 +593,9 @@ func reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) report
 		SpeakerStats:    speakerStats,
 		Highlights:      analysis.Highlights,
 		Chapters:        analysis.Chapters,
+		Keywords:        analysis.Keywords,
+		Trend:           computeSentimentTrend(analysis.Transcript, engagement, mood),
+		Interruptions:   interruptions,
 		AIQuestions: []string{
 			"Какие решения приняли на встрече?",
 			"Какие задачи появились после встречи?",
@@ -579,7 +632,6 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 	s.generatedReportStore[detail.Report.ID] = detail
 	if detail.RoomName != "" {
 		s.latestRoomReports[detail.RoomName] = detail.Report.ID
-		s.latestRoomReports[roomIDFromName(detail.RoomName)] = detail.Report.ID
 	}
 	s.saveReportsLocked()
 }
@@ -806,6 +858,10 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 		default:
 			methodNotAllowed(w, http.MethodGet+", "+http.MethodPatch)
 		}
+	case "personal-note":
+		s.reportPersonalNote(w, r, detail)
+	case "personalize":
+		s.personalizeReportSummary(w, r, detail)
 	case "action-items":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -906,6 +962,117 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func reportNoteOwnerKey(r *http.Request) string {
+	if user, ok := userFromContext(r.Context()); ok {
+		if id := strings.TrimSpace(user.ID); id != "" {
+			return id
+		}
+	}
+	return "anonymous"
+}
+
+func (s *Server) reportPersonalNote(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
+	owner := reportNoteOwnerKey(r)
+
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{
+			"reportId": detail.Report.ID,
+			"note":     detail.PersonalNotes[owner],
+		})
+	case http.MethodPut, http.MethodPatch:
+		var payload struct {
+			Note string `json:"note"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64*1024))
+		if err := decoder.Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid JSON body")
+			return
+		}
+
+		fresh, ok := s.reportDetailByID(detail.Report.ID)
+		if !ok {
+			writeError(w, http.StatusNotFound, "Report not found")
+			return
+		}
+		notes := make(map[string]string, len(fresh.PersonalNotes)+1)
+		for key, value := range fresh.PersonalNotes {
+			notes[key] = value
+		}
+		note := strings.TrimSpace(payload.Note)
+		if note == "" {
+			delete(notes, owner)
+		} else {
+			notes[owner] = note
+		}
+		fresh.PersonalNotes = notes
+		s.storeReport(fresh)
+		writeJSON(w, http.StatusOK, map[string]any{
+			"reportId": fresh.Report.ID,
+			"note":     fresh.PersonalNotes[owner],
+			"status":   "saved",
+		})
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPut)
+	}
+}
+
+func (s *Server) personalizeReportSummary(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w, http.MethodPost)
+		return
+	}
+	if s.ai == nil || !s.ai.Configured() {
+		writeError(w, http.StatusServiceUnavailable, "AI backend is not configured")
+		return
+	}
+
+	owner := reportNoteOwnerKey(r)
+	contextText := truncateRunes(cleanReportDetailContext(detail), maxChatContextRunes)
+	note := strings.TrimSpace(detail.PersonalNotes[owner])
+
+	prompt := "Перепиши сводку встречи так, чтобы она была более персональной и сфокусированной на главном для читателя. " +
+		"Сохрани фактическую точность, не выдумывай ничего, что отсутствует в контексте. " +
+		"Верни только валидный JSON без markdown по схеме: {\"summary\": [{\"title\": \"string\", \"text\": \"string\"}]}. Пиши на русском языке."
+	if note != "" {
+		prompt += "\nУчти личные заметки читателя об этой встрече: " + note
+	}
+
+	answer, err := s.ai.Chat(r.Context(), []llm.Message{
+		{Role: "system", Content: "Ты редактор отчётов о встречах AlemLive. Возвращай только JSON по заданной схеме."},
+		{Role: "user", Content: prompt + "\n\nКонтекст отчёта:\n" + contextText},
+	}, llm.ChatOptions{
+		Temperature: 0.4,
+		MaxTokens:   900,
+	})
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "AI service is unavailable")
+		return
+	}
+
+	var parsed struct {
+		Summary []summarySection `json:"summary"`
+	}
+	if err := json.Unmarshal([]byte(extractJSONObject(answer)), &parsed); err != nil || len(parsed.Summary) == 0 {
+		writeError(w, http.StatusBadGateway, "AI returned an invalid summary")
+		return
+	}
+
+	fresh, ok := s.reportDetailByID(detail.Report.ID)
+	if !ok {
+		writeError(w, http.StatusNotFound, "Report not found")
+		return
+	}
+	fresh.Summary = parsed.Summary
+	s.storeReport(fresh)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"reportId": fresh.Report.ID,
+		"summary":  fresh.Summary,
+		"status":   "personalized",
+	})
+}
+
 func (s *Server) retryReportAnalysis(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
 	if s.ai == nil || !s.ai.Configured() {
 		writeError(w, http.StatusServiceUnavailable, "AI backend is not configured")
@@ -944,11 +1111,8 @@ func (s *Server) retryReportAnalysis(w http.ResponseWriter, r *http.Request, det
 	if report.Duration == "" || report.Duration == "00:00" {
 		report.Duration = formatTranscriptTime(float64(max(30, len(lines)*30)))
 	}
-	if report.Score == 0 {
-		report.Score = 90
-	}
 
-	updated := reportDetailFromAnalysis(report, analysis)
+	updated := s.reportDetailFromAnalysis(report, analysis)
 	updated.RecordingURL = detail.RecordingURL
 	updated.RecordingSourceURL = detail.RecordingSourceURL
 	updated.RecordingFile = detail.RecordingFile
@@ -1099,19 +1263,8 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 	}
 
 	messages := []llm.Message{
-		{
-			Role:    "system",
-			Content: "Ты AI-помощник AlemLive. Отвечай кратко на русском языке, используя только контекст выбранного отчёта.",
-		},
-		{Role: "user", Content: "Контекст отчёта:\n" + contextText},
-	}
-	messages = append(messages, llm.Message{
-		Role:    "system",
-		Content: "Отвечай обычным текстом на русском языке. Не используй Markdown: без **, без #, без списков с маркерами и без code fences.",
-	})
-	messages = []llm.Message{
-		{Role: "system", Content: "Ты AI-помощник AlemLive. Отвечай кратко на русском языке, используя только контекст выбранного отчёта. Не выдумывай факты, которых нет в отчёте."},
-		{Role: "system", Content: "Отвечай обычным текстом. Не используй Markdown: без **, без #, без списков с маркерами и без code fences."},
+		{Role: "system", Content: "Ты AI-помощник AlemLive. Отвечай кратко, используя только контекст выбранного отчёта. Не выдумывай факты, которых нет в отчёте."},
+		{Role: "system", Content: chatLanguageInstruction(req.Language)},
 		{Role: "user", Content: "Контекст отчёта:\n" + contextText},
 	}
 	messages = append(messages, sanitizeChatHistory(req.History)...)
@@ -1122,7 +1275,7 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 		MaxTokens:   700,
 	})
 	if err != nil {
-		retryAnswer, retryErr := s.retryReportChat(r.Context(), contextText, message)
+		retryAnswer, retryErr := s.retryReportChat(r.Context(), contextText, message, req.Language)
 		if retryErr == nil {
 			writeJSON(w, http.StatusOK, aiChatResponse{Answer: plainTextAIAnswer(retryAnswer)})
 			return
@@ -1135,7 +1288,7 @@ func (s *Server) reportChat(w http.ResponseWriter, r *http.Request, detail repor
 	writeJSON(w, http.StatusOK, aiChatResponse{Answer: plainTextAIAnswer(answer)})
 }
 
-func (s *Server) retryReportChat(ctx context.Context, contextText, message string) (string, error) {
+func (s *Server) retryReportChat(ctx context.Context, contextText, message, language string) (string, error) {
 	if s.ai == nil || !s.ai.Configured() {
 		return "", llm.ErrNotConfigured
 	}
@@ -1143,7 +1296,7 @@ func (s *Server) retryReportChat(ctx context.Context, contextText, message strin
 	return s.ai.Chat(ctx, []llm.Message{
 		{
 			Role:    "system",
-			Content: "Answer in Russian plain text only. No Markdown. Use the meeting context. If the user asks for a Russian summary, summarize the meeting in Russian and do not copy English transcript text verbatim except product names and people's names.",
+			Content: chatLanguageInstruction(language) + " Use the meeting context. Do not copy transcript text verbatim except product names and people's names.",
 		},
 		{Role: "user", Content: "Meeting report context:\n" + shortContext},
 		{Role: "user", Content: message},

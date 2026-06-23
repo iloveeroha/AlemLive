@@ -160,23 +160,6 @@ class RoomsRepositoryImpl implements RoomsRepository {
   }
 
   @override
-  Future<void> transferOwner({
-    required String roomId,
-    required String participantId,
-  }) async {
-    try {
-      await apiClient.transferOwner(
-        roomId: roomId,
-        participantId: participantId,
-      );
-    } catch (error) {
-      if (!config.enableMockFallback) {
-        throw mapDioException(error);
-      }
-    }
-  }
-
-  @override
   Future<void> muteParticipant({
     required String roomId,
     required String participantId,
@@ -221,30 +204,6 @@ class RoomsRepositoryImpl implements RoomsRepository {
       roomId: roomId,
       participantId: participantId,
       action: 'camera-on-request',
-    );
-  }
-
-  @override
-  Future<void> screenShareStarted({
-    required String roomId,
-    required String participantId,
-  }) {
-    return _control(
-      roomId: roomId,
-      participantId: participantId,
-      action: 'screen-share-start',
-    );
-  }
-
-  @override
-  Future<void> screenShareStopped({
-    required String roomId,
-    required String participantId,
-  }) {
-    return _control(
-      roomId: roomId,
-      participantId: participantId,
-      action: 'screen-share-stop',
     );
   }
 
