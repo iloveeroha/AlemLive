@@ -1,0 +1,220 @@
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  livekit-config:
+    image: alpine:3.23
+    environment:
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-change-me-livekit-secret}"
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        set -eu
+        mkdir -p /config
+        cat > /config/livekit.yaml <<EOF
+        port: 7880
+        bind_addresses:
+          - ""
+
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: false
+          port_range_start: 60000
+          port_range_end: 60100
+
+        keys:
+          "$${LIVEKIT_API_KEY}": "$${LIVEKIT_API_SECRET}"
+
+        redis:
+          address: redis:6379
+
+        logging:
+          level: info
+        EOF
+
+        cat > /config/egress.yaml <<EOF
+        log_level: info
+        api_key: "$${LIVEKIT_API_KEY}"
+        api_secret: "$${LIVEKIT_API_SECRET}"
+        ws_url: ws://livekit:7880
+        insecure: true
+
+        redis:
+          address: redis:6379
+        EOF
+    volumes:
+      - livekit_config:/config
+    restart: "no"
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit/livekit.yaml --node-ip=${LIVEKIT_NODE_IP:-127.0.0.1}
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "7882:7882/udp"
+      - "60000-60100:60000-60100/udp"
+    volumes:
+      - livekit_config:/etc/livekit:ro
+    depends_on:
+      redis:
+        condition: service_started
+      livekit-config:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-alemlive}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-change-me-minio-password}"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: "${MINIO_ROOT_USER:-alemlive}"
+      MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-change-me-minio-password}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-alemlive-recordings}"
+    entrypoint: /bin/sh
+    command: >
+      -c "until mc alias set local http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\"; do sleep 1; done;
+      mc mb -p \"local/$${MINIO_BUCKET}\" || true;
+      mc anonymous set download \"local/$${MINIO_BUCKET}\" || true"
+    restart: "no"
+
+  livekit-egress:
+    image: livekit/egress:latest
+    environment:
+      EGRESS_CONFIG_FILE: /etc/livekit/egress.yaml
+    volumes:
+      - livekit_config:/etc/livekit:ro
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
+    shm_size: "1gb"
+    depends_on:
+      livekit:
+        condition: service_started
+      livekit-config:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  diarization:
+    build:
+      context: ./diarization
+    environment:
+      HF_TOKEN: "${HF_TOKEN:-}"
+      HUGGINGFACE_TOKEN: "${HUGGINGFACE_TOKEN:-}"
+      DIARIZATION_MODEL: "${DIARIZATION_MODEL:-pyannote/speaker-diarization-3.1}"
+    ports:
+      - "8091:8091"
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
+      KC_HOSTNAME: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env
+    environment:
+      PORT: "8080"
+      ALLOWED_ORIGINS: "http://localhost:5173,https://localhost:5174"
+      KEYCLOAK_ISSUER_URL: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}/realms/alemlive"
+      KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/certs"
+      KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
+      KEYCLOAK_CLIENT_ID: "alemlive"
+      LOCAL_AUTH_ENABLED: "true"
+      LOCAL_AUTH_SECRET: "alemlive-local-auth-secret-change-me"
+      LIVEKIT_URL: "ws://livekit:7880"
+      LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL:-ws://localhost:7880}"
+      LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
+      LIVEKIT_API_SECRET: "${LIVEKIT_API_SECRET:-change-me-livekit-secret}"
+      LIVEKIT_EGRESS_ENABLED: "true"
+      LIVEKIT_EGRESS_AUDIO_ONLY: "false"
+      LIVEKIT_EGRESS_LAYOUT: "grid"
+      LIVEKIT_EGRESS_FILE_PREFIX: "alemlive"
+      LIVEKIT_EGRESS_PUBLIC_BASE_URL: "${LIVEKIT_EGRESS_PUBLIC_BASE_URL:-http://localhost:9000/alemlive-recordings}"
+      LIVEKIT_EGRESS_WEBHOOK_URL: "http://backend:8080/api/livekit/webhook"
+      LIVEKIT_S3_BUCKET: "${MINIO_BUCKET:-alemlive-recordings}"
+      LIVEKIT_S3_REGION: "us-east-1"
+      LIVEKIT_S3_ENDPOINT: "http://minio:9000"
+      LIVEKIT_S3_ACCESS_KEY: "${MINIO_ROOT_USER:-alemlive}"
+      LIVEKIT_S3_SECRET: "${MINIO_ROOT_PASSWORD:-change-me-minio-password}"
+      LIVEKIT_S3_FORCE_PATH_STYLE: "true"
+      DEFAULT_LLM_MODEL: "${DEFAULT_LLM_MODEL:-openai/gpt-oss-120b}"
+      DEFAULT_STT_MODEL: "${DEFAULT_STT_MODEL:-openai/whisper-large-v3}"
+      DIARIZATION_BASE_URL: "${DIARIZATION_BASE_URL:-}"
+      DIARIZATION_API_KEY: "${DIARIZATION_API_KEY:-}"
+      DIARIZATION_TIMEOUT_SECONDS: "${DIARIZATION_TIMEOUT_SECONDS:-900}"
+      DEMO_REPORTS_ENABLED: "${DEMO_REPORTS_ENABLED:-false}"
+      REPORTS_STORAGE_PATH: "/app/data/reports.json"
+      RECORDINGS_STORAGE_PATH: "/app/data/recordings"
+    volumes:
+      - ./backend/data:/app/data
+    ports:
+      - "8088:8080"
+    depends_on:
+      keycloak:
+        condition: service_started
+      livekit:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+      diarization:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        APP_HOST: "${APP_HOST:-127.0.0.1}"
+    ports:
+      - "5173:80"
+      - "5174:443"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  minio_data:
+  livekit_config:
