@@ -1,6 +1,7 @@
 {
   "realm": "alemlive",
   "enabled": true,
+  "sslRequired": "none",
   "displayName": "AlemLive",
   "registrationAllowed": true,
   "loginWithEmailAllowed": true,

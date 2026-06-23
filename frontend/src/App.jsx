@@ -95,6 +95,10 @@ function normalizeReportActions(actions) {
   return Array.from(byID.values())
 }
 
+function firstNonEmpty(...values) {
+  return values.find((value) => typeof value === 'string' && value.trim())?.trim() || ''
+}
+
 const reportRows = [
   {
     id: 'read-intro',
@@ -452,6 +456,7 @@ function chapterKey(chapterItem) {
 
 const authSessionKey = 'alemlive-auth-session-v2'
 const authVerifierKey = 'alemlive-auth-verifier'
+const participantSessionKey = 'alemlive-participant-session-id'
 let currentAccessToken = ''
 let authRefreshPromise = null
 
@@ -476,6 +481,22 @@ function getCurrentAccessToken() {
 function getAuthHeaders() {
   const token = getCurrentAccessToken()
   return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
+function getParticipantSessionID() {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+
+  const existing = window.sessionStorage.getItem(participantSessionKey)
+  if (existing) {
+    return existing
+  }
+
+  ensureCryptoRandomUUID()
+  const next = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
+  window.sessionStorage.setItem(participantSessionKey, next)
+  return next
 }
 
 function tokenExpiresAt(token) {
@@ -962,7 +983,7 @@ function App() {
   const [activeReportTab, setActiveReportTab] = useState('notes')
   const [form, setForm] = useState({
     roomName: getInitialRoomName(),
-    userName: import.meta.env.VITE_LIVEKIT_NAME ?? 'Мади Орысбек',
+    userName: import.meta.env.VITE_LIVEKIT_NAME ?? '',
   })
   const [meeting, setMeeting] = useState(null)
   const [entryMode, setEntryMode] = useState('create')
@@ -1029,7 +1050,17 @@ function App() {
   const copilotInputRef = useRef(null)
   const reportUploadInputRef = useRef(null)
 
-  const canStart = form.userName.trim() && form.roomName.trim()
+  const sessionClaims = useMemo(() => decodeJWTClaims(authSession?.accessToken || ''), [authSession?.accessToken])
+  const authenticatedUserName = firstNonEmpty(
+    profile?.displayName,
+    profile?.name,
+    profile?.username,
+    profile?.email,
+    sessionClaims.name,
+    sessionClaims.preferred_username,
+    sessionClaims.email,
+  )
+  const canStart = authenticatedUserName && form.roomName.trim()
   const isConnected = Boolean(meeting)
   const isAuthEnabled = Boolean(authConfig.enabled)
   const isAuthenticated = !isAuthEnabled || Boolean(authSession?.accessToken)
@@ -1074,14 +1105,14 @@ function App() {
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
-    const name = meeting?.userName || form.userName || profile?.name || 'Guest'
+    const name = meeting?.userName || authenticatedUserName || 'Guest'
 
     return {
       room,
       name,
       initial: profile?.initial || name.trim().slice(0, 1).toUpperCase() || 'M',
     }
-  }, [form.roomName, form.userName, meeting, profile])
+  }, [authenticatedUserName, form.roomName, meeting, profile])
 
   useEffect(() => {
     setCurrentAccessToken(authSession?.accessToken || '')
@@ -1244,9 +1275,15 @@ function App() {
 
       if (profilePayload.status === 'fulfilled') {
         setProfile(profilePayload.value)
+        const profileName = firstNonEmpty(
+          profilePayload.value.displayName,
+          profilePayload.value.name,
+          profilePayload.value.username,
+          profilePayload.value.email,
+        )
         setForm((current) => ({
           ...current,
-          userName: current.userName || profilePayload.value.name || current.userName,
+          userName: current.userName || profileName || current.userName,
         }))
       }
 
@@ -1437,7 +1474,7 @@ function App() {
         method: 'POST',
         body: JSON.stringify({
           roomName: form.roomName || meetingMeta.room,
-          userName: form.userName || meetingMeta.name,
+          userName: authenticatedUserName || meetingMeta.name,
           device: name,
           enabled,
         }),
@@ -1558,7 +1595,7 @@ function App() {
   async function requestToken(roomName, userName, isHost) {
     const payload = await apiRequest('/api/livekit/token', {
       method: 'POST',
-      body: JSON.stringify({ roomName, userName, isHost }),
+      body: JSON.stringify({ roomName, userName, identity: getParticipantSessionID(), isHost }),
     })
 
     if (!payload.serverUrl || !payload.token) {
@@ -1577,10 +1614,10 @@ function App() {
     setMeetingNotice('')
 
     const nextRoomName = form.roomName.trim()
-    const nextUserName = form.userName.trim()
+    const nextUserName = authenticatedUserName
 
     if (!nextUserName || !nextRoomName) {
-      setJoinError('Введите имя и название комнаты')
+      setJoinError(nextRoomName ? 'Профиль пользователя еще загружается' : 'Введите название комнаты')
       return
     }
 
@@ -2487,11 +2524,6 @@ function App() {
                     Присоединиться
                   </button>
                 </div>
-
-                <label>
-                  <span>Ваше имя</span>
-                  <input name="userName" value={form.userName} onChange={updateField} autoComplete="name" />
-                </label>
 
                 <label>
                   <span>Название комнаты</span>

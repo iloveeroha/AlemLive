@@ -1,8 +1,10 @@
 package httpapi
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -53,6 +55,7 @@ type tokenResponse struct {
 	Token     string `json:"token"`
 	RoomName  string `json:"roomName"`
 	UserName  string `json:"userName"`
+	Identity  string `json:"identity,omitempty"`
 	ExpiresAt string `json:"expiresAt"`
 	ReportID  string `json:"reportId,omitempty"`
 }
@@ -293,7 +296,8 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	room := firstNonEmpty(req.RoomName, req.Room)
-	identity := firstNonEmpty(req.UserName, req.Identity)
+	displayName := firstNonEmpty(req.UserName, req.Identity)
+	identitySeed := req.Identity
 
 	room, err := validateField("roomName", room)
 	if err != nil {
@@ -301,13 +305,19 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	identity, err = validateField("userName", identity)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
+	if authUser, ok := userFromContext(r.Context()); ok {
+		displayName = firstNonEmpty(authUser.Name, authUser.Username, authUser.Email, displayName)
+		identitySeed = firstNonEmpty(identitySeed, authUser.ID, authUser.Username, authUser.Email, displayName)
+	} else {
+		displayName, err = validateField("userName", displayName)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
-	user := roomUser{ID: identity, Name: identity}
+	identity := liveKitParticipantIdentity(firstNonEmpty(identitySeed, displayName), displayName)
+	user := roomUser{ID: identity, Name: displayName}
 	snapshot, _ := s.joinRoomState(room, user, req.IsHost, true, true)
 	conferenceEvent := "joined"
 	if req.IsHost {
@@ -332,6 +342,7 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		s.cfg.LiveKitAPIKey,
 		s.cfg.LiveKitSecret,
 		identity,
+		displayName,
 		room,
 		string(metadata),
 		s.cfg.TokenTTL,
@@ -346,10 +357,17 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		ServerURL: s.publicLiveKitURL(r),
 		Token:     token,
 		RoomName:  room,
-		UserName:  identity,
+		UserName:  displayName,
+		Identity:  identity,
 		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
 		ReportID:  conference.ReportID,
 	})
+}
+
+func liveKitParticipantIdentity(seed, displayName string) string {
+	raw := firstNonEmpty(seed, displayName, "guest")
+	sum := sha256.Sum256([]byte(raw))
+	return fmt.Sprintf("participant-%x", sum[:12])
 }
 
 func (s *Server) publicLiveKitURL(r *http.Request) string {

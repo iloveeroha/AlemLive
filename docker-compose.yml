@@ -140,6 +140,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
+      - keycloak_data:/opt/keycloak/data
       - ./keycloak:/opt/keycloak/data/import:ro
     restart: unless-stopped
 
@@ -222,3 +223,4 @@ services:
 volumes:
   minio_data:
   livekit_config:
+  keycloak_data:

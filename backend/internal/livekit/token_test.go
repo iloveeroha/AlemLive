@@ -13,7 +13,7 @@ import (
 func TestGenerateToken(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 
-	token, expiresAt, err := GenerateToken("api-key", "secret", "Madi", "alem-meeting", `{"role":"host"}`, time.Hour, now)
+	token, expiresAt, err := GenerateToken("api-key", "secret", "user-123", "Madi", "alem-meeting", `{"role":"host"}`, time.Hour, now)
 	if err != nil {
 		t.Fatalf("GenerateToken returned error: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestGenerateToken(t *testing.T) {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 
-	if payload["iss"] != "api-key" || payload["sub"] != "Madi" {
+	if payload["iss"] != "api-key" || payload["sub"] != "user-123" || payload["name"] != "Madi" {
 		t.Fatalf("unexpected identity claims: %#v", payload)
 	}
 
@@ -63,7 +63,7 @@ func TestGenerateToken(t *testing.T) {
 }
 
 func TestGenerateTokenRequiresInputs(t *testing.T) {
-	_, _, err := GenerateToken("", "secret", "user", "room", "", time.Hour, time.Now())
+	_, _, err := GenerateToken("", "secret", "user", "User", "room", "", time.Hour, time.Now())
 	if err == nil {
 		t.Fatal("expected missing api key error")
 	}

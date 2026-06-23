@@ -530,6 +530,7 @@ func (s *Server) roomLiveKitCredentials(r *http.Request, snapshot roomStateSnaps
 		s.cfg.LiveKitAPIKey,
 		s.cfg.LiveKitSecret,
 		user.ID,
+		user.Name,
 		snapshot.Name,
 		string(metadata),
 		s.cfg.TokenTTL,
