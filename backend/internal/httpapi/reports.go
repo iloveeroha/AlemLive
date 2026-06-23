@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/iloveeroha/AlemLive/backend/internal/llm"
+	"github.com/iloveeroha/AlemLive/backend/internal/storage"
 )
 
 type reportRow struct {
@@ -937,15 +938,8 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			"query":   strings.TrimSpace(r.URL.Query().Get("q")),
 			"results": searchReportDetail(detail, r.URL.Query().Get("q")),
 		})
-	case "history":
-		if r.Method != http.MethodGet {
-			methodNotAllowed(w, http.MethodGet)
-			return
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"reportId": detail.Report.ID,
-			"history":  []aiChatMessage{},
-		})
+	case "chat-sessions":
+		s.reportChatSessions(w, r, detail)
 	case "prompts":
 		if r.Method != http.MethodGet {
 			methodNotAllowed(w, http.MethodGet)
@@ -1014,6 +1008,69 @@ func (s *Server) reportPersonalNote(w http.ResponseWriter, r *http.Request, deta
 		})
 	default:
 		methodNotAllowed(w, http.MethodGet+", "+http.MethodPut)
+	}
+}
+
+const maxChatSessionMessages = 200
+
+func (s *Server) reportChatSessions(w http.ResponseWriter, r *http.Request, detail reportDetailResponse) {
+	owner := reportNoteOwnerKey(r)
+
+	switch r.Method {
+	case http.MethodGet:
+		if s.chatHistory == nil {
+			writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "sessions": []storage.ChatSession{}})
+			return
+		}
+		sessions, err := s.chatHistory.ListSessions(r.Context(), detail.Report.ID, owner)
+		if err != nil {
+			log.Printf("list copilot chat sessions for report %s: %v", detail.Report.ID, err)
+			writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "sessions": []storage.ChatSession{}})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "sessions": sessions})
+	case http.MethodPost:
+		var payload struct {
+			ID       string                `json:"id"`
+			Title    string                `json:"title"`
+			Messages []storage.ChatMessage `json:"messages"`
+		}
+		decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 512*1024))
+		if err := decoder.Decode(&payload); err != nil {
+			writeError(w, http.StatusBadRequest, "Invalid JSON body")
+			return
+		}
+
+		sessionID := strings.TrimSpace(payload.ID)
+		if sessionID == "" {
+			writeError(w, http.StatusBadRequest, "id is required")
+			return
+		}
+		if len(payload.Messages) > maxChatSessionMessages {
+			payload.Messages = payload.Messages[len(payload.Messages)-maxChatSessionMessages:]
+		}
+
+		if s.chatHistory == nil {
+			writeJSON(w, http.StatusOK, map[string]any{
+				"reportId": detail.Report.ID,
+				"sessions": []storage.ChatSession{{ID: sessionID, Title: payload.Title, Messages: payload.Messages}},
+			})
+			return
+		}
+
+		sessions, err := s.chatHistory.UpsertSession(r.Context(), detail.Report.ID, owner, storage.ChatSession{
+			ID:       sessionID,
+			Title:    strings.TrimSpace(payload.Title),
+			Messages: payload.Messages,
+		})
+		if err != nil {
+			log.Printf("save copilot chat session for report %s: %v", detail.Report.ID, err)
+			writeError(w, http.StatusServiceUnavailable, "Failed to save chat session")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"reportId": detail.Report.ID, "sessions": sessions})
+	default:
+		methodNotAllowed(w, http.MethodGet+", "+http.MethodPost)
 	}
 }
 

@@ -9,16 +9,17 @@ import (
 )
 
 const (
-	defaultPort            = "8080"
-	defaultTokenTTLMinutes = 120
-	defaultLLMBaseURL      = "https://llm.nitec.kz"
-	defaultLLMModel        = "openai/gpt-oss-120b"
-	defaultSTTModel        = "openai/whisper-large-v3"
-	defaultLLMTimeout      = 60
-	defaultSTTTimeout      = 900
-	defaultDiarizeTimeout  = 900
-	defaultReportsStorage  = "data/reports.json"
-	defaultRecordingsDir   = "data/recordings"
+	defaultPort                = "8080"
+	defaultTokenTTLMinutes     = 120
+	defaultLLMBaseURL          = "https://llm.nitec.kz"
+	defaultLLMModel            = "openai/gpt-oss-120b"
+	defaultSTTModel            = "openai/whisper-large-v3"
+	defaultLLMTimeout          = 60
+	defaultSTTTimeout          = 900
+	defaultDiarizeTimeout      = 900
+	defaultReportsStorage      = "data/reports.json"
+	defaultRecordingsDir       = "data/recordings"
+	defaultChatHistoryS3Bucket = "alemlive-chat-history"
 )
 
 type Config struct {
@@ -62,6 +63,7 @@ type Config struct {
 	ReportsStoragePath         string
 	RecordingsStoragePath      string
 	DemoReportsEnabled         bool
+	ChatHistoryS3Bucket        string
 }
 
 func Load() Config {
@@ -110,6 +112,7 @@ func Load() Config {
 		ReportsStoragePath:         strings.TrimSpace(env("REPORTS_STORAGE_PATH", defaultReportsStorage)),
 		RecordingsStoragePath:      strings.TrimSpace(env("RECORDINGS_STORAGE_PATH", defaultRecordingsDir)),
 		DemoReportsEnabled:         envBool("DEMO_REPORTS_ENABLED", false),
+		ChatHistoryS3Bucket:        strings.TrimSpace(env("CHAT_HISTORY_S3_BUCKET", defaultChatHistoryS3Bucket)),
 	}
 }
 

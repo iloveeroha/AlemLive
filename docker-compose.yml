@@ -181,6 +181,7 @@ services:
       DEMO_REPORTS_ENABLED: "${DEMO_REPORTS_ENABLED:-false}"
       REPORTS_STORAGE_PATH: "/app/data/reports.json"
       RECORDINGS_STORAGE_PATH: "/app/data/recordings"
+      CHAT_HISTORY_S3_BUCKET: "${CHAT_HISTORY_S3_BUCKET:-alemlive-chat-history}"
     volumes:
       - ./backend/data:/app/data
     ports:

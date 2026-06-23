@@ -3,6 +3,7 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,17 +16,19 @@ import (
 	"github.com/iloveeroha/AlemLive/backend/internal/diarization"
 	"github.com/iloveeroha/AlemLive/backend/internal/livekit"
 	"github.com/iloveeroha/AlemLive/backend/internal/llm"
+	"github.com/iloveeroha/AlemLive/backend/internal/storage"
 )
 
 type Server struct {
-	cfg      config.Config
-	clock    func() time.Time
-	ai       *llm.Client
-	stt      *llm.Client
-	diarizer *diarization.Client
-	egress   *livekit.EgressManager
-	mux      *http.ServeMux
-	jwks     jwksCache
+	cfg         config.Config
+	clock       func() time.Time
+	ai          *llm.Client
+	stt         *llm.Client
+	diarizer    *diarization.Client
+	egress      *livekit.EgressManager
+	mux         *http.ServeMux
+	jwks        jwksCache
+	chatHistory *storage.ChatHistoryStore
 
 	reportsMu            sync.Mutex
 	generatedReports     []reportRow
@@ -159,6 +162,12 @@ func NewServer(cfg config.Config) http.Handler {
 	server.cfg.STTModel = sttModel
 	server.cfg.STTTimeout = sttTimeout
 	server.loadReports()
+
+	if chatHistory, err := storage.NewChatHistoryStore(cfg); err != nil {
+		log.Printf("Copilot chat history storage disabled: %v", err)
+	} else {
+		server.chatHistory = chatHistory
+	}
 
 	server.routes()
 

@@ -801,6 +801,34 @@ function roomRecordingLabel(state) {
   }
 }
 
+async function fetchCopilotSessions(reportId) {
+  if (!reportId) {
+    return []
+  }
+  try {
+    const payload = await apiRequest(`/api/reports/${reportId}/chat-sessions`)
+    return payload.sessions || []
+  } catch {
+    return []
+  }
+}
+
+async function saveCopilotSession(reportId, sessionId, messages) {
+  if (!reportId || !sessionId || messages.length === 0) {
+    return []
+  }
+  const title = messages.find((message) => message.role === 'user')?.text?.slice(0, 60) || 'Новый чат'
+  try {
+    const payload = await apiRequest(`/api/reports/${reportId}/chat-sessions`, {
+      method: 'POST',
+      body: JSON.stringify({ id: sessionId, title, messages }),
+    })
+    return payload.sessions || []
+  } catch {
+    return []
+  }
+}
+
 const authSessionKey = 'alemlive-auth-session-v2'
 const authVerifierKey = 'alemlive-auth-verifier'
 let currentAccessToken = ''
@@ -1415,6 +1443,9 @@ function App() {
   const [isDetailActionsOpen, setIsDetailActionsOpen] = useState(false)
   const [isConferenceChatOpen, setIsConferenceChatOpen] = useState(true)
   const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false)
+  const [activeCopilotSessionId, setActiveCopilotSessionId] = useState('')
+  const [copilotChatSessions, setCopilotChatSessions] = useState([])
+  const [isCopilotHistoryOpen, setIsCopilotHistoryOpen] = useState(false)
   const [copilotPanelWidth, setCopilotPanelWidth] = useState(420)
   const [isWideEnoughToResizeCopilot, setIsWideEnoughToResizeCopilot] = useState(() => (
     typeof window === 'undefined' || window.innerWidth > 1320
@@ -1454,6 +1485,8 @@ function App() {
   const searchableChapters = selectedReportDetail?.chapters || chapters
   const searchableHighlights = selectedReportDetail?.highlights || highlights
   const selectedReportRecordingUrl = selectedReportDetail?.recordingUrl || ''
+  const askedCopilotQuestions = new Set(copilotMessages.filter((message) => message.role === 'user').map((message) => message.text))
+  const unaskedCopilotQuestions = (selectedReportDetail?.aiQuestions || aiQuestions).filter((question) => !askedCopilotQuestions.has(question))
   const transcriptChapterGroups = groupTranscriptByChapters(searchableTranscriptLines, searchableChapters)
   const transcriptMatches = findTranscriptMatches(transcriptChapterGroups, transcriptSearchQuery)
   const normalizedTranscriptMatchIndex = transcriptMatches.length > 0
@@ -1956,6 +1989,26 @@ function App() {
   }, [activeView, authReady, isAuthenticated, selectedReportId])
 
   useEffect(() => {
+    setCopilotMessages([])
+    setActiveCopilotSessionId('')
+    setIsCopilotHistoryOpen(false)
+    if (!selectedReportId) {
+      setCopilotChatSessions([])
+      return undefined
+    }
+
+    let isMounted = true
+    fetchCopilotSessions(selectedReportId).then((sessions) => {
+      if (isMounted) {
+        setCopilotChatSessions(sessions)
+      }
+    })
+    return () => {
+      isMounted = false
+    }
+  }, [selectedReportId])
+
+  useEffect(() => {
     if (!authReady || !isAuthenticated || !hasProcessingReports) {
       return undefined
     }
@@ -2330,7 +2383,8 @@ function App() {
 
   function collapseCopilotPanel() {
     setIsCopilotCollapsed(true)
-    setReportActionMessage('Copilot можно свернуть на следующем шаге UI')
+    setIsCopilotHistoryOpen(false)
+    setReportActionMessage('Copilot свёрнут')
   }
 
   function openReport(reportId) {
@@ -2548,45 +2602,18 @@ function App() {
   }
 
   async function runReportLookup(kind) {
-    if (!selectedReportId) {
+    if (!selectedReportId || kind !== 'search') {
       return
     }
 
-    const searchQuery = kind === 'search' ? window.prompt('Что найти в отчёте?', 'backend') : ''
-    if (kind === 'search' && searchQuery === null) {
-      return
-    }
-
-    const endpointByKind = {
-      prompts: 'prompts',
-      history: 'history',
-      search: `search?q=${encodeURIComponent(searchQuery || '')}`,
-    }
-    const endpoint = endpointByKind[kind]
-    if (!endpoint) {
+    const searchQuery = window.prompt('Что найти в отчёте?', 'backend')
+    if (searchQuery === null) {
       return
     }
 
     try {
-      const payload = await apiRequest(`/api/reports/${selectedReportId}/${endpoint}`)
-      if (kind === 'prompts') {
-        const prompts = payload.prompts || []
-        if (prompts[0]) {
-          setCopilotInput(prompts[0])
-          setIsCopilotCollapsed(false)
-          window.setTimeout(() => copilotInputRef.current?.focus(), 0)
-        }
-        setReportActionMessage(`Prompt готов: ${prompts[0] || 'нет подсказок'}`)
-      } else if (kind === 'history') {
-        const history = payload.history || []
-        if (history.length) {
-          setCopilotMessages(history.map((item) => ({ role: item.role || 'assistant', text: item.content || item.text || '' })))
-        }
-        setIsCopilotCollapsed(false)
-        setReportActionMessage(`История чата: ${history.length || copilotMessages.length}`)
-      } else {
-        setReportActionMessage(`Найдено: ${(payload.results || []).length}`)
-      }
+      const payload = await apiRequest(`/api/reports/${selectedReportId}/search?q=${encodeURIComponent(searchQuery || '')}`)
+      setReportActionMessage(`Найдено: ${(payload.results || []).length}`)
     } catch (error) {
       setReportActionMessage(error.message)
     }
@@ -2697,21 +2724,60 @@ function App() {
       return
     }
 
+    const reportId = selectedReportId
+    const sessionId = activeCopilotSessionId || crypto.randomUUID()
+    if (!activeCopilotSessionId) {
+      setActiveCopilotSessionId(sessionId)
+    }
+
     setIsCopilotSending(true)
     setCopilotInput('')
-    setCopilotMessages((current) => [...current, { role: 'user', text }])
+
+    const afterUserMessage = [...copilotMessages, { role: 'user', text }]
+    setCopilotMessages(afterUserMessage)
+    saveCopilotSession(reportId, sessionId, afterUserMessage).then(setCopilotChatSessions)
 
     try {
       const payload = await apiRequest(`/api/reports/${selectedReportId}/chat`, {
         method: 'POST',
         body: JSON.stringify({ message: text, language: copilotLanguage }),
       })
-      setCopilotMessages((current) => [...current, { role: 'assistant', text: payload.answer || 'Ответ пустой' }])
+      const afterAssistantMessage = [...afterUserMessage, { role: 'assistant', text: payload.answer || 'Ответ пустой' }]
+      setCopilotMessages(afterAssistantMessage)
+      saveCopilotSession(reportId, sessionId, afterAssistantMessage).then(setCopilotChatSessions)
     } catch (error) {
-      setCopilotMessages((current) => [...current, { role: 'assistant', text: error.message }])
+      const afterErrorMessage = [...afterUserMessage, { role: 'assistant', text: error.message }]
+      setCopilotMessages(afterErrorMessage)
+      saveCopilotSession(reportId, sessionId, afterErrorMessage).then(setCopilotChatSessions)
     } finally {
       setIsCopilotSending(false)
     }
+  }
+
+  function startNewCopilotChat() {
+    setCopilotMessages([])
+    setCopilotInput('')
+    setActiveCopilotSessionId('')
+    setIsCopilotHistoryOpen(false)
+    setReportActionMessage('Новый чат с Alem создан')
+  }
+
+  function toggleCopilotHistory() {
+    if (!selectedReportId) {
+      return
+    }
+    if (isCopilotHistoryOpen) {
+      setIsCopilotHistoryOpen(false)
+      return
+    }
+    fetchCopilotSessions(selectedReportId).then(setCopilotChatSessions)
+    setIsCopilotHistoryOpen(true)
+  }
+
+  function openCopilotSession(session) {
+    setCopilotMessages(session.messages || [])
+    setActiveCopilotSessionId(session.id)
+    setIsCopilotHistoryOpen(false)
   }
 
   function askAboutMoment(question, time) {
@@ -4160,7 +4226,13 @@ function App() {
 
         <div
           className="report-detail-layout"
-          style={isCopilotCollapsed || !isWideEnoughToResizeCopilot ? undefined : { gridTemplateColumns: `minmax(0, 1fr) ${copilotPanelWidth}px` }}
+          style={
+            isCopilotCollapsed
+              ? { gridTemplateColumns: 'minmax(0, 1fr) 0px' }
+              : isWideEnoughToResizeCopilot
+                ? { gridTemplateColumns: `minmax(0, 1fr) ${copilotPanelWidth}px` }
+                : undefined
+          }
         >
           <div className="report-recording-column">
             {selectedReportRecordingUrl && (
@@ -4276,89 +4348,124 @@ function App() {
           </div>
 
           <aside className={isCopilotCollapsed ? 'report-copilot collapsed' : 'report-copilot'}>
-            {!isCopilotCollapsed && isWideEnoughToResizeCopilot && (
-              <div
-                className="copilot-resize-handle"
-                onMouseDown={startCopilotResize}
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Изменить ширину панели Alem"
-              >
-                <GripVertical size={14} />
-              </div>
-            )}
-            <div className="copilot-tools">
-              <button className="icon-button" type="button" onClick={() => runReportLookup('prompts')} aria-label="Edit prompts">
-                <Edit3 size={18} />
-              </button>
-              <button className="icon-button" type="button" onClick={() => runReportLookup('history')} aria-label="History">
-                <Clock3 size={18} />
-              </button>
-              <span />
-              <button className="icon-button" type="button" onClick={focusCopilotPanel} aria-label="Open side panel">
-                <ExternalLink size={18} />
-              </button>
-              <button className="icon-button" type="button" onClick={collapseCopilotPanel} aria-label="Collapse side panel">
-                <PanelRight size={18} />
-              </button>
-            </div>
-
             {!isCopilotCollapsed && (
               <>
-            <div className="copilot-scroll-area">
-              <div className="copilot-question-list">
-                {(selectedReportDetail?.aiQuestions || aiQuestions).map((question) => (
-                  <button className="copilot-question" type="button" key={question} onClick={() => askReportCopilot(question)}>
-                    <Sparkles size={18} />
-                    {question}
+                {isWideEnoughToResizeCopilot && (
+                  <div
+                    className="copilot-resize-handle"
+                    onMouseDown={startCopilotResize}
+                    role="separator"
+                    aria-orientation="vertical"
+                    aria-label="Изменить ширину панели Alem"
+                  >
+                    <GripVertical size={14} />
+                  </div>
+                )}
+                <div className="copilot-tools">
+                  <button className="icon-button" type="button" onClick={startNewCopilotChat} aria-label="Новый чат">
+                    <Edit3 size={18} />
                   </button>
-                ))}
-              </div>
-
-              {copilotMessages.length > 0 && (
-                <div className="copilot-chat-log">
-                  {copilotMessages.slice(-4).map((message, index) => (
-                    <div className={message.role === 'user' ? 'copilot-message user' : 'copilot-message'} key={`${message.role}-${index}-${message.text}`}>
-                      {message.text}
-                    </div>
-                  ))}
+                  <div className="copilot-history-wrap">
+                    <button
+                      className={isCopilotHistoryOpen ? 'icon-button active' : 'icon-button'}
+                      type="button"
+                      onClick={toggleCopilotHistory}
+                      aria-label="История чатов"
+                      aria-haspopup="menu"
+                      aria-expanded={isCopilotHistoryOpen}
+                    >
+                      <Clock3 size={18} />
+                    </button>
+                    {isCopilotHistoryOpen && (
+                      <div className="copilot-history-menu" role="menu">
+                        {copilotChatSessions.length === 0 ? (
+                          <p className="copilot-history-empty">Пока нет сохранённых чатов</p>
+                        ) : (
+                          copilotChatSessions.map((session) => (
+                            <button
+                              key={session.id}
+                              type="button"
+                              role="menuitem"
+                              className={session.id === activeCopilotSessionId ? 'copilot-history-item active' : 'copilot-history-item'}
+                              onClick={() => openCopilotSession(session)}
+                            >
+                              {session.title || 'Чат'}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <span />
+                  <button className="icon-button" type="button" onClick={openAskAI} aria-label="Открыть AlemAI в полноэкранном режиме">
+                    <ExternalLink size={18} />
+                  </button>
+                  <button className="icon-button" type="button" onClick={collapseCopilotPanel} aria-label="Свернуть панель">
+                    <PanelRight size={18} />
+                  </button>
                 </div>
-              )}
-            </div>
 
-            <form
-              className="copilot-input"
-              onSubmit={(event) => {
-                event.preventDefault()
-                askReportCopilot(copilotInput)
-              }}
-            >
-              <span className="copilot-language-select">
-                <Globe size={16} />
-                <select
-                  value={copilotLanguage}
-                  onChange={(event) => setCopilotLanguage(event.target.value)}
-                  aria-label="Язык ответа Alem"
+                <div className="copilot-scroll-area">
+                  <div className="copilot-question-list">
+                    {unaskedCopilotQuestions.map((question) => (
+                      <button className="copilot-question" type="button" key={question} onClick={() => askReportCopilot(question)}>
+                        <Sparkles size={18} />
+                        {question}
+                      </button>
+                    ))}
+                  </div>
+
+                  {copilotMessages.length > 0 && (
+                    <div className="copilot-chat-log">
+                      {copilotMessages.slice(-4).map((message, index) => (
+                        <div className={message.role === 'user' ? 'copilot-message user' : 'copilot-message'} key={`${message.role}-${index}-${message.text}`}>
+                          {message.text}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <form
+                  className="copilot-input"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    askReportCopilot(copilotInput)
+                  }}
                 >
-                  <option value="ru">RU</option>
-                  <option value="en">EN</option>
-                  <option value="kk">KK</option>
-                </select>
-              </span>
-              <input
-                ref={copilotInputRef}
-                value={copilotInput}
-                onChange={(event) => setCopilotInput(event.target.value)}
-                placeholder="Спросите Alem о чём угодно..."
-              />
-              <button className="ask-send" type="submit" aria-label="Ask Alem" disabled={isCopilotSending}>
-                <Send size={18} />
-              </button>
-            </form>
+                  <span className="copilot-language-select">
+                    <Globe size={16} />
+                    <select
+                      value={copilotLanguage}
+                      onChange={(event) => setCopilotLanguage(event.target.value)}
+                      aria-label="Язык ответа Alem"
+                    >
+                      <option value="ru">RU</option>
+                      <option value="en">EN</option>
+                      <option value="kk">KK</option>
+                    </select>
+                  </span>
+                  <input
+                    ref={copilotInputRef}
+                    value={copilotInput}
+                    onChange={(event) => setCopilotInput(event.target.value)}
+                    placeholder="Спросите Alem о чём угодно..."
+                  />
+                  <button className="ask-send" type="submit" aria-label="Ask Alem" disabled={isCopilotSending}>
+                    <Send size={18} />
+                  </button>
+                </form>
               </>
             )}
           </aside>
         </div>
+
+        {isCopilotCollapsed && (
+          <button className="copilot-reopen-button" type="button" onClick={focusCopilotPanel}>
+            <Sparkles size={18} />
+            Спросить AlemAI
+          </button>
+        )}
       </section>
     )
   }
