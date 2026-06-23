@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	lkproto "github.com/livekit/protocol/livekit"
 	lksdk "github.com/livekit/server-sdk-go/v2"
@@ -309,16 +309,28 @@ func isEgressTerminal(status lkproto.EgressStatus) bool {
 		status == lkproto.EgressStatus_EGRESS_LIMIT_REACHED
 }
 
-var unsafePathPart = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
-
 func sanitizePathPart(value string) string {
 	value = strings.Trim(strings.ToLower(value), " ._-")
-	value = unsafePathPart.ReplaceAllString(value, "-")
-	value = strings.Trim(value, "-")
-	if value == "" {
+	var b strings.Builder
+	lastDash := false
+	for _, r := range value {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+			lastDash = false
+		case (r == '.' || r == '_' || r == '-') && !lastDash:
+			b.WriteRune(r)
+			lastDash = r == '-'
+		case !lastDash:
+			b.WriteRune('-')
+			lastDash = true
+		}
+	}
+	out := strings.Trim(b.String(), " ._-")
+	if out == "" {
 		return "room"
 	}
-	return value
+	return out
 }
 
 func firstNonEmptyEgress(values ...string) string {

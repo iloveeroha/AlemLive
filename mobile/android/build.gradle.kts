@@ -19,12 +19,12 @@ subprojects {
     afterEvaluate {
         plugins.withId("com.android.application") {
             extensions.configure<com.android.build.gradle.AppExtension>("android") {
-                compileSdkVersion(35)
+                compileSdkVersion(36)
             }
         }
         plugins.withId("com.android.library") {
             extensions.configure<com.android.build.gradle.LibraryExtension>("android") {
-                compileSdkVersion(35)
+                compileSdkVersion(36)
             }
         }
     }

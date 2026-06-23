@@ -12,6 +12,7 @@ import (
 	"path"
 	"strings"
 	"time"
+	"unicode"
 
 	lkauth "github.com/livekit/protocol/auth"
 	lkproto "github.com/livekit/protocol/livekit"
@@ -754,14 +755,20 @@ func downloadRecordingWithRetry(ctx context.Context, urls []string, maxWait time
 func sanitizeReportID(value string) string {
 	value = strings.ToLower(strings.TrimSpace(value))
 	var b strings.Builder
+	lastDash := false
 	for _, r := range value {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			b.WriteRune(r)
-		} else {
+			lastDash = false
+		} else if (r == '-' || r == '_' || r == '.') && !lastDash {
 			b.WriteRune('-')
+			lastDash = true
+		} else if !lastDash {
+			b.WriteRune('-')
+			lastDash = true
 		}
 	}
-	out := strings.Trim(b.String(), "-")
+	out := strings.Trim(b.String(), "-_.")
 	if out == "" {
 		return time.Now().UTC().Format("20060102150405")
 	}

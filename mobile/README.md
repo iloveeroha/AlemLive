@@ -36,12 +36,20 @@ flutter run `
   --dart-define=LIVEKIT_URL=ws://YOUR_PC_IP:7880
 ```
 
+For Keycloak login on mobile, the app uses the redirect URI
+`alemlive://auth/callback`. Keep this URI in the `alemlive` Keycloak client
+redirects. If you run on an emulator or a real device, set
+`KEYCLOAK_PUBLIC_URL` to an address that the device can open, for example
+`http://10.0.2.2:8080` for the Android emulator or `http://YOUR_PC_IP:8080`
+for a physical device.
+
 ## Packages
 
 - `flutter_riverpod` for state management
 - `go_router` for navigation
 - `dio` for backend API calls
 - `flutter_secure_storage` for auth token storage
+- `app_links` and `url_launcher` for Keycloak browser login callbacks
 - `livekit_client` for video rooms, chat data messages and media controls
 - `permission_handler` for camera, microphone and screen sharing permissions
 - `video_player` for report recordings

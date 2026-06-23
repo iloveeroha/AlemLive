@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 type authUser struct {
@@ -675,7 +676,7 @@ func localUserID(username string) string {
 	lastDash := false
 	for _, r := range username {
 		switch {
-		case (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9'):
+		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			b.WriteRune(r)
 			lastDash = false
 		case !lastDash:

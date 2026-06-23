@@ -68,6 +68,12 @@ class AuthController extends Notifier<AuthState> {
     );
   }
 
+  Future<void> loginWithKeycloak() async {
+    await _runAuthAction(
+      () => ref.read(loginWithKeycloakUseCaseProvider).call(),
+    );
+  }
+
   Future<void> register({
     required String username,
     required String password,

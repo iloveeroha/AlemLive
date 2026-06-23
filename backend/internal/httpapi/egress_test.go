@@ -85,6 +85,52 @@ func TestProcessEgressRecordingStoresVideoWithoutSTT(t *testing.T) {
 	}
 }
 
+func TestProcessEgressRecordingUpdatesSavedConferenceReport(t *testing.T) {
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	server := &Server{
+		cfg: config.Config{
+			LiveKitS3Endpoint:          "http://minio:9000",
+			LiveKitS3Bucket:            "alemlive-recordings",
+			LiveKitEgressPublicBaseURL: "http://localhost:9000/alemlive-recordings",
+		},
+		clock:                func() time.Time { return now },
+		generatedReportStore: map[string]reportDetailResponse{},
+		deletedReportIDs:     map[string]struct{}{},
+		activeMeetings:       map[string]meetingSession{},
+		latestRoomReports:    map[string]string{},
+	}
+
+	conference := server.recordConferenceEvent("Команда тест", "Мади", "created", now)
+	if conference.ReportID == "" {
+		t.Fatal("expected conference report")
+	}
+	server.recordConferenceEvent("Команда тест", "Мади", "left", now.Add(time.Minute))
+
+	server.processEgressRecording(t.Context(), livekitservice.EgressState{
+		RoomName:  "Команда тест",
+		EgressID:  "egress-id",
+		FilePath:  "alemlive/команда-тест/20260616-120000.mp4",
+		PublicURL: "http://localhost:9000/alemlive-recordings/alemlive/команда-тест/20260616-120000.mp4",
+	}, nil)
+
+	detail, ok := server.reportDetailByID(conference.ReportID)
+	if !ok {
+		t.Fatal("expected original conference report to be updated")
+	}
+	if detail.Report.ID != conference.ReportID {
+		t.Fatalf("expected same report id, got %s", detail.Report.ID)
+	}
+	if detail.RecordingURL != reportStreamURL(conference.ReportID) {
+		t.Fatalf("expected recording stream URL on saved report, got %#v", detail.RecordingURL)
+	}
+	if detail.Report.RecordingStatus != "completed" || detail.Report.ProcessingState != "ready" {
+		t.Fatalf("expected saved report to become video-ready, got %#v", detail.Report)
+	}
+	if _, ok := server.reportDetailByID("egress-egress-id"); ok {
+		t.Fatal("late egress should not create a separate report for the same room")
+	}
+}
+
 func TestProcessEgressRecordingKeepsVideoWhenSTTFails(t *testing.T) {
 	recordingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "video/mp4")
@@ -234,4 +280,26 @@ func TestReportRoomLookupKeysIncludeMeetingReportSlug(t *testing.T) {
 		}
 	}
 	t.Fatalf("expected room slug key, got %#v", keys)
+}
+
+func TestUnicodeRoomNamesStayLinkableAcrossIDs(t *testing.T) {
+	roomName := "Қазақша кездесу"
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	server := &Server{
+		generatedReportStore: map[string]reportDetailResponse{},
+		deletedReportIDs:     map[string]struct{}{},
+		activeMeetings:       map[string]meetingSession{},
+		latestRoomReports:    map[string]string{},
+	}
+
+	conference := server.recordConferenceEvent(roomName, "Айдана", "created", now)
+	if conference.ReportID == "" {
+		t.Fatal("expected report id")
+	}
+	if !strings.Contains(conference.ReportID, "қазақша-кездесу") {
+		t.Fatalf("expected unicode report id slug, got %s", conference.ReportID)
+	}
+	if got := server.latestReportIDForRoom(roomIDFromName(roomName)); got != conference.ReportID {
+		t.Fatalf("expected lookup by room id to return report %s, got %s", conference.ReportID, got)
+	}
 }

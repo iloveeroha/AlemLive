@@ -11,6 +11,11 @@ class AuthApiClient {
 
   final Dio _dio;
 
+  Future<Map<String, dynamic>> authConfig() async {
+    final response = await _dio.get<Map<String, dynamic>>('/api/auth/config');
+    return response.data ?? <String, dynamic>{};
+  }
+
   Future<Map<String, dynamic>> login({
     required String username,
     required String password,
@@ -29,6 +34,32 @@ class AuthApiClient {
     final response = await _dio.post<Map<String, dynamic>>(
       '/api/auth/register',
       data: {'username': username, 'password': password},
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> exchangeAuthCode({
+    required String code,
+    required String redirectUri,
+    required String codeVerifier,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/auth/token',
+      data: {
+        'code': code,
+        'redirectUri': redirectUri,
+        'codeVerifier': codeVerifier,
+      },
+    );
+    return response.data ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> refreshToken({
+    required String refreshToken,
+  }) async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      '/api/auth/token',
+      data: {'refreshToken': refreshToken},
     );
     return response.data ?? <String, dynamic>{};
   }
