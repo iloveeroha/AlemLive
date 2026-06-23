@@ -40,6 +40,7 @@ lerna-debug.log*
 # Flutter / mobile generated files
 mobile/.dart_tool/
 mobile/.flutter-plugins-dependencies
+mobile/build/
 mobile/android/local.properties
 mobile/ios/Flutter/
 mobile/ios/Runner/GeneratedPluginRegistrant.*

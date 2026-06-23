@@ -20,13 +20,9 @@ class RoomEventsConnection {
     required String roomId,
     required AppConfig config,
     required SecureStorageService storage,
-  }) : this._(roomId: roomId, config: config, storage: storage);
+  }) : this._(roomId, config, storage);
 
-  RoomEventsConnection._({
-    required this._roomId,
-    required this._config,
-    required this._storage,
-  });
+  RoomEventsConnection._(this._roomId, this._config, this._storage);
 
   final String _roomId;
   final AppConfig _config;

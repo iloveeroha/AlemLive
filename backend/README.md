@@ -58,6 +58,8 @@ LIVEKIT_EGRESS_WEBHOOK_URL=http://backend:8080/api/livekit/webhook
 
 The browser should use the URL returned by `/api/config` or `/api/livekit/token`. In the default stack it is proxied as `wss://<frontend-host>/livekit`.
 
+For browser usage through the Docker frontend, keep `LIVEKIT_PUBLIC_URL` empty. If it is set to a direct `ws://host:7880` URL while the frontend is opened over HTTPS, browsers can block or downgrade the connection.
+
 ## Diarization
 
 The optional bundled service uses pyannote:
@@ -67,7 +69,7 @@ DIARIZATION_BASE_URL=http://diarization:8091
 HF_TOKEN=your-huggingface-token
 ```
 
-The service returns voice labels such as `SPEAKER_00`. Backend maps them to transcript lines as `Speaker 1`, `Speaker 2`; if participant names are known or speakers introduce themselves, backend can replace generic labels with names.
+The service returns voice labels such as `SPEAKER_00`. Backend maps them to transcript lines as `Speaker 1`, `Speaker 2`; if participant names are known or speakers introduce themselves, backend can replace generic labels with names. Check `GET http://localhost:8091/healthz`; `configured: false` means `HF_TOKEN` is missing, invalid, or the pyannote model terms were not accepted.
 
 ## Report Statuses
 

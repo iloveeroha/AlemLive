@@ -791,16 +791,17 @@ function getHashRoute(hash) {
 
 function getInitialRoomName() {
   if (typeof window === 'undefined') {
-    return import.meta.env.VITE_LIVEKIT_ROOM ?? 'alem-meeting'
+    return normalizeRoomName(import.meta.env.VITE_LIVEKIT_ROOM ?? 'alem-meeting')
   }
 
   const roomFromURL = new URLSearchParams(window.location.search).get('room')
-  return roomFromURL || import.meta.env.VITE_LIVEKIT_ROOM || 'alem-meeting'
+  return normalizeRoomName(roomFromURL || import.meta.env.VITE_LIVEKIT_ROOM || 'alem-meeting')
 }
 
 function getMeetingShareURL(roomName) {
+  const normalizedRoomName = normalizeRoomName(roomName)
   if (typeof window === 'undefined') {
-    return `/?room=${encodeURIComponent(roomName)}#meeting`
+    return `/?room=${encodeURIComponent(normalizedRoomName)}#meeting`
   }
 
   const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
@@ -808,7 +809,18 @@ function getMeetingShareURL(roomName) {
   const protocol = needsHTTPS ? 'https:' : window.location.protocol
   const port = needsHTTPS && window.location.port === '5173' ? '5174' : window.location.port
   const host = port ? `${window.location.hostname}:${port}` : window.location.hostname
-  return `${protocol}//${host}/?room=${encodeURIComponent(roomName)}#meeting`
+  return `${protocol}//${host}/?room=${encodeURIComponent(normalizedRoomName)}#meeting`
+}
+
+function normalizeRoomName(value) {
+  const normalized = String(value || '')
+    .normalize('NFKC')
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '-')
+    .replace(/^-+|-+$/g, '')
+
+  return normalized || 'alem-meeting'
 }
 
 function getParticipantRole(participant) {
@@ -1039,7 +1051,6 @@ function App() {
   const [isCopilotSending, setIsCopilotSending] = useState(false)
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false)
   const [isDetailActionsOpen, setIsDetailActionsOpen] = useState(false)
-  const [isMeetingMaximized, setIsMeetingMaximized] = useState(false)
   const [isConferenceChatOpen, setIsConferenceChatOpen] = useState(true)
   const [isCopilotCollapsed, setIsCopilotCollapsed] = useState(false)
   const [reportMirrorOverrides, setReportMirrorOverrides] = useState({})
@@ -1049,6 +1060,8 @@ function App() {
   const [isRecordingToggling, setIsRecordingToggling] = useState(false)
   const copilotInputRef = useRef(null)
   const reportUploadInputRef = useRef(null)
+  const meetingActiveRef = useRef(false)
+  const authSessionRef = useRef(null)
 
   const sessionClaims = useMemo(() => decodeJWTClaims(authSession?.accessToken || ''), [authSession?.accessToken])
   const authenticatedUserName = firstNonEmpty(
@@ -1101,6 +1114,11 @@ function App() {
     if (route.reportId) {
       setSelectedReportId(route.reportId)
     }
+
+    const roomFromURL = new URLSearchParams(window.location.search).get('room')
+    if (roomFromURL) {
+      setForm((current) => ({ ...current, roomName: normalizeRoomName(roomFromURL) }))
+    }
   }
 
   const meetingMeta = useMemo(() => {
@@ -1115,8 +1133,13 @@ function App() {
   }, [authenticatedUserName, form.roomName, meeting, profile])
 
   useEffect(() => {
+    authSessionRef.current = authSession
     setCurrentAccessToken(authSession?.accessToken || '')
   }, [authSession])
+
+  useEffect(() => {
+    meetingActiveRef.current = activeView === 'meeting' && Boolean(meeting)
+  }, [activeView, meeting])
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1408,17 +1431,6 @@ function App() {
   }, [authReady, hasProcessingReports, isAuthenticated, selectedReportId])
 
   useEffect(() => {
-    if (typeof document === 'undefined') {
-      return undefined
-    }
-
-    document.body.classList.toggle('meeting-maximized-active', isMeetingMaximized)
-    return () => {
-      document.body.classList.remove('meeting-maximized-active')
-    }
-  }, [isMeetingMaximized])
-
-  useEffect(() => {
     if (!isConnected || !meetingMeta.room) {
       setRoomRecordingStatus({ state: 'idle', configured: false })
       return undefined
@@ -1492,7 +1504,6 @@ function App() {
 
   function handleLiveKitDisconnected() {
     setMeeting(null)
-    setIsMeetingMaximized(false)
     if (manualDisconnectRef.current) {
       manualDisconnectRef.current = false
       setMeetingNotice('')
@@ -1507,6 +1518,14 @@ function App() {
 
   useEffect(() => {
     function handleAuthExpired(event) {
+      if (meetingActiveRef.current) {
+        if (authSessionRef.current) {
+          saveAuthSession(authSessionRef.current)
+        }
+        setMeetingNotice(event.detail || 'Авторизация временно недоступна, встреча продолжается')
+        setAuthError(event.detail || 'Авторизация временно недоступна')
+        return
+      }
       setAuthSession(null)
       setAuthError(event.detail || 'Сессия истекла. Войдите заново.')
       setAuthReady(true)
@@ -1542,6 +1561,11 @@ function App() {
         })
         .catch(() => {
           if (isMounted) {
+            if (meetingActiveRef.current) {
+              setMeetingNotice('Не удалось обновить Keycloak-сессию, встреча продолжается')
+              setAuthError('Не удалось обновить Keycloak-сессию')
+              return
+            }
             setAuthSession(null)
             setAuthError('Сессия истекла. Войдите заново.')
           }
@@ -1613,7 +1637,7 @@ function App() {
     manualDisconnectRef.current = false
     setMeetingNotice('')
 
-    const nextRoomName = form.roomName.trim()
+    const nextRoomName = normalizeRoomName(form.roomName)
     const nextUserName = authenticatedUserName
 
     if (!nextUserName || !nextRoomName) {
@@ -1643,7 +1667,6 @@ function App() {
         audio: devices.mic,
         video: devices.camera,
       })
-      setIsMeetingMaximized(true)
       setIsConferenceChatOpen(true)
       recordMeetingEvent(mode === 'create' ? 'created' : 'joined', {
         roomName: payload.roomName || nextRoomName,
@@ -2405,7 +2428,6 @@ function App() {
     const meetingGridClassName = [
       'meeting-grid',
       isConnected ? 'meeting-grid-connected' : '',
-      isMeetingMaximized ? 'meeting-grid-maximized' : '',
       isConnected && !isConferenceChatOpen ? 'meeting-chat-collapsed' : '',
     ]
       .filter(Boolean)

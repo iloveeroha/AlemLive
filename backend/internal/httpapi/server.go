@@ -304,6 +304,7 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	room = canonicalRoomName(room)
 
 	if authUser, ok := userFromContext(r.Context()); ok {
 		displayName = firstNonEmpty(authUser.Name, authUser.Username, authUser.Email, displayName)

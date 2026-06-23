@@ -1,4 +1,5 @@
 import os
+import logging
 import subprocess
 import tempfile
 from pathlib import Path
@@ -13,22 +14,34 @@ HF_TOKEN = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
 
 app = FastAPI(title="AlemLive Diarization")
 pipeline: Optional[Pipeline] = None
+load_error: Optional[str] = None
 
 
 @app.on_event("startup")
 def load_pipeline() -> None:
-    global pipeline
+    global pipeline, load_error
     if not HF_TOKEN:
+        load_error = "HF_TOKEN is not set"
         return
-    pipeline = Pipeline.from_pretrained(MODEL_NAME, use_auth_token=HF_TOKEN)
+    try:
+        pipeline = Pipeline.from_pretrained(MODEL_NAME, use_auth_token=HF_TOKEN)
+        load_error = None
+    except Exception as exc:  # noqa: BLE001 - keep the HTTP service alive and expose status.
+        pipeline = None
+        load_error = str(exc)
+        logging.exception("failed to load diarization model %s", MODEL_NAME)
 
 
 @app.get("/healthz")
 def healthz() -> dict:
+    status = "ok"
+    if pipeline is None:
+        status = "missing_hf_token" if not HF_TOKEN else "load_failed"
     return {
-        "status": "ok" if pipeline is not None else "missing_hf_token",
+        "status": status,
         "model": MODEL_NAME,
         "configured": pipeline is not None,
+        "error": load_error,
     }
 
 
