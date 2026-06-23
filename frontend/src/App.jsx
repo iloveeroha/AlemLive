@@ -1434,7 +1434,17 @@ function App() {
   const meetingActiveRef = useRef(false)
   const authSessionRef = useRef(null)
 
-  const canStart = form.userName.trim() && form.roomName.trim()
+  const sessionClaims = useMemo(() => decodeJWTClaims(authSession?.accessToken || ''), [authSession?.accessToken])
+  const currentUserName = (
+    profile?.name ||
+    profile?.username ||
+    sessionClaims.name ||
+    sessionClaims.preferred_username ||
+    sessionClaims.email ||
+    form.userName ||
+    'Guest'
+  ).trim()
+  const canStart = currentUserName && form.roomName.trim()
   const isConnected = Boolean(meeting)
   const isAuthEnabled = Boolean(authConfig.enabled)
   const isAuthenticated = !isAuthEnabled || Boolean(authSession?.accessToken)
@@ -1641,14 +1651,14 @@ function App() {
 
   const meetingMeta = useMemo(() => {
     const room = meeting?.roomName || form.roomName || 'alem-meeting'
-    const name = meeting?.userName || form.userName || profile?.name || 'Guest'
+    const name = meeting?.userName || currentUserName
 
     return {
       room,
       name,
       initial: profile?.initial || name.trim().slice(0, 1).toUpperCase() || 'M',
     }
-  }, [form.roomName, form.userName, meeting, profile])
+  }, [currentUserName, form.roomName, meeting, profile])
 
   useEffect(() => {
     authSessionRef.current = authSession
@@ -1818,7 +1828,7 @@ function App() {
         setProfile(profilePayload.value)
         setForm((current) => ({
           ...current,
-          userName: current.userName || profilePayload.value.name || current.userName,
+          userName: profilePayload.value.name || profilePayload.value.username || current.userName,
         }))
       }
 
@@ -3097,11 +3107,6 @@ function App() {
                     Присоединиться
                   </button>
                 </div>
-
-                <label>
-                  <span>Ваше имя</span>
-                  <input name="userName" value={form.userName} onChange={updateField} autoComplete="name" />
-                </label>
 
                 <label>
                   <span>Название комнаты</span>
