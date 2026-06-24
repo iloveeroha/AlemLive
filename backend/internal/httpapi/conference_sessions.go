@@ -8,10 +8,11 @@ import (
 )
 
 type meetingSession struct {
-	ReportID     string
-	RoomName     string
-	StartedAt    time.Time
-	Participants map[string]struct{}
+	ReportID           string
+	RoomName           string
+	StartedAt          time.Time
+	Participants       map[string]struct{}
+	ActiveParticipants map[string]struct{}
 }
 
 type conferenceEventResult struct {
@@ -32,7 +33,7 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 	}
 
 	roomName = strings.TrimSpace(firstNonEmpty(roomName, "alem-meeting"))
-	userName = strings.TrimSpace(firstNonEmpty(userName, "Guest"))
+	userName = normalizeConferenceParticipantName(firstNonEmpty(userName, "Guest"))
 
 	s.reportsMu.Lock()
 	defer s.reportsMu.Unlock()
@@ -53,19 +54,22 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 
 	switch event {
 	case "created", "joined":
+		ensureMeetingSessionParticipantMaps(&session)
 		session.Participants[userName] = struct{}{}
+		session.ActiveParticipants[userName] = struct{}{}
 		s.activeMeetings[roomName] = session
 		s.updateConferenceReportLocked(session, now, "active")
 	case "left":
-		delete(session.Participants, userName)
-		if len(session.Participants) == 0 {
+		ensureMeetingSessionParticipantMaps(&session)
+		delete(session.ActiveParticipants, userName)
+		if len(session.ActiveParticipants) == 0 {
 			delete(s.activeMeetings, roomName)
 			recordingShouldStop := s.conferenceRecordingShouldStopLocked(session.ReportID)
 			finalStatus := s.finalConferenceStatusLocked(session.ReportID)
 			s.updateConferenceReportLocked(session, now, finalStatus)
 			return conferenceEventResult{
 				ReportID:             session.ReportID,
-				Participants:         0,
+				Participants:         len(session.Participants),
 				RecordingShouldStop:  recordingShouldStop,
 				ConferenceSaved:      true,
 				ConferenceStatus:     finalStatus,
@@ -91,7 +95,7 @@ func (s *Server) recordConferenceEvent(roomName, userName, event string, now tim
 
 	return conferenceEventResult{
 		ReportID:             session.ReportID,
-		Participants:         len(session.Participants),
+		Participants:         len(session.ActiveParticipants),
 		ConferenceSaved:      true,
 		ConferenceStatus:     "active",
 		ConferenceReportPath: "/api/reports/" + session.ReportID,
@@ -173,10 +177,11 @@ func (s *Server) newMeetingSessionLocked(roomName, userName string, now time.Tim
 	s.latestRoomReports[roomName] = reportID
 
 	return meetingSession{
-		ReportID:     reportID,
-		RoomName:     roomName,
-		StartedAt:    now,
-		Participants: map[string]struct{}{userName: struct{}{}},
+		ReportID:           reportID,
+		RoomName:           roomName,
+		StartedAt:          now,
+		Participants:       map[string]struct{}{userName: struct{}{}},
+		ActiveParticipants: map[string]struct{}{userName: struct{}{}},
 	}
 }
 
@@ -201,10 +206,11 @@ func (s *Server) resumeMeetingSessionLocked(roomName, userName string, now time.
 		startedAt = now
 	}
 	return meetingSession{
-		ReportID:     reportID,
-		RoomName:     roomName,
-		StartedAt:    startedAt,
-		Participants: participants,
+		ReportID:           reportID,
+		RoomName:           roomName,
+		StartedAt:          startedAt,
+		Participants:       participants,
+		ActiveParticipants: map[string]struct{}{userName: struct{}{}},
 	}, true
 }
 
@@ -354,7 +360,8 @@ func (s *Server) reportDetailForUpdate(reportID string) (reportDetailResponse, b
 func sortedParticipantNames(participants map[string]struct{}) []string {
 	names := make([]string, 0, len(participants))
 	for name := range participants {
-		if strings.TrimSpace(name) != "" {
+		name = normalizeConferenceParticipantName(name)
+		if isConferenceParticipantName(name) {
 			names = append(names, name)
 		}
 	}
@@ -365,12 +372,66 @@ func sortedParticipantNames(participants map[string]struct{}) []string {
 func participantsFromReport(value string) map[string]struct{} {
 	participants := map[string]struct{}{}
 	for _, part := range strings.Split(value, ",") {
-		name := strings.TrimSpace(part)
-		if name != "" {
+		name := normalizeConferenceParticipantName(part)
+		if isConferenceParticipantName(name) {
 			participants[name] = struct{}{}
 		}
 	}
 	return participants
+}
+
+func ensureMeetingSessionParticipantMaps(session *meetingSession) {
+	if session.Participants == nil {
+		session.Participants = map[string]struct{}{}
+	}
+	if session.ActiveParticipants == nil {
+		session.ActiveParticipants = map[string]struct{}{}
+		for name := range session.Participants {
+			session.ActiveParticipants[name] = struct{}{}
+		}
+	}
+}
+
+func normalizeConferenceParticipantName(name string) string {
+	name = strings.Trim(name, " \t\r\n()[]{}")
+	name = strings.Join(strings.Fields(name), " ")
+	if name == "" {
+		return "Guest"
+	}
+	return name
+}
+
+func isConferenceParticipantName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.HasPrefix(name, "+") {
+		return false
+	}
+	lower := strings.ToLower(name)
+	blocked := []string{
+		"speaker",
+		"participant",
+		"guest",
+		"unknown",
+		"more",
+		"others",
+		"livekit room",
+		"processed",
+		"больше",
+		"другие",
+		"участник",
+		"гость",
+	}
+	for _, word := range blocked {
+		if strings.Contains(lower, word) {
+			return false
+		}
+	}
+	for _, r := range name {
+		if r < '0' || r > '9' {
+			return true
+		}
+	}
+	return false
 }
 
 func legacyConferenceSummary(roomName, status string, egressEnabled bool) []summarySection {

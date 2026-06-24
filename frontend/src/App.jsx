@@ -748,6 +748,52 @@ function getReportLocalTime(report) {
   })
 }
 
+function getReportParticipantNames(report) {
+  const raw = `${report?.participantNames || ''}`
+  const seen = new Set()
+  const names = []
+
+  raw.split(/[,;\n\r\t]+/).forEach((part) => {
+    const name = part.trim().replace(/^[()[\]{}]+|[()[\]{}]+$/g, '').replace(/\s+/g, ' ')
+    if (!name || name.startsWith('+')) {
+      return
+    }
+
+    const lower = name.toLowerCase()
+    const isServiceLabel = [
+      'speaker',
+      'participant',
+      'guest',
+      'unknown',
+      'more',
+      'others',
+      'livekit room',
+      'processed',
+      'больше',
+      'другие',
+      'участник',
+      'гость',
+    ].some((word) => lower.includes(word))
+
+    if (isServiceLabel || /^\d+$/.test(name)) {
+      return
+    }
+
+    const key = lower
+    if (seen.has(key)) {
+      return
+    }
+    seen.add(key)
+    names.push(name)
+  })
+
+  return names
+}
+
+function formatReportParticipantNames(report) {
+  return getReportParticipantNames(report).join(', ')
+}
+
 function reportProcessingLabel(report) {
   const state = report?.processingState || report?.status || ''
   const recording = report?.recordingStatus || ''
@@ -2123,6 +2169,7 @@ function App() {
   }
 
   function handleLiveKitDisconnected() {
+    const previousMeeting = meeting
     setMeeting(null)
     if (manualDisconnectRef.current) {
       manualDisconnectRef.current = false
@@ -2130,8 +2177,11 @@ function App() {
       return
     }
 
-    if (meeting?.roomName && meeting?.userName) {
-      recordMeetingEvent('left')
+    if (previousMeeting?.roomName && previousMeeting?.userName) {
+      recordMeetingEvent('left', {
+        roomName: previousMeeting.roomName,
+        userName: previousMeeting.userName,
+      })
     }
     setMeetingNotice('Соединение с комнатой разорвано')
   }
@@ -2200,8 +2250,29 @@ function App() {
     }
   }, [authReady, authSession?.refreshToken, authSession?.accessToken])
 
-  function recordMeetingEvent(event, overrides = {}) {
-    return apiRequest('/api/meetings/events', {
+  function applyMeetingEventPayload(payload) {
+    if (!payload) {
+      return
+    }
+
+    if (payload.recording) {
+      setRoomRecordingStatus(payload.recording)
+    }
+
+    const reportId = payload.reportId || payload.conference?.reportId
+    if (reportId) {
+      setSelectedReportId(reportId)
+      setReportsRefreshKey((current) => current + 1)
+      const isFinalConferenceEvent = ['left', 'ended'].includes(`${payload.event || ''}`.toLowerCase())
+      if (payload.conference?.conferenceSaved && isFinalConferenceEvent) {
+        setWorkspaceNotice('Отчёт встречи сохранён')
+        switchView('reports')
+      }
+    }
+  }
+
+  async function recordMeetingEvent(event, overrides = {}) {
+    const payload = await apiRequest('/api/meetings/events', {
       method: 'POST',
       body: JSON.stringify({
         roomName: overrides.roomName || meetingMeta.room,
@@ -2209,6 +2280,8 @@ function App() {
         event,
       }),
     }).catch(() => null)
+    applyMeetingEventPayload(payload)
+    return payload
   }
 
   async function refreshRoomRecordingStatus(roomName = meetingMeta.room) {
@@ -2299,6 +2372,10 @@ function App() {
         audio: devices.mic,
         video: devices.camera,
       })
+      if (payload.reportId) {
+        setSelectedReportId(payload.reportId)
+        setReportsRefreshKey((current) => current + 1)
+      }
       setIsConferenceChatOpen(true)
       recordMeetingEvent(mode === 'create' ? 'created' : 'joined', {
         roomName: payload.roomName || nextRoomName,
@@ -4196,6 +4273,8 @@ function App() {
   }
 
   function renderReportDetail() {
+    const reportParticipantNames = formatReportParticipantNames(selectedReport)
+
     return (
       <section className="report-detail-page">
         <div className="report-detail-header">
@@ -4218,10 +4297,12 @@ function App() {
                   <Video size={17} />
                   {selectedReport.source}
                 </span>
-                <span>
-                  <Users size={17} />
-                  {selectedReport.participantNames || 'Мади, Айдана, Елиас, +1 больше'}
-                </span>
+                {reportParticipantNames && (
+                  <span>
+                    <Users size={17} />
+                    {reportParticipantNames}
+                  </span>
+                )}
               </div>
             </div>
           </div>

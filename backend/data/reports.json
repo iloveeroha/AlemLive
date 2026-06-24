@@ -2,6 +2,473 @@
   "reports": [
     {
       "report": {
+        "id": "uploaded-20260624070403-548164189",
+        "title": "meeting-alem-meeting-20260624-064111-video",
+        "source": "Upload",
+        "type": "upload",
+        "date": "24.06.2026",
+        "time": "07:04",
+        "participants": 0,
+        "participantNames": "asyl asyl",
+        "score": 67,
+        "engagementScore": 59,
+        "moodScore": 75,
+        "folder": "Processed",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "mint",
+        "week": "Uploads",
+        "duration": "01:00",
+        "status": "ready",
+        "processingState": "ready",
+        "recordingStatus": "completed",
+        "transcriptionStatus": "completed",
+        "analysisStatus": "completed",
+        "createdAt": "2026-06-24T07:04:03Z"
+      },
+      "summary": [
+        {
+          "title": "Краткое содержание",
+          "text": "Участник подтвердил что‑то коротким «Да» и задал вопрос о наличии записи."
+        }
+      ],
+      "actionItems": [],
+      "keyQuestions": [
+        {
+          "time": "02:12",
+          "question": "Он был?",
+          "answer": "Ответ не был дан в ходе встречи."
+        }
+      ],
+      "transcriptLines": [
+        {
+          "id": "t1",
+          "time": "00:27",
+          "speaker": "asyl asyl",
+          "text": "Да."
+        },
+        {
+          "id": "t2",
+          "time": "02:12",
+          "speaker": "asyl asyl",
+          "text": "Ну, даже запись. Он был?"
+        }
+      ],
+      "transcript": [
+        {
+          "id": "t1",
+          "time": "00:27",
+          "speaker": "asyl asyl",
+          "text": "Да."
+        },
+        {
+          "id": "t2",
+          "time": "02:12",
+          "speaker": "asyl asyl",
+          "text": "Ну, даже запись. Он был?"
+        }
+      ],
+      "speakerStats": [
+        {
+          "name": "Speaker 1",
+          "role": "Speaker",
+          "talkTime": 100,
+          "talkTimeText": "100%",
+          "talk": 100,
+          "sentiment": "Нейтральный",
+          "pace": "",
+          "firstSeenTime": "00:27",
+          "score": 87,
+          "mood": 75,
+          "engagement": 100,
+          "micMutedPercent": 0,
+          "cameraOffPercent": 0
+        }
+      ],
+      "highlights": [
+        {
+          "time": "02:12",
+          "title": "Вопрос о записи",
+          "text": "Участник спросил: «Он был?».",
+          "type": "Question"
+        }
+      ],
+      "chapters": [
+        {
+          "start": "00:00",
+          "end": "02:30",
+          "title": "Обсуждение записи",
+          "text": "В начале встречи участник коротко подтвердил что‑то, затем спросил о наличии записи.",
+          "points": [
+            "Краткое подтверждение («Да»).",
+            "Вопрос о том, была ли запись.",
+            "Ответ на вопрос не получен."
+          ]
+        }
+      ],
+      "trend": [
+        {
+          "time": "00:27",
+          "score": 68,
+          "engagement": 61,
+          "mood": 75
+        },
+        {
+          "time": "02:12",
+          "score": 68,
+          "engagement": 61,
+          "mood": 75
+        }
+      ],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Кратко перескажи встречу на русском."
+      ],
+      "recordingUrl": "/api/reports/uploaded-20260624070403-548164189/recording/stream",
+      "recordingFile": "uploaded-20260624070403-548164189.mp4",
+      "recordingType": "video/mp4",
+      "roomName": "alem-meeting",
+      "keywords": [
+        "даже",
+        "запись"
+      ]
+    },
+    {
+      "report": {
+        "id": "uploaded-20260624065032-760898659",
+        "title": "vod (2)",
+        "source": "Upload",
+        "type": "upload",
+        "date": "24.06.2026",
+        "time": "06:50",
+        "participants": 0,
+        "participantNames": "asyl asyl",
+        "score": 71,
+        "engagementScore": 61,
+        "moodScore": 81,
+        "folder": "Processed",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "mint",
+        "week": "Uploads",
+        "duration": "04:00",
+        "status": "ready",
+        "processingState": "ready",
+        "recordingStatus": "completed",
+        "transcriptionStatus": "completed",
+        "analysisStatus": "completed",
+        "createdAt": "2026-06-24T06:50:32Z"
+      },
+      "summary": [
+        {
+          "title": "Обзор возможностей Read",
+          "text": "Read автоматически присоединяется к запланированным встречам, транскрибирует их, создает отчёты с резюме, списком действий и возможностью редактирования."
+        },
+        {
+          "title": "Процесс получения отчёта",
+          "text": "После завершения встречи Read отправляет участникам электронное письмо с отчётом, который доступен уже через несколько минут."
+        },
+        {
+          "title": "Следующие шаги для пользователей",
+          "text": "Подключить календарь, пригласить Read на следующую встречу, просмотреть первый отчёт и поделиться им с командой."
+        }
+      ],
+      "actionItems": [
+        {
+          "id": "action-1",
+          "time": "03:29",
+          "title": "Подключить календарь и пригласить Read к следующей встрече",
+          "task": "Подключить календарь и пригласить Read к следующей встрече",
+          "description": "",
+          "owner": "Участники встречи",
+          "due": "",
+          "priority": "High",
+          "status": "open"
+        },
+        {
+          "id": "action-2",
+          "time": "03:29",
+          "title": "Просмотреть первый отчёт и поделиться им с командой",
+          "task": "Просмотреть первый отчёт и поделиться им с командой",
+          "description": "",
+          "owner": "Участники встречи",
+          "due": "",
+          "priority": "Medium",
+          "status": "open"
+        }
+      ],
+      "keyQuestions": [
+        {
+          "time": "00:00",
+          "question": "Is it complicated to set up?",
+          "answer": "Нет, настройка проста: достаточно подключить календарь (Google или Outlook), и Read автоматически будет присоединяться к встречам."
+        },
+        {
+          "time": "00:24",
+          "question": "So, is Read listening right now?",
+          "answer": "Да, Read слушает в реальном времени, транскрибирует и формирует отчёт."
+        },
+        {
+          "time": "01:39",
+          "question": "Can I trust the summary to be accurate?",
+          "answer": "Read использует продвинутые языковые модели, обеспечивая точное резюме, которое при необходимости можно отредактировать."
+        },
+        {
+          "time": "01:57",
+          "question": "How soon is the report available?",
+          "answer": "Обычно через несколько минут после окончания встречи."
+        },
+        {
+          "time": "03:29",
+          "question": "What should we do next if we want to try this?",
+          "answer": "Подключить календарь, пригласить Read к следующей встрече, затем просмотреть и поделиться первым отчётом."
+        }
+      ],
+      "transcriptLines": [
+        {
+          "id": "t1",
+          "time": "00:00",
+          "speaker": "Достаточно Быстро",
+          "text": "Everyone, today we'll show you how Read can turn your meetings into actionable, shareable reports automatically. Is it complicated to set up? No, not at all. Just connect your calendar, Google or Outlook, and Read will automatically join your scheduled calls. No need to send a separate invite. So, once my calendar is connected, Read just knows when to join? Exactly."
+        },
+        {
+          "id": "t2",
+          "time": "00:24",
+          "speaker": "Достаточно Быстро",
+          "text": "It'll join any meeting you want, and you can control which meetings it attends. It works with Zoom, Teams, and Google Meet. You can also add Read manually to meetings, or use our Chrome extension, as well as our Zoom and Team apps, to automatically detect when you're in a meeting and have Read joined for you. So, is Read listening right now? Yes, and it's here to help. Read will transcribe, summarize, and identify key topics. No manual note-taking needed."
+        },
+        {
+          "id": "t3",
+          "time": "00:52",
+          "speaker": "Достаточно Быстро",
+          "text": "How do I know what's being captured? You'll see Reed is actively on your call, and after we wrap, Reed will email you and the participants a meeting report to review. So what does that report actually include? Great question. Let's review a meeting report and see what Reed produced for us. The report gives you a concise summary of what was discussed, a list of action items, who's responsible for what,"
+        },
+        {
+          "id": "t4",
+          "time": "01:39",
+          "speaker": "Достаточно Быстро",
+          "text": "Can I trust the summary to be accurate? Absolutely. Read uses advanced language models to capture the main points, but you can always edit or add to the report if you want to clarify and expand on something. How soon is the report available?"
+        },
+        {
+          "id": "t5",
+          "time": "01:57",
+          "speaker": "Достаточно Быстро",
+          "text": "Обычно через несколько минут после конца встречи. Это достаточно быстро поможет вам с вашими фоллоуапами, пока все остается свежим от встречи. Итак, давайте посмотрим на некоторые из функций. Вы можете использовать акционные элементы для навигации на вашу интеграцию, например, Jira, Asana, HubSpot и прочее. Вы можете также использовать Search Copilot, чтобы проверить статус этих акционных элементов или создавать email-драфты. Как я делаю репорт? Просто нажмите Share."
+        },
+        {
+          "id": "t6",
+          "time": "02:38",
+          "speaker": "Достаточно Быстро",
+          "text": "Продолжение следует..."
+        },
+        {
+          "id": "t7",
+          "time": "02:59",
+          "speaker": "Достаточно Быстро",
+          "text": "You can jump directly to these moments, see the context, and even filter your reports by topic across all of your meetings. It makes it simple to track important decisions and follow up on key points. So now that we've gone through a report, let's recap best practices. To get the most out of READ, invite it to your meetings where you want clear follow-up or documentation. Review and customize your reports right after the meeting."
+        },
+        {
+          "id": "t8",
+          "time": "03:29",
+          "speaker": "Достаточно Быстро",
+          "text": "and use the search and filter tools to revisit key decisions or action items. What should we do next if we want to try this? Simple. Connect your calendar and invite Read to your next meeting. Review your first report and share it with your team. If you have any questions or want tips, Read Support is here to help you. Well, thanks everyone for your time, and I really hope you enjoy using Read. Bye, guys!"
+        }
+      ],
+      "transcript": [
+        {
+          "id": "t1",
+          "time": "00:00",
+          "speaker": "Достаточно Быстро",
+          "text": "Everyone, today we'll show you how Read can turn your meetings into actionable, shareable reports automatically. Is it complicated to set up? No, not at all. Just connect your calendar, Google or Outlook, and Read will automatically join your scheduled calls. No need to send a separate invite. So, once my calendar is connected, Read just knows when to join? Exactly."
+        },
+        {
+          "id": "t2",
+          "time": "00:24",
+          "speaker": "Достаточно Быстро",
+          "text": "It'll join any meeting you want, and you can control which meetings it attends. It works with Zoom, Teams, and Google Meet. You can also add Read manually to meetings, or use our Chrome extension, as well as our Zoom and Team apps, to automatically detect when you're in a meeting and have Read joined for you. So, is Read listening right now? Yes, and it's here to help. Read will transcribe, summarize, and identify key topics. No manual note-taking needed."
+        },
+        {
+          "id": "t3",
+          "time": "00:52",
+          "speaker": "Достаточно Быстро",
+          "text": "How do I know what's being captured? You'll see Reed is actively on your call, and after we wrap, Reed will email you and the participants a meeting report to review. So what does that report actually include? Great question. Let's review a meeting report and see what Reed produced for us. The report gives you a concise summary of what was discussed, a list of action items, who's responsible for what,"
+        },
+        {
+          "id": "t4",
+          "time": "01:39",
+          "speaker": "Достаточно Быстро",
+          "text": "Can I trust the summary to be accurate? Absolutely. Read uses advanced language models to capture the main points, but you can always edit or add to the report if you want to clarify and expand on something. How soon is the report available?"
+        },
+        {
+          "id": "t5",
+          "time": "01:57",
+          "speaker": "Достаточно Быстро",
+          "text": "Обычно через несколько минут после конца встречи. Это достаточно быстро поможет вам с вашими фоллоуапами, пока все остается свежим от встречи. Итак, давайте посмотрим на некоторые из функций. Вы можете использовать акционные элементы для навигации на вашу интеграцию, например, Jira, Asana, HubSpot и прочее. Вы можете также использовать Search Copilot, чтобы проверить статус этих акционных элементов или создавать email-драфты. Как я делаю репорт? Просто нажмите Share."
+        },
+        {
+          "id": "t6",
+          "time": "02:38",
+          "speaker": "Достаточно Быстро",
+          "text": "Продолжение следует..."
+        },
+        {
+          "id": "t7",
+          "time": "02:59",
+          "speaker": "Достаточно Быстро",
+          "text": "You can jump directly to these moments, see the context, and even filter your reports by topic across all of your meetings. It makes it simple to track important decisions and follow up on key points. So now that we've gone through a report, let's recap best practices. To get the most out of READ, invite it to your meetings where you want clear follow-up or documentation. Review and customize your reports right after the meeting."
+        },
+        {
+          "id": "t8",
+          "time": "03:29",
+          "speaker": "Достаточно Быстро",
+          "text": "and use the search and filter tools to revisit key decisions or action items. What should we do next if we want to try this? Simple. Connect your calendar and invite Read to your next meeting. Review your first report and share it with your team. If you have any questions or want tips, Read Support is here to help you. Well, thanks everyone for your time, and I really hope you enjoy using Read. Bye, guys!"
+        }
+      ],
+      "speakerStats": [
+        {
+          "name": "Достаточно Быстро",
+          "role": "Speaker",
+          "talkTime": 100,
+          "talkTimeText": "100%",
+          "talk": 100,
+          "sentiment": "Положительный, демонстрационный тон с акцентом на простоту использования и пользу.",
+          "pace": "",
+          "firstSeenTime": "00:00",
+          "score": 91,
+          "mood": 83,
+          "engagement": 100,
+          "micMutedPercent": 0,
+          "cameraOffPercent": 0
+        }
+      ],
+      "highlights": [
+        {
+          "time": "00:00",
+          "title": "Введение и подключение календаря",
+          "text": "Read автоматически присоединяется к встречам после подключения календаря.",
+          "type": "Topic"
+        },
+        {
+          "time": "01:57",
+          "title": "Время получения отчёта",
+          "text": "Отчёт доступен через несколько минут после завершения встречи.",
+          "type": "Question"
+        },
+        {
+          "time": "03:29",
+          "title": "Следующие шаги для пользователей",
+          "text": "Подключить календарь, пригласить Read, просмотреть и поделиться отчётом.",
+          "type": "Action"
+        }
+      ],
+      "chapters": [
+        {
+          "start": "00:00",
+          "end": "00:52",
+          "title": "Обзор подключения и функций",
+          "text": "Презентатор объясняет, как подключить календарь, какие платформы поддерживает Read и как он автоматически присоединяется к встречам.",
+          "points": [
+            "Подключение календаря Google или Outlook",
+            "Поддержка Zoom, Teams, Google Meet",
+            "Автоматическое присоединение без отдельного приглашения"
+          ]
+        },
+        {
+          "start": "00:52",
+          "end": "01:57",
+          "title": "Отчёт после встречи",
+          "text": "Описание того, что входит в отчёт, как быстро он появляется и какие возможности редактирования доступны.",
+          "points": [
+            "Отчёт включает резюме, список действий и ответственных",
+            "Отчёт отправляется по email сразу после встречи",
+            "Можно редактировать и добавлять детали"
+          ]
+        },
+        {
+          "start": "01:57",
+          "end": "02:38",
+          "title": "Интеграции и дополнительные функции",
+          "text": "Рассказывается о поддерживаемых интеграциях (Jira, Asana, HubSpot) и функции Search Copilot для проверки статуса задач.",
+          "points": [
+            "Интеграция с Jira, Asana, HubSpot",
+            "Search Copilot для поиска статуса и создания email‑черновиков",
+            "Кнопка Share для создания отчёта"
+          ]
+        },
+        {
+          "start": "02:59",
+          "end": "03:29",
+          "title": "Навигация по отчёту и лучшие практики",
+          "text": "Показаны возможности перехода к ключевым моментам, фильтрации по темам и рекомендации по использованию Read для лучшего последующего действия.",
+          "points": [
+            "Переход к важным моментам и контексту",
+            "Фильтрация по темам во всех встречах",
+            "Приглашать Read в встречи, где нужен чёткий фолло‑ап"
+          ]
+        },
+        {
+          "start": "03:29",
+          "end": "03:45",
+          "title": "Заключение и призыв к действию",
+          "text": "Презентатор подводит итоги, предлагает подключить календарь и попробовать Read в следующей встрече, а также обратиться в поддержку при вопросах.",
+          "points": [
+            "Подключить календарь и пригласить Read",
+            "Просмотреть первый отчёт и поделиться им",
+            "Обратиться в поддержку для вопросов"
+          ]
+        }
+      ],
+      "trend": [
+        {
+          "time": "00:00",
+          "score": 72,
+          "engagement": 63,
+          "mood": 81
+        },
+        {
+          "time": "00:52",
+          "score": 74,
+          "engagement": 63,
+          "mood": 85
+        },
+        {
+          "time": "01:57",
+          "score": 72,
+          "engagement": 63,
+          "mood": 81
+        },
+        {
+          "time": "02:59",
+          "score": 74,
+          "engagement": 63,
+          "mood": 85
+        }
+      ],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Кратко перескажи встречу на русском."
+      ],
+      "recordingUrl": "/api/reports/uploaded-20260624065032-760898659/recording/stream",
+      "recordingFile": "uploaded-20260624065032-760898659.mp4",
+      "recordingType": "video/mp4",
+      "roomName": "alem-meeting",
+      "keywords": [
+        "read",
+        "report",
+        "meeting",
+        "meetings",
+        "review",
+        "reports",
+        "automatically",
+        "calendar"
+      ]
+    },
+    {
+      "report": {
         "id": "meeting-alem-meeting-20260624-055435",
         "title": "Встреча - alem-meeting",
         "source": "LiveKit",

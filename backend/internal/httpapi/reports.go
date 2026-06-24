@@ -949,6 +949,12 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 			"reportId": detail.Report.ID,
 			"prompts":  detail.AIQuestions,
 		})
+	case "history":
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w, http.MethodGet)
+			return
+		}
+		writeJSON(w, http.StatusOK, reportHistoryPayload(detail))
 	case "chat":
 		s.reportChat(w, r, detail)
 	default:
@@ -1514,6 +1520,44 @@ func reportActions(reportID string) []map[string]any {
 		{"id": "delete", "label": "Удалить отчёт", "method": http.MethodDelete, "endpoint": "/api/reports/" + reportID, "enabled": true, "danger": true},
 		{"id": "send", "label": "Отправить в...", "method": http.MethodPost, "endpoint": "/api/reports/" + reportID + "/send", "enabled": true},
 		{"id": "copy", "label": "Копировать отчёт", "method": http.MethodGet, "endpoint": "/api/reports/" + reportID + "/copy", "enabled": true},
+	}
+}
+
+func reportHistoryPayload(detail reportDetailResponse) map[string]any {
+	report := detail.Report
+	timeline := []map[string]any{}
+	if report.CreatedAt != "" {
+		timeline = append(timeline, map[string]any{
+			"type":      "created",
+			"label":     "Report created",
+			"timestamp": report.CreatedAt,
+		})
+	}
+	if report.RecordingStatus != "" {
+		timeline = append(timeline, map[string]any{
+			"type":   "recording",
+			"label":  "Recording",
+			"status": report.RecordingStatus,
+		})
+	}
+	if report.TranscriptionStatus != "" {
+		timeline = append(timeline, map[string]any{
+			"type":   "transcription",
+			"label":  "Transcription",
+			"status": report.TranscriptionStatus,
+		})
+	}
+	if report.AnalysisStatus != "" {
+		timeline = append(timeline, map[string]any{
+			"type":   "analysis",
+			"label":  "AI analysis",
+			"status": report.AnalysisStatus,
+		})
+	}
+	return map[string]any{
+		"reportId": report.ID,
+		"status":   firstNonEmpty(report.ProcessingState, report.Status),
+		"items":    timeline,
 	}
 }
 
