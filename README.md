@@ -22,7 +22,25 @@ The frontend uses a self-signed HTTPS certificate. The browser will ask you to a
 
 ## LAN Testing
 
-Find your Windows IPv4:
+Fast path on Windows:
+
+```powershell
+.\scripts\update-local-ip.ps1
+```
+
+The script finds the current LAN IPv4, updates `.env` and `backend/.env`, rebuilds the frontend HTTPS certificate, and recreates the Docker services that depend on public URLs. If automatic detection picks the wrong adapter, pass the IP manually:
+
+```powershell
+.\scripts\update-local-ip.ps1 -Ip 10.111.226.73
+```
+
+To only update env files without restarting Docker:
+
+```powershell
+.\scripts\update-local-ip.ps1 -NoDocker
+```
+
+Manual setup is also possible. Find your Windows IPv4:
 
 ```powershell
 ipconfig

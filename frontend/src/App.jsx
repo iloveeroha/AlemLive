@@ -1289,6 +1289,42 @@ function MediaStateReporter({ roomName }) {
   return null
 }
 
+function CorrectMeetingVideoMirror() {
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return undefined
+    }
+
+    const apply = () => {
+      document.querySelectorAll('.livekit-stage video, .livekit-stage .lk-participant-media-video').forEach((element) => {
+        const isLocalCamera = element.dataset.lkLocalParticipant === 'true' && element.dataset.lkSource === 'camera'
+        element.style.setProperty('transform', isLocalCamera ? 'scaleX(-1)' : 'none', 'important')
+        element.style.setProperty('scale', '1', 'important')
+        element.dataset.alemMirrorCorrected = isLocalCamera ? 'true' : 'false'
+      })
+    }
+
+    apply()
+
+    const observer = new MutationObserver(apply)
+    observer.observe(document.body, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+      attributeFilter: ['class', 'style', 'data-lk-facing-mode', 'data-lk-local-participant', 'data-lk-source'],
+    })
+
+    const interval = window.setInterval(apply, 500)
+
+    return () => {
+      observer.disconnect()
+      window.clearInterval(interval)
+    }
+  }, [])
+
+  return null
+}
+
 function ConferenceChatPanel({ onClose }) {
   const { chatMessages, send, isSending } = useChat()
   const [message, setMessage] = useState('')
@@ -3255,6 +3291,7 @@ function App() {
               className="livekit-context"
             >
               <MediaStateReporter roomName={meeting.roomName} />
+              <CorrectMeetingVideoMirror />
               <div className="meeting-livekit-layout">
                 <section className="meeting-panel">
                   {meetingToolbar}

@@ -4672,9 +4672,10 @@ body.meeting-maximized-active {
   display: none !important;
 }
 
-.meeting-grid.meeting-grid-connected .livekit-stage [data-lk-facing-mode='user'] .lk-participant-media-video[data-lk-local-participant='true'][data-lk-source='camera'],
-.meeting-grid.meeting-grid-connected .livekit-stage .lk-participant-media-video[data-lk-local-participant='true'][data-lk-source='camera'] {
+.meeting-grid.meeting-grid-connected .livekit-stage .lk-participant-media-video:not([data-lk-local-participant='true']),
+.meeting-grid.meeting-grid-connected .livekit-stage video:not([data-lk-local-participant='true']) {
   transform: none !important;
+  scale: 1 !important;
 }
 
 .meeting-grid.meeting-grid-connected.meeting-chat-collapsed {
@@ -4776,4 +4777,20 @@ body.meeting-maximized-active {
   .meeting-grid-connected.meeting-chat-collapsed .meeting-livekit-layout > .side-column {
     display: none !important;
   }
+}
+
+/* Some camera drivers already provide a mirrored local feed. Correct only the
+   local camera preview; remote camera tiles stay untransformed. */
+[data-lk-facing-mode='user'] .lk-participant-media-video[data-lk-local-participant='true'][data-lk-source='camera'],
+[data-lk-facing-mode='user'] video[data-lk-local-participant='true'][data-lk-source='camera'],
+.lk-participant-media-video[data-lk-local-participant='true'][data-lk-source='camera'],
+video[data-lk-local-participant='true'][data-lk-source='camera'] {
+  transform: scaleX(-1) !important;
+  scale: 1 !important;
+}
+
+.livekit-stage video:not([data-lk-local-participant='true']),
+.livekit-stage .lk-participant-media-video:not([data-lk-local-participant='true']) {
+  transform: none !important;
+  scale: 1 !important;
 }

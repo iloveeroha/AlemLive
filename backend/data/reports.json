@@ -2,6 +2,270 @@
   "reports": [
     {
       "report": {
+        "id": "meeting-alem-meeting-20260624-055435",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "24.06.2026",
+        "time": "05:54",
+        "participants": 0,
+        "participantNames": "",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "06:47",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-24T05:54:35Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260624-054724",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "24.06.2026",
+        "time": "05:47",
+        "participants": 0,
+        "participantNames": "",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:19",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-24T05:47:24Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260624-054137",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "24.06.2026",
+        "time": "05:41",
+        "participants": 0,
+        "participantNames": "",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:05",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-24T05:41:37Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260623-133928",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "23.06.2026",
+        "time": "13:39",
+        "participants": 0,
+        "participantNames": "",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "03:14",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-23T13:39:28Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260623-112655",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "23.06.2026",
+        "time": "11:26",
+        "participants": 0,
+        "participantNames": "",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:04",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-23T11:26:55Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260623-112507",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "23.06.2026",
+        "time": "11:25",
+        "participants": 0,
+        "participantNames": "",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:29",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-23T11:25:07Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
         "id": "uploaded-20260623110223-419324379",
         "title": "vod (2)",
         "source": "Upload",

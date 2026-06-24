@@ -3,6 +3,7 @@
 backend/.env
 backend/data/
 keycloak-data-backup-*/
+.tmp/
 
 # Frontend
 node_modules
