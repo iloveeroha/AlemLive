@@ -32,6 +32,11 @@
 	<string>AlemLive connects to local meeting services during development.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>AlemLive needs microphone access for audio meetings.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

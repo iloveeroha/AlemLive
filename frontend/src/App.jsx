@@ -1314,22 +1314,24 @@ function shouldWarnAboutMediaSecurity() {
 function MediaStateReporter({ roomName }) {
   const { isMicrophoneEnabled, isCameraEnabled } = useLocalParticipant()
 
-  function reportDeviceState(device, enabled) {
+  useEffect(() => {
     if (!roomName) {
       return
     }
     apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/device-state`, {
       method: 'POST',
-      body: JSON.stringify({ device, enabled }),
+      body: JSON.stringify({ device: 'mic', enabled: Boolean(isMicrophoneEnabled) }),
     }).catch(() => {})
-  }
-
-  useEffect(() => {
-    reportDeviceState('mic', Boolean(isMicrophoneEnabled))
   }, [roomName, isMicrophoneEnabled])
 
   useEffect(() => {
-    reportDeviceState('camera', Boolean(isCameraEnabled))
+    if (!roomName) {
+      return
+    }
+    apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/device-state`, {
+      method: 'POST',
+      body: JSON.stringify({ device: 'camera', enabled: Boolean(isCameraEnabled) }),
+    }).catch(() => {})
   }, [roomName, isCameraEnabled])
 
   return null
@@ -1343,10 +1345,9 @@ function CorrectMeetingVideoMirror() {
 
     const apply = () => {
       document.querySelectorAll('.livekit-stage video, .livekit-stage .lk-participant-media-video').forEach((element) => {
-        const isLocalCamera = element.dataset.lkLocalParticipant === 'true' && element.dataset.lkSource === 'camera'
-        element.style.setProperty('transform', isLocalCamera ? 'scaleX(-1)' : 'none', 'important')
+        element.style.setProperty('transform', 'none', 'important')
         element.style.setProperty('scale', '1', 'important')
-        element.dataset.alemMirrorCorrected = isLocalCamera ? 'true' : 'false'
+        element.dataset.alemMirrorCorrected = 'true'
       })
     }
 
@@ -1580,15 +1581,15 @@ function App() {
     if (!activeTranscriptMatch) {
       return
     }
-    setCollapsedTranscriptChapters((current) => {
+    queueMicrotask(() => setCollapsedTranscriptChapters((current) => {
       if (!current[activeTranscriptMatch.chapterKey]) {
         return current
       }
       const next = { ...current }
       delete next[activeTranscriptMatch.chapterKey]
       return next
-    })
-  }, [activeTranscriptMatch?.lineKey, activeTranscriptMatch?.chapterKey])
+    }))
+  }, [activeTranscriptMatch])
 
   useEffect(() => {
     if (!activeTranscriptMatch) {
@@ -1596,7 +1597,7 @@ function App() {
     }
     const node = transcriptLineRefs.current[activeTranscriptMatch.lineKey]
     node?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-  }, [activeTranscriptMatch?.lineKey, transcriptMatchIndex, collapsedTranscriptChapters])
+  }, [activeTranscriptMatch, transcriptMatchIndex, collapsedTranscriptChapters])
 
   useEffect(() => {
     if (activeReportTab !== 'highlights' || !selectedReportRecordingUrl) {
@@ -1639,7 +1640,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeReportTab, selectedReportRecordingUrl, searchableHighlights])
+  }, [activeReportTab, highlightThumbnails, searchableHighlights, selectedReportRecordingUrl])
 
   useEffect(() => {
     if (activeReportTab !== 'chapters' || !selectedReportRecordingUrl) {
@@ -1682,7 +1683,7 @@ function App() {
     return () => {
       cancelled = true
     }
-  }, [activeReportTab, selectedReportRecordingUrl, searchableChapters])
+  }, [activeReportTab, chapterThumbnails, searchableChapters, selectedReportRecordingUrl])
 
   useEffect(() => {
     function handleMouseMove(event) {
@@ -2071,11 +2072,13 @@ function App() {
   }, [activeView, authReady, isAuthenticated, selectedReportId])
 
   useEffect(() => {
-    setCopilotMessages([])
-    setActiveCopilotSessionId('')
-    setIsCopilotHistoryOpen(false)
+    queueMicrotask(() => {
+      setCopilotMessages([])
+      setActiveCopilotSessionId('')
+      setIsCopilotHistoryOpen(false)
+    })
     if (!selectedReportId) {
-      setCopilotChatSessions([])
+      queueMicrotask(() => setCopilotChatSessions([]))
       return undefined
     }
 
@@ -2111,13 +2114,21 @@ function App() {
 
   useEffect(() => {
     if (!isConnected || !meetingMeta.room) {
-      setRoomRecordingStatus({ state: 'idle', configured: false })
+      queueMicrotask(() => setRoomRecordingStatus({ state: 'idle', configured: false }))
       return undefined
     }
 
-    refreshRoomRecordingStatus(meetingMeta.room)
+    const roomName = meetingMeta.room
+    const refreshRecordingStatus = async () => {
+      const payload = await apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/recording/status`).catch(() => null)
+      if (payload) {
+        setRoomRecordingStatus(payload)
+      }
+    }
+
+    queueMicrotask(refreshRecordingStatus)
     const timer = window.setInterval(() => {
-      refreshRoomRecordingStatus(meetingMeta.room)
+      refreshRecordingStatus()
     }, 5000)
 
     return () => window.clearInterval(timer)
@@ -2281,18 +2292,6 @@ function App() {
       }),
     }).catch(() => null)
     applyMeetingEventPayload(payload)
-    return payload
-  }
-
-  async function refreshRoomRecordingStatus(roomName = meetingMeta.room) {
-    if (!roomName) {
-      return null
-    }
-
-    const payload = await apiRequest(`/api/rooms/${encodeURIComponent(roomName)}/recording/status`).catch(() => null)
-    if (payload) {
-      setRoomRecordingStatus(payload)
-    }
     return payload
   }
 

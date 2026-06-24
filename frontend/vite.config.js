@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': 'http://localhost:8088',
       '/livekit': {
         target: 'ws://localhost:7880',
         ws: true,

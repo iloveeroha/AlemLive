@@ -132,8 +132,8 @@ services:
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm"]
     environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
-      KC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN_USERNAME:-admin}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-admin}"
       KC_HOSTNAME: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}"
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
@@ -152,12 +152,12 @@ services:
     environment:
       PORT: "8080"
       ALLOWED_ORIGINS: "http://localhost:5173,https://localhost:5174,http://${APP_HOST:-127.0.0.1}:5173,https://${APP_HOST:-127.0.0.1}:5174"
-      KEYCLOAK_ISSUER_URL: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}/realms/alemlive"
-      KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/certs"
-      KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
-      KEYCLOAK_CLIENT_ID: "alemlive"
+      KEYCLOAK_ISSUER_URL: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}/realms/${KEYCLOAK_REALM:-alemlive}"
+      KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/${KEYCLOAK_REALM:-alemlive}/protocol/openid-connect/certs"
+      KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/${KEYCLOAK_REALM:-alemlive}/protocol/openid-connect/token"
+      KEYCLOAK_CLIENT_ID: "${KEYCLOAK_CLIENT_ID:-alemlive}"
       LOCAL_AUTH_ENABLED: "true"
-      LOCAL_AUTH_SECRET: "alemlive-local-auth-secret-change-me"
+      LOCAL_AUTH_SECRET: "${LOCAL_AUTH_SECRET:-change-me-local-auth-secret}"
       LIVEKIT_URL: "ws://livekit:7880"
       LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL:-}"
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"

@@ -4806,13 +4806,12 @@ body.meeting-maximized-active {
   }
 }
 
-/* Some camera drivers already provide a mirrored local feed. Correct only the
-   local camera preview; remote camera tiles stay untransformed. */
+/* Keep meeting video unmirrored for both local and remote participants. */
 [data-lk-facing-mode='user'] .lk-participant-media-video[data-lk-local-participant='true'][data-lk-source='camera'],
 [data-lk-facing-mode='user'] video[data-lk-local-participant='true'][data-lk-source='camera'],
 .lk-participant-media-video[data-lk-local-participant='true'][data-lk-source='camera'],
 video[data-lk-local-participant='true'][data-lk-source='camera'] {
-  transform: scaleX(-1) !important;
+  transform: none !important;
   scale: 1 !important;
 }
 

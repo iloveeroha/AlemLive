@@ -17,7 +17,7 @@ class AppConfig {
       ),
       enableMockFallback: bool.fromEnvironment(
         'ENABLE_MOCK_FALLBACK',
-        defaultValue: true,
+        defaultValue: false,
       ),
     );
   }

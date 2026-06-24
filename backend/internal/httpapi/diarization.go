@@ -41,10 +41,9 @@ func applyDiarizationSegments(lines []transcriptLine, segments []diarization.Seg
 		return lines
 	}
 
-	out := make([]transcriptLine, len(lines))
-	for i, line := range lines {
-		line.Speaker = bestDiarizationSpeaker(line, segments, line.Speaker)
-		out[i] = line
+	out := make([]transcriptLine, 0, len(lines))
+	for _, line := range lines {
+		out = append(out, splitTranscriptLineByDiarization(line, segments)...)
 	}
 	out = normalizeTranscriptSpeakers(out)
 	out = applyParticipantSpeakerNames(out, strings.Join(participants, ", "))
@@ -90,6 +89,133 @@ func bestDiarizationSpeaker(line transcriptLine, segments []diarization.Segment,
 	}
 
 	return fallback
+}
+
+type diarizedLinePart struct {
+	start   float64
+	end     float64
+	speaker string
+}
+
+func splitTranscriptLineByDiarization(line transcriptLine, segments []diarization.Segment) []transcriptLine {
+	lineStart, lineEnd := transcriptBounds(line)
+	parts := overlappingDiarizationParts(lineStart, lineEnd, segments)
+	if len(parts) == 0 {
+		line.Speaker = "SPEAKER_UNKNOWN"
+		return []transcriptLine{line}
+	}
+	if len(parts) == 1 {
+		line.Speaker = parts[0].speaker
+		return []transcriptLine{line}
+	}
+
+	words := strings.Fields(line.Text)
+	if len(words) < 2 {
+		line.Speaker = bestDiarizationSpeaker(line, segments, "SPEAKER_UNKNOWN")
+		return []transcriptLine{line}
+	}
+
+	chunks := splitWordsByDiarizationParts(words, parts)
+	out := make([]transcriptLine, 0, len(chunks))
+	for i, text := range chunks {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue
+		}
+		part := parts[i]
+		next := line
+		next.Time = formatTranscriptTime(part.start)
+		next.Start = part.start
+		next.End = part.end
+		next.Speaker = part.speaker
+		next.Text = text
+		out = appendMergedTranscriptLine(out, next)
+	}
+	if len(out) == 0 {
+		line.Speaker = bestDiarizationSpeaker(line, segments, "SPEAKER_UNKNOWN")
+		return []transcriptLine{line}
+	}
+	return out
+}
+
+func overlappingDiarizationParts(lineStart, lineEnd float64, segments []diarization.Segment) []diarizedLinePart {
+	parts := make([]diarizedLinePart, 0)
+	for _, segment := range segments {
+		start := maxFloat(lineStart, segment.Start)
+		end := minFloat(lineEnd, segment.End)
+		if end <= start {
+			continue
+		}
+		parts = append(parts, diarizedLinePart{
+			start:   start,
+			end:     end,
+			speaker: segment.Speaker,
+		})
+	}
+	sort.SliceStable(parts, func(i, j int) bool {
+		if parts[i].start == parts[j].start {
+			return parts[i].end < parts[j].end
+		}
+		return parts[i].start < parts[j].start
+	})
+	return parts
+}
+
+func splitWordsByDiarizationParts(words []string, parts []diarizedLinePart) []string {
+	chunks := make([]string, len(parts))
+	totalWeight := 0.0
+	for _, part := range parts {
+		totalWeight += maxFloat(part.end-part.start, 0)
+	}
+	if totalWeight <= 0 {
+		chunks[0] = strings.Join(words, " ")
+		return chunks
+	}
+
+	wordIndex := 0
+	totalWords := len(words)
+	for i, part := range parts {
+		remainingWords := totalWords - wordIndex
+		remainingParts := len(parts) - i
+		if remainingWords <= 0 {
+			break
+		}
+		count := remainingWords
+		if remainingParts > 1 {
+			weight := maxFloat(part.end-part.start, 0)
+			count = int(float64(totalWords)*weight/totalWeight + 0.5)
+			if count < 1 {
+				count = 1
+			}
+			maxAllowed := remainingWords - (remainingParts - 1)
+			if maxAllowed < 1 {
+				maxAllowed = 1
+			}
+			if count > maxAllowed {
+				count = maxAllowed
+			}
+		}
+		chunks[i] = strings.Join(words[wordIndex:wordIndex+count], " ")
+		wordIndex += count
+	}
+	if wordIndex < totalWords {
+		last := len(chunks) - 1
+		chunks[last] = strings.TrimSpace(chunks[last] + " " + strings.Join(words[wordIndex:], " "))
+	}
+	return chunks
+}
+
+func appendMergedTranscriptLine(lines []transcriptLine, next transcriptLine) []transcriptLine {
+	if len(lines) == 0 {
+		return append(lines, next)
+	}
+	last := &lines[len(lines)-1]
+	if normalizeSpeakerLabel(last.Speaker) != normalizeSpeakerLabel(next.Speaker) {
+		return append(lines, next)
+	}
+	last.Text = strings.TrimSpace(last.Text + " " + next.Text)
+	last.End = next.End
+	return lines
 }
 
 func transcriptBounds(line transcriptLine) (float64, float64) {
@@ -243,13 +369,13 @@ func participantSpeakerOrder(lines []transcriptLine, names []string) []string {
 }
 
 func fallbackSpeakerNames(lines []transcriptLine, speakerToName map[string]string, names []string) map[string]string {
-	if len(names) == 0 {
-		return nil
-	}
 	fallback := map[string]string{}
 	next := 1
 	for _, line := range lines {
 		speaker := normalizeSpeakerLabel(line.Speaker)
+		if strings.EqualFold(speaker, "SPEAKER_UNKNOWN") {
+			continue
+		}
 		if isGenericSpeakerName(speaker) || matchKnownParticipantName(speaker, names) != "" {
 			continue
 		}
@@ -267,7 +393,16 @@ func fallbackSpeakerNames(lines []transcriptLine, speakerToName map[string]strin
 
 func transcriptSpeakersNeedParticipantRepair(lines []transcriptLine, participants string) bool {
 	names := participantNamesFromText(participants)
-	if len(lines) == 0 || len(names) == 0 {
+	if len(lines) == 0 {
+		return false
+	}
+	if len(names) == 0 {
+		for _, line := range lines {
+			speaker := normalizeSpeakerLabel(line.Speaker)
+			if !isGenericSpeakerName(speaker) && !strings.EqualFold(speaker, "SPEAKER_UNKNOWN") {
+				return true
+			}
+		}
 		return false
 	}
 	for _, line := range lines {
