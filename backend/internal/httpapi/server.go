@@ -34,6 +34,8 @@ type Server struct {
 	generatedReports     []reportRow
 	generatedReportStore map[string]reportDetailResponse
 	deletedReportIDs     map[string]struct{}
+	reportClientsMu      sync.Mutex
+	reportClients        map[*reportEventClient]struct{}
 	activeMeetings       map[string]meetingSession
 	latestRoomReports    map[string]string
 	roomsMu              sync.Mutex
@@ -52,12 +54,13 @@ type tokenRequest struct {
 }
 
 type tokenResponse struct {
-	ServerURL string `json:"serverUrl"`
-	Token     string `json:"token"`
-	RoomName  string `json:"roomName"`
-	UserName  string `json:"userName"`
-	ExpiresAt string `json:"expiresAt"`
-	ReportID  string `json:"reportId,omitempty"`
+	ServerURL   string `json:"serverUrl"`
+	Token       string `json:"token"`
+	RoomName    string `json:"roomName"`
+	MeetingCode string `json:"meetingCode"`
+	UserName    string `json:"userName"`
+	ExpiresAt   string `json:"expiresAt"`
+	ReportID    string `json:"reportId,omitempty"`
 }
 
 type meetingAnalysis struct {
@@ -93,12 +96,19 @@ type keyQuestion struct {
 }
 
 type transcriptLine struct {
-	Time      string  `json:"time"`
-	Speaker   string  `json:"speaker"`
-	Text      string  `json:"text"`
-	Sentiment string  `json:"sentiment,omitempty"`
-	Start     float64 `json:"-"`
-	End       float64 `json:"-"`
+	ID              string  `json:"id,omitempty"`
+	Time            string  `json:"time"`
+	Speaker         string  `json:"speaker"`
+	SpeakerID       string  `json:"speakerId,omitempty"`
+	SpeakerName     string  `json:"speakerName,omitempty"`
+	ParticipantID   string  `json:"participantId,omitempty"`
+	LiveKitIdentity string  `json:"liveKitIdentity,omitempty"`
+	TrackID         string  `json:"trackId,omitempty"`
+	Source          string  `json:"source,omitempty"`
+	Text            string  `json:"text"`
+	Sentiment       string  `json:"sentiment,omitempty"`
+	Start           float64 `json:"start,omitempty"`
+	End             float64 `json:"end,omitempty"`
 }
 
 type meetingInsights struct {
@@ -151,6 +161,7 @@ func NewServer(cfg config.Config) http.Handler {
 		mux:                  http.NewServeMux(),
 		generatedReportStore: map[string]reportDetailResponse{},
 		deletedReportIDs:     map[string]struct{}{},
+		reportClients:        map[*reportEventClient]struct{}{},
 		activeMeetings:       map[string]meetingSession{},
 		latestRoomReports:    map[string]string{},
 		rooms:                map[string]*roomState{},
@@ -178,6 +189,7 @@ const askAIURL = "https://alem-workspace.gov.kz/web/alem-rag"
 
 func (s *Server) routes() {
 	s.mux.HandleFunc("/healthz", s.health)
+	s.mux.HandleFunc("/api/diagnostics/recording", s.recordingDiagnostics)
 	s.mux.HandleFunc("/api/config", s.config)
 	s.mux.HandleFunc("/api/auth/config", s.authConfig)
 	s.mux.HandleFunc("/api/auth/token", s.authToken)
@@ -200,6 +212,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("/api/reports", s.reports)
 	s.mux.HandleFunc("/api/reports/filters", s.reportFilters)
 	s.mux.HandleFunc("/api/reports/upload", s.reportUpload)
+	s.mux.HandleFunc("/api/reports/events", s.reportEvents)
 	s.mux.HandleFunc("/api/reports/", s.reportByID)
 	s.mux.HandleFunc("/api/ai/chat", s.aiChat)
 	s.mux.HandleFunc("/api/ai/status", s.aiStatus)
@@ -241,6 +254,9 @@ func (s *Server) config(w http.ResponseWriter, r *http.Request) {
 		"reportFiltersEndpoint":  "/api/reports/filters",
 		"llmModel":               s.cfg.LLMModel,
 		"sttModel":               s.cfg.STTModel,
+		"recordingMode":          s.cfg.RecordingMode,
+		"recordingFallbackMode":  s.cfg.RecordingFallbackMode,
+		"diarizationFallback":    s.cfg.EnableDiarizationFallback,
 	})
 }
 
@@ -255,6 +271,8 @@ func egressConfigFromAppConfig(cfg config.Config) livekit.EgressConfig {
 		FilePrefix:    cfg.LiveKitEgressFilePrefix,
 		PublicBaseURL: cfg.LiveKitEgressPublicBaseURL,
 		WebhookURL:    cfg.LiveKitEgressWebhookURL,
+		RecordingMode: cfg.RecordingMode,
+		FallbackMode:  cfg.RecordingFallbackMode,
 		S3: livekit.S3Config{
 			AccessKey:      cfg.LiveKitS3AccessKey,
 			Secret:         cfg.LiveKitS3Secret,
@@ -303,8 +321,6 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	room := firstNonEmpty(req.RoomName, req.Room)
-	identity := firstNonEmpty(req.UserName, req.Identity)
-
 	room, err := validateField("roomName", room)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -312,13 +328,17 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 	}
 	room = canonicalRoomName(room)
 
-	identity, err = validateField("userName", identity)
+	user := s.roomUserFromRequest(r, req.Identity, req.UserName)
+	if user.ID == "" || user.Name == "" {
+		writeError(w, http.StatusBadRequest, "userName is required")
+		return
+	}
+	_, err = validateField("userName", user.Name)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	user := roomUser{ID: identity, Name: identity}
 	snapshot, _ := s.joinRoomState(room, user, req.IsHost, true, true)
 	conferenceEvent := "joined"
 	if req.IsHost {
@@ -327,22 +347,24 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 	conference := s.recordConferenceEvent(snapshot.Name, user.Name, conferenceEvent, s.clock())
 	if conference.ReportID != "" {
 		snapshot = s.setRoomRecordingState(snapshot.ID, snapshot.RecordingState, conference.ReportID)
+		s.syncReportParticipantsFromSnapshot(conference.ReportID, snapshot)
 	}
 
 	role := "participant"
 	if req.IsHost {
 		role = "host"
 	}
-	metadata, err := json.Marshal(map[string]string{"role": role})
+	metadata, err := json.Marshal(roomLiveKitMetadata(room, user, role))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "Could not create LiveKit token")
 		return
 	}
 
-	token, expiresAt, err := livekit.GenerateToken(
+	token, expiresAt, err := livekit.GenerateTokenWithName(
 		s.cfg.LiveKitAPIKey,
 		s.cfg.LiveKitSecret,
-		identity,
+		user.ID,
+		user.Name,
 		room,
 		string(metadata),
 		s.cfg.TokenTTL,
@@ -354,12 +376,13 @@ func (s *Server) createLiveKitToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, tokenResponse{
-		ServerURL: s.publicLiveKitURL(r),
-		Token:     token,
-		RoomName:  room,
-		UserName:  identity,
-		ExpiresAt: expiresAt.UTC().Format(time.RFC3339),
-		ReportID:  conference.ReportID,
+		ServerURL:   s.publicLiveKitURL(r),
+		Token:       token,
+		RoomName:    room,
+		MeetingCode: room,
+		UserName:    user.Name,
+		ExpiresAt:   expiresAt.UTC().Format(time.RFC3339),
+		ReportID:    conference.ReportID,
 	})
 }
 

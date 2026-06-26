@@ -13,9 +13,12 @@ import (
 )
 
 var diarizationSpeakerPattern = regexp.MustCompile(`(?i)^(?:speaker|spk)[_\s-]*(\d+)$`)
-var selfIntroductionPattern = regexp.MustCompile(`(?i)(?:\b(?:i['’]?m|i\s+am|my\s+name\s+is|this\s+is)|(?:^|[^\p{L}])(?:я|меня\s+зовут|это))\s+([\p{L}][\p{L}'’.-]*(?:\s+[\p{L}][\p{L}'’.-]*){0,2})`)
+var selfIntroductionPattern = regexp.MustCompile(`(?i)(?:\b(?:i['’]?m|i\s+am|my\s+name\s+is|this\s+is)|(?:^|[^\p{L}])(?:меня\s+зовут|это))\s+([\p{L}][\p{L}'’.-]*(?:\s+[\p{L}][\p{L}'’.-]*){0,2})`)
 
 func (s *Server) diarizeTranscript(ctx context.Context, fileName, contentType string, data []byte, participants string, lines []transcriptLine) []transcriptLine {
+	if !s.cfg.EnableDiarizationFallback {
+		return lines
+	}
 	if s.diarizer == nil || !s.diarizer.Configured() || len(data) == 0 || len(lines) == 0 {
 		return lines
 	}
@@ -44,11 +47,11 @@ func applyDiarizationSegments(lines []transcriptLine, segments []diarization.Seg
 	out := make([]transcriptLine, len(lines))
 	for i, line := range lines {
 		line.Speaker = bestDiarizationSpeaker(line, segments, line.Speaker)
+		line.Source = speakerSourceDiarization
 		out[i] = line
 	}
-	out = normalizeTranscriptSpeakers(out)
-	out = applyParticipantSpeakerNames(out, strings.Join(participants, ", "))
-	return out
+	_ = participants
+	return normalizeTranscriptSpeakers(out)
 }
 
 func normalizedDiarizationSegments(segments []diarization.Segment) []diarization.Segment {
@@ -148,19 +151,12 @@ func applyParticipantSpeakerNames(lines []transcriptLine, participants string) [
 
 	out := make([]transcriptLine, len(lines))
 	speakerToName := inferSpeakerNamesFromTranscript(lines, names)
-	usedNames := usedSpeakerNames(speakerToName)
-	if len(names) > 0 {
-		fillSpeakerNamesByParticipantOrder(speakerToName, usedNames, participantSpeakerOrder(lines, names), names)
-	}
-	fallbackNames := fallbackSpeakerNames(lines, speakerToName, names)
 	for i, line := range lines {
 		speaker := normalizeSpeakerLabel(line.Speaker)
 		if known := matchKnownParticipantName(speaker, names); known != "" {
 			line.Speaker = known
 		} else if mapped, ok := speakerToName[speaker]; ok {
 			line.Speaker = mapped
-		} else if fallback, ok := fallbackNames[speaker]; ok {
-			line.Speaker = fallback
 		} else {
 			line.Speaker = speaker
 		}
@@ -194,60 +190,46 @@ func inferSpeakerNamesFromTranscript(lines []transcriptLine, names []string) map
 	return speakerToName
 }
 
-func fillSpeakerNamesByParticipantOrder(speakerToName map[string]string, usedNames map[string]struct{}, speakers, names []string) {
-	if len(speakers) == 0 || len(names) == 0 {
-		return
-	}
-	nextName := 0
-	for _, speaker := range speakers {
-		if _, ok := speakerToName[speaker]; ok {
-			continue
+func fallbackSpeakerNames(lines []transcriptLine, speakerToName map[string]string, names []string) map[string]string {
+	if len(names) > 0 {
+		fallback := map[string]string{}
+		usedNames := map[string]struct{}{}
+		for _, name := range speakerToName {
+			if known := matchKnownParticipantName(name, names); known != "" {
+				usedNames[participantNameKey(known)] = struct{}{}
+			}
 		}
-		for nextName < len(names) {
-			name := names[nextName]
-			nextName++
-			key := participantNameKey(name)
-			if _, used := usedNames[key]; used {
+		for _, line := range lines {
+			speaker := normalizeSpeakerLabel(line.Speaker)
+			if known := matchKnownParticipantName(speaker, names); known != "" {
+				usedNames[participantNameKey(known)] = struct{}{}
+			}
+		}
+
+		nextNameIndex := 0
+		for _, line := range lines {
+			speaker := normalizeSpeakerLabel(line.Speaker)
+			if _, ok := speakerToName[speaker]; ok {
 				continue
 			}
-			speakerToName[speaker] = name
-			usedNames[key] = struct{}{}
-			break
+			if matchKnownParticipantName(speaker, names) != "" {
+				continue
+			}
+			if _, ok := fallback[speaker]; ok {
+				continue
+			}
+			name := nextUnusedParticipantName(names, usedNames, &nextNameIndex)
+			if name == "" {
+				continue
+			}
+			fallback[speaker] = name
+			usedNames[participantNameKey(name)] = struct{}{}
 		}
+		return fallback
 	}
-}
 
-func usedSpeakerNames(speakerToName map[string]string) map[string]struct{} {
-	used := map[string]struct{}{}
-	for _, name := range speakerToName {
-		used[participantNameKey(name)] = struct{}{}
-	}
-	return used
-}
-
-func participantSpeakerOrder(lines []transcriptLine, names []string) []string {
-	order := make([]string, 0)
-	seen := map[string]struct{}{}
-	for _, line := range lines {
-		speaker := normalizeSpeakerLabel(line.Speaker)
-		if matchKnownParticipantName(speaker, names) != "" {
-			continue
-		}
-		if _, ok := seen[speaker]; ok {
-			continue
-		}
-		seen[speaker] = struct{}{}
-		order = append(order, speaker)
-	}
-	return order
-}
-
-func fallbackSpeakerNames(lines []transcriptLine, speakerToName map[string]string, names []string) map[string]string {
-	if len(names) == 0 {
-		return nil
-	}
 	fallback := map[string]string{}
-	next := 1
+	next := nextFallbackSpeakerIndex(lines)
 	for _, line := range lines {
 		speaker := normalizeSpeakerLabel(line.Speaker)
 		if isGenericSpeakerName(speaker) || matchKnownParticipantName(speaker, names) != "" {
@@ -263,6 +245,46 @@ func fallbackSpeakerNames(lines []transcriptLine, speakerToName map[string]strin
 		next++
 	}
 	return fallback
+}
+
+func nextUnusedParticipantName(names []string, used map[string]struct{}, index *int) string {
+	for *index < len(names) {
+		name := strings.TrimSpace(names[*index])
+		*index = *index + 1
+		if name == "" {
+			continue
+		}
+		key := participantNameKey(name)
+		if _, ok := used[key]; ok {
+			continue
+		}
+		return name
+	}
+	return ""
+}
+
+func nextFallbackSpeakerIndex(lines []transcriptLine) int {
+	maxIndex := 0
+	for _, line := range lines {
+		speaker := normalizeSpeakerLabel(line.Speaker)
+		if strings.EqualFold(speaker, "speaker") {
+			maxIndex = max(maxIndex, 1)
+			continue
+		}
+		matches := diarizationSpeakerPattern.FindStringSubmatch(speaker)
+		if len(matches) != 2 {
+			continue
+		}
+		index, err := strconv.Atoi(matches[1])
+		if err != nil {
+			continue
+		}
+		if index == 0 || strings.HasPrefix(matches[1], "0") {
+			index++
+		}
+		maxIndex = max(maxIndex, index)
+	}
+	return maxIndex + 1
 }
 
 func transcriptSpeakersNeedParticipantRepair(lines []transcriptLine, participants string) bool {
@@ -337,6 +359,9 @@ func selfIntroducedName(text string, knownParticipants []string) string {
 		}
 		if known := matchKnownParticipantName(candidate, knownParticipants); known != "" {
 			return known
+		}
+		if len(knownParticipants) > 0 {
+			continue
 		}
 		return titleName(candidate)
 	}

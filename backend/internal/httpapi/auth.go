@@ -109,6 +109,7 @@ func isPublicPath(path string) bool {
 	}
 	return path == "/healthz" ||
 		path == "/api/config" ||
+		path == "/api/diagnostics/recording" ||
 		path == "/api/auth/config" ||
 		path == "/api/auth/token" ||
 		path == "/api/auth/login" ||

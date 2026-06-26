@@ -1,46 +1,50 @@
 {
-  "realm": "alemlive",
-  "enabled": true,
-  "displayName": "AlemLive",
-  "registrationAllowed": true,
-  "loginWithEmailAllowed": true,
-  "duplicateEmailsAllowed": false,
-  "resetPasswordAllowed": true,
-  "editUsernameAllowed": false,
-  "clients": [
-    {
-      "clientId": "alemlive",
-      "name": "AlemLive",
-      "enabled": true,
-      "protocol": "openid-connect",
-      "publicClient": true,
-      "standardFlowEnabled": true,
-      "implicitFlowEnabled": false,
-      "directAccessGrantsEnabled": true,
-      "serviceAccountsEnabled": false,
-      "frontchannelLogout": true,
-      "redirectUris": [
-        "http://localhost:5173/*",
-        "https://localhost:5174/*",
-        "http://127.0.0.1:5173/*",
-        "https://127.0.0.1:5174/*",
-        "http://10.111.199.51:5173/*",
-        "https://10.111.199.51:5174/*",
-        "http://10.*:5173/*",
-        "https://10.*:5174/*",
-        "http://172.*:5173/*",
-        "https://172.*:5174/*",
-        "http://192.168.*:5173/*",
-        "https://192.168.*:5174/*"
-      ],
-      "webOrigins": [
-        "+"
-      ],
-      "attributes": {
-        "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "+"
-      }
-    }
-  ],
-  "users": []
+    "realm":  "alemlive",
+    "enabled":  true,
+    "displayName":  "AlemLive",
+    "registrationAllowed":  true,
+    "loginWithEmailAllowed":  true,
+    "duplicateEmailsAllowed":  false,
+    "resetPasswordAllowed":  true,
+    "editUsernameAllowed":  false,
+    "clients":  [
+                    {
+                        "clientId":  "alemlive",
+                        "name":  "AlemLive",
+                        "enabled":  true,
+                        "protocol":  "openid-connect",
+                        "publicClient":  true,
+                        "standardFlowEnabled":  true,
+                        "implicitFlowEnabled":  false,
+                        "directAccessGrantsEnabled":  true,
+                        "serviceAccountsEnabled":  false,
+                        "frontchannelLogout":  true,
+                        "redirectUris":  [
+                                             "http://localhost:5173/*",
+                                             "https://localhost:5174/*",
+                                             "http://127.0.0.1:5173/*",
+                                             "https://127.0.0.1:5174/*",
+                                             "http://10.111.199.51:5173/*",
+                                             "https://10.111.199.51:5174/*",
+                                             "http://10.*:5173/*",
+                                             "https://10.*:5174/*",
+                                             "http://172.*:5173/*",
+                                             "https://172.*:5174/*",
+                                             "http://192.168.*:5173/*",
+                                             "https://192.168.*:5174/*",
+                                             "http://192.168.1.69:5173/*",
+                                             "https://192.168.1.69:5174/*"
+                                         ],
+                        "webOrigins":  [
+                                           "+"
+                                       ],
+                        "attributes":  {
+                                           "pkce.code.challenge.method":  "S256",
+                                           "post.logout.redirect.uris":  "+"
+                                       }
+                    }
+                ],
+    "users":  [
+
+              ]
 }

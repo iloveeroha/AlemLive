@@ -2,6 +2,763 @@
   "reports": [
     {
       "report": {
+        "id": "meeting-fzu-qujh-tvw-20260625-183442",
+        "title": "Встреча - fzu-qujh-tvw",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "25.06.2026",
+        "time": "18:34",
+        "participants": 2,
+        "participantNames": "Rimu tempest, asyl asyl",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "03:29",
+        "status": "failed",
+        "processingState": "failed",
+        "recordingStatus": "failed",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-25T18:34:42Z"
+      },
+      "summary": [
+        {
+          "title": "Не удалось записать встречу",
+          "text": "К сожалению, при проведении встречи fzu-qujh-tvw 25 июня 2026 г. в 18:34 мс. запись не была создана – LiveKit Egress не смог подготовить файл. В результате встреча сохранена без аудио‑записи, а транскрипция и AI‑анализ не запущены. Участники Rimu tempest и asyl asyl могут обратиться к поддержке LiveKit, если нужна запись."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "recordingMode": "room_composite",
+      "egressId": "EG_wGrAuK8vaWCj",
+      "recordingBucket": "alemlive-recordings",
+      "recordingObjectKey": "alemlive/fzu-qujh-tvw/20260625-183604.mp4",
+      "recordingStartedAt": "2026-06-25T18:36:05Z",
+      "recordingError": "LiveKit Egress stop failed: LiveKit Egress request failed",
+      "lastError": "LiveKit Egress stop failed: LiveKit Egress request failed",
+      "pipelineEvents": [
+        {
+          "stage": "recording",
+          "status": "running",
+          "message": "LiveKit Egress started",
+          "at": "2026-06-25T18:36:05Z",
+          "egressId": "EG_wGrAuK8vaWCj",
+          "objectKey": "alemlive/fzu-qujh-tvw/20260625-183604.mp4"
+        },
+        {
+          "stage": "recording",
+          "status": "failed",
+          "message": "LiveKit Egress stop failed: LiveKit Egress request failed",
+          "at": "2026-06-25T18:38:04Z",
+          "egressId": "EG_wGrAuK8vaWCj",
+          "objectKey": "alemlive/fzu-qujh-tvw/20260625-183604.mp4"
+        }
+      ],
+      "roomName": "fzu-qujh-tvw"
+    },
+    {
+      "report": {
+        "id": "meeting-fff-20260625-180008",
+        "title": "Встреча - fff",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "25.06.2026",
+        "time": "18:00",
+        "participants": 1,
+        "participantNames": "Rimu tempest",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "Rimu tempest",
+        "ownerInitial": "R",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:17",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-25T18:00:08Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "recordingMode": "room_composite",
+      "roomName": "fff"
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260625-174425",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "25.06.2026",
+        "time": "17:44",
+        "participants": 1,
+        "participantNames": "Madi Orysbek",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "Madi Orysbek",
+        "ownerInitial": "M",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:18",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-25T17:44:25Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "recordingMode": "room_composite",
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260625-172035",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "25.06.2026",
+        "time": "17:20",
+        "participants": 2,
+        "participantNames": "Madi Orysbek, asyl asyl",
+        "score": 71,
+        "engagementScore": 67,
+        "moodScore": 75,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "01:00",
+        "status": "ready",
+        "processingState": "ready",
+        "recordingStatus": "completed",
+        "transcriptionStatus": "completed",
+        "analysisStatus": "failed",
+        "createdAt": "2026-06-25T17:20:35Z"
+      },
+      "summary": [
+        {
+          "title": "Транскрипт получен",
+          "text": "Аудио распознано, но AI-анализ сейчас недоступен. Откройте вкладку транскрипта для исходного текста или повторите AI-запрос позже."
+        }
+      ],
+      "actionItems": [
+        {
+          "id": "action-1",
+          "title": "Проверить транскрипт и подтвердить задачи вручную",
+          "task": "Проверить транскрипт и подтвердить задачи вручную",
+          "description": "",
+          "owner": "Team",
+          "due": "После встречи",
+          "priority": "Medium",
+          "status": "open"
+        }
+      ],
+      "transcriptLines": [
+        {
+          "id": "t1",
+          "time": "00:01",
+          "speaker": "Speaker 2",
+          "speakerId": "speaker-2",
+          "speakerName": "Speaker 2",
+          "source": "stt",
+          "text": "Тест №1600. Сегодня я и мой друг собираемся поговорить о том, что мы собираемся поговорить о мобильных легендах. Почему они так плохи, и почему они всегда на нашей команде, когда я МВП и лучший игрок матча. Всегда. И то, что некоторые... Сумер меня на этом келепиным."
+        },
+        {
+          "id": "t2",
+          "time": "00:42",
+          "speaker": "Speaker 1",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "text": "М-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м."
+        }
+      ],
+      "transcript": [
+        {
+          "id": "t1",
+          "time": "00:01",
+          "speaker": "Speaker 2",
+          "speakerId": "speaker-2",
+          "speakerName": "Speaker 2",
+          "source": "stt",
+          "text": "Тест №1600. Сегодня я и мой друг собираемся поговорить о том, что мы собираемся поговорить о мобильных легендах. Почему они так плохи, и почему они всегда на нашей команде, когда я МВП и лучший игрок матча. Всегда. И то, что некоторые... Сумер меня на этом келепиным."
+        },
+        {
+          "id": "t2",
+          "time": "00:42",
+          "speaker": "Speaker 1",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "text": "М-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м."
+        }
+      ],
+      "segments": [
+        {
+          "id": "t1",
+          "speakerId": "speaker-2",
+          "speakerName": "Speaker 2",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:01",
+          "text": "Тест №1600. Сегодня я и мой друг собираемся поговорить о том, что мы собираемся поговорить о мобильных легендах. Почему они так плохи, и почему они всегда на нашей команде, когда я МВП и лучший игрок матча. Всегда. И то, что некоторые... Сумер меня на этом келепиным."
+        },
+        {
+          "id": "t2",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:42",
+          "text": "М-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м-м."
+        }
+      ],
+      "speakerStats": [
+        {
+          "name": "Speaker 2",
+          "role": "Speaker",
+          "talkTime": 50,
+          "talkTimeText": "50%",
+          "talk": 50,
+          "sentiment": "Информационная встреча",
+          "pace": "",
+          "firstSeenTime": "00:01",
+          "score": 76,
+          "mood": 75,
+          "engagement": 77,
+          "charisma": 75,
+          "hasCharisma": true,
+          "micMutedPercent": 0,
+          "cameraOffPercent": 0
+        },
+        {
+          "name": "Speaker 1",
+          "role": "Speaker",
+          "talkTime": 50,
+          "talkTimeText": "50%",
+          "talk": 50,
+          "sentiment": "Информационная встреча",
+          "pace": "",
+          "firstSeenTime": "00:42",
+          "score": 76,
+          "mood": 75,
+          "engagement": 77,
+          "bias": 75,
+          "hasBias": true,
+          "micMutedPercent": 0,
+          "cameraOffPercent": 0
+        }
+      ],
+      "highlights": [
+        {
+          "time": "00:00",
+          "title": "Транскрипт готов",
+          "text": "Speech-to-text завершился. Для финальных выводов нужен повторный AI-анализ.",
+          "type": "Action"
+        }
+      ],
+      "chapters": [
+        {
+          "start": "00:00",
+          "end": "01:00",
+          "title": "Разговор",
+          "text": "Автоматически распознанная запись встречи."
+        }
+      ],
+      "trend": [
+        {
+          "time": "00:01",
+          "score": 72,
+          "engagement": 69,
+          "mood": 75
+        },
+        {
+          "time": "00:42",
+          "score": 72,
+          "engagement": 69,
+          "mood": 75
+        }
+      ],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Кратко перескажи встречу на русском."
+      ],
+      "recordingUrl": "/api/reports/meeting-alem-meeting-20260625-172035/recording/stream",
+      "recordingSourceUrl": "http://minio:9000/alemlive-recordings/alemlive/alem-meeting/20260625-172055.mp4",
+      "recordingMode": "room_composite",
+      "speakerSource": "stt",
+      "roomName": "alem-meeting",
+      "keywords": [
+        "собираемся",
+        "поговорить",
+        "почему",
+        "всегда",
+        "тест",
+        "1600",
+        "сегодня",
+        "друг"
+      ]
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260625-172029",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "25.06.2026",
+        "time": "17:20",
+        "participants": 1,
+        "participantNames": "Madi Orysbek",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "Madi Orysbek",
+        "ownerInitial": "M",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:04",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-25T17:20:29Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "recordingMode": "room_composite",
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260625-154856",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "25.06.2026",
+        "time": "15:48",
+        "participants": 2,
+        "participantNames": "Madi Orysbek, asyl asyl",
+        "score": 73,
+        "engagementScore": 68,
+        "moodScore": 78,
+        "folder": "Сохранённые встречи",
+        "owner": "asyl asyl",
+        "ownerInitial": "A",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "03:00",
+        "status": "ready",
+        "processingState": "ready",
+        "recordingStatus": "completed",
+        "transcriptionStatus": "completed",
+        "analysisStatus": "completed",
+        "createdAt": "2026-06-25T15:48:56Z"
+      },
+      "summary": [
+        {
+          "title": "Вводные замечания и тема встречи",
+          "text": "Madi Orysbek открыл встречу, упомянув разговор о покемонах, Кобельмоне, Майнкрафте и жаркую погоду в Астане (35 °C)."
+        },
+        {
+          "title": "Тестирование ИИ и обсуждение будущих проектов",
+          "text": "Участник, обозначенный как Speaker, согласился с выводами Асубека и предложил проверить эффективность искусственного интеллекта в распознавании речи и скорости анализа."
+        },
+        {
+          "title": "Вопрос о втором сезоне «Ателье колдовских колпаков»",
+          "text": "Madi Orysbek задал вопрос о предполагаемой дате выхода второго сезона, запросив мнения участников."
+        }
+      ],
+      "actionItems": [
+        {
+          "id": "action-1",
+          "time": "00:33",
+          "title": "Провести проверку качества работы искусственного интеллекта в распознавании речи и оценить время анализа информации.",
+          "task": "Провести проверку качества работы искусственного интеллекта в распознавании речи и оценить время анализа информации.",
+          "description": "",
+          "owner": "Speaker",
+          "due": "",
+          "priority": "Medium",
+          "status": "open"
+        }
+      ],
+      "keyQuestions": [
+        {
+          "time": "01:02",
+          "question": "Когда выйдет второй сезон «Ателье колдовских колпаков»?",
+          "answer": "Конкретной даты не назвали; участники высказали предположения, но окончательное решение пока не принято."
+        }
+      ],
+      "transcriptLines": [
+        {
+          "id": "t1",
+          "time": "00:00",
+          "speaker": "Madi Orysbek",
+          "text": "Вместе со мной и моим другом Мадзи мы поговорим о покемонах, Кобельмоне и Майнкрафтере, названном Кристалликс. И также, уважаемые друзья, сегодня в Астане было очень жарко, но после того, как погода закончилась, мы будем продолжать сегодняшний ауэрай, потому что на сегодняшний день температура 35 градусов."
+        },
+        {
+          "id": "t2",
+          "time": "00:33",
+          "speaker": "Madi Orysbek",
+          "text": "Дорогие"
+        },
+        {
+          "id": "t3",
+          "time": "00:33",
+          "speaker": "Speaker 1",
+          "text": "друзья, я соглашусь с выводом нашего сотрудника Асубека. Также могу сказать то, что сейчас мы будем проверять, насколько хорошо работает искусственный интеллект и как он поймет нашу речь. Также за какое время он сможет проанализировать информацию."
+        },
+        {
+          "id": "t4",
+          "time": "00:33",
+          "speaker": "Madi Orysbek",
+          "text": "А также под конец встречи хотелось бы"
+        },
+        {
+          "id": "t5",
+          "time": "00:57",
+          "speaker": "Speaker 1",
+          "text": "сделать..."
+        },
+        {
+          "id": "t6",
+          "time": "01:02",
+          "speaker": "Madi Orysbek",
+          "text": "Решение, например, когда выйдет второй сезон «Ателье колдовских колпаков»? Ваше предположение?"
+        }
+      ],
+      "transcript": [
+        {
+          "id": "t1",
+          "time": "00:00",
+          "speaker": "Madi Orysbek",
+          "text": "Вместе со мной и моим другом Мадзи мы поговорим о покемонах, Кобельмоне и Майнкрафтере, названном Кристалликс. И также, уважаемые друзья, сегодня в Астане было очень жарко, но после того, как погода закончилась, мы будем продолжать сегодняшний ауэрай, потому что на сегодняшний день температура 35 градусов."
+        },
+        {
+          "id": "t2",
+          "time": "00:33",
+          "speaker": "Madi Orysbek",
+          "text": "Дорогие"
+        },
+        {
+          "id": "t3",
+          "time": "00:33",
+          "speaker": "Speaker 1",
+          "text": "друзья, я соглашусь с выводом нашего сотрудника Асубека. Также могу сказать то, что сейчас мы будем проверять, насколько хорошо работает искусственный интеллект и как он поймет нашу речь. Также за какое время он сможет проанализировать информацию."
+        },
+        {
+          "id": "t4",
+          "time": "00:33",
+          "speaker": "Madi Orysbek",
+          "text": "А также под конец встречи хотелось бы"
+        },
+        {
+          "id": "t5",
+          "time": "00:57",
+          "speaker": "Speaker 1",
+          "text": "сделать..."
+        },
+        {
+          "id": "t6",
+          "time": "01:02",
+          "speaker": "Madi Orysbek",
+          "text": "Решение, например, когда выйдет второй сезон «Ателье колдовских колпаков»? Ваше предположение?"
+        }
+      ],
+      "segments": [
+        {
+          "id": "t1",
+          "speakerId": "madi-orysbek",
+          "speakerName": "Madi Orysbek",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:00",
+          "text": "Вместе со мной и моим другом Мадзи мы поговорим о покемонах, Кобельмоне и Майнкрафтере, названном Кристалликс. И также, уважаемые друзья, сегодня в Астане было очень жарко, но после того, как погода закончилась, мы будем продолжать сегодняшний ауэрай, потому что на сегодняшний день температура 35 градусов."
+        },
+        {
+          "id": "t2",
+          "speakerId": "madi-orysbek",
+          "speakerName": "Madi Orysbek",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:33",
+          "text": "Дорогие"
+        },
+        {
+          "id": "t3",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:33",
+          "text": "друзья, я соглашусь с выводом нашего сотрудника Асубека. Также могу сказать то, что сейчас мы будем проверять, насколько хорошо работает искусственный интеллект и как он поймет нашу речь. Также за какое время он сможет проанализировать информацию."
+        },
+        {
+          "id": "t4",
+          "speakerId": "madi-orysbek",
+          "speakerName": "Madi Orysbek",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:33",
+          "text": "А также под конец встречи хотелось бы"
+        },
+        {
+          "id": "t5",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:57",
+          "text": "сделать..."
+        },
+        {
+          "id": "t6",
+          "speakerId": "madi-orysbek",
+          "speakerName": "Madi Orysbek",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "01:02",
+          "text": "Решение, например, когда выйдет второй сезон «Ателье колдовских колпаков»? Ваше предположение?"
+        }
+      ],
+      "speakerStats": [
+        {
+          "name": "Madi Orysbek",
+          "role": "Speaker",
+          "talkTime": 66,
+          "talkTimeText": "66%",
+          "talk": 66,
+          "sentiment": "Информационная встреча",
+          "pace": "",
+          "score": 0,
+          "mood": 0,
+          "engagement": 0,
+          "micMutedPercent": 0,
+          "cameraOffPercent": 0
+        },
+        {
+          "name": "Speaker 1",
+          "role": "Speaker",
+          "talkTime": 33,
+          "talkTimeText": "33%",
+          "talk": 33,
+          "sentiment": "Информационная встреча",
+          "pace": "",
+          "score": 0,
+          "mood": 0,
+          "engagement": 0,
+          "micMutedPercent": 0,
+          "cameraOffPercent": 0
+        }
+      ],
+      "highlights": [
+        {
+          "time": "00:00",
+          "title": "Вводные замечания",
+          "text": "Madi Orysbek представил тему встречи и упомянул жаркую погоду в Астане.",
+          "type": "Topic"
+        },
+        {
+          "time": "00:33",
+          "title": "Тестирование ИИ",
+          "text": "Speaker согласился с выводами Асубека и предложил проверить эффективность ИИ.",
+          "type": "Action"
+        },
+        {
+          "time": "01:02",
+          "title": "Вопрос о втором сезоне",
+          "text": "Madi Orysbek спросил о дате выхода второго сезона «Ателье колдовских колпаков».",
+          "type": "Question"
+        }
+      ],
+      "chapters": [
+        {
+          "start": "00:00",
+          "end": "00:33",
+          "title": "Вводная часть",
+          "text": "Madi Orysbek открыл встречу, рассказав о планах обсудить покемонов, Кобельмона, Майнкрафт и упомянув жаркую погоду в Астане.",
+          "points": [
+            "Приветствие участников",
+            "Указание тем для обсуждения",
+            "Упоминание текущей погоды (35 °C)"
+          ]
+        },
+        {
+          "start": "00:33",
+          "end": "01:02",
+          "title": "Обсуждение ИИ и будущих проектов",
+          "text": "Speaker согласился с выводами Асубека, предложил проверить работу ИИ в распознавании речи и оценить время анализа, после чего Madi Orysbek задал вопрос о дате выхода второго сезона «Ателье колдовских колпаков».",
+          "points": [
+            "Согласие с выводами Асубека",
+            "Предложение тестировать ИИ",
+            "Вопрос о втором сезоне проекта"
+          ]
+        }
+      ],
+      "trend": [
+        {
+          "time": "00:00",
+          "score": 74,
+          "engagement": 70,
+          "mood": 78
+        },
+        {
+          "time": "00:33",
+          "score": 76,
+          "engagement": 70,
+          "mood": 82
+        },
+        {
+          "time": "00:57",
+          "score": 74,
+          "engagement": 70,
+          "mood": 78
+        }
+      ],
+      "interruptions": 1,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Кратко перескажи встречу на русском."
+      ],
+      "recordingUrl": "/api/reports/meeting-alem-meeting-20260625-154856/recording/stream",
+      "recordingSourceUrl": "http://minio:9000/alemlive-recordings/alemlive/alem-meeting/20260625-155026.mp4",
+      "recordingMode": "room_composite",
+      "speakerSource": "stt",
+      "roomName": "alem-meeting",
+      "keywords": [
+        "также",
+        "друзья",
+        "сегодняшний",
+        "вместе",
+        "мной",
+        "моим",
+        "другом",
+        "мадзи"
+      ]
+    },
+    {
+      "report": {
+        "id": "meeting-alem-meeting-20260625-154726",
+        "title": "Встреча - alem-meeting",
+        "source": "LiveKit",
+        "type": "meeting",
+        "date": "25.06.2026",
+        "time": "15:47",
+        "participants": 1,
+        "participantNames": "Madi Orysbek",
+        "score": 0,
+        "folder": "Сохранённые встречи",
+        "owner": "Madi Orysbek",
+        "ownerInitial": "M",
+        "thumbnailTone": "blue",
+        "week": "LiveKit meetings",
+        "duration": "00:03",
+        "status": "saved",
+        "processingState": "saved",
+        "recordingStatus": "missing",
+        "transcriptionStatus": "not_started",
+        "analysisStatus": "not_started",
+        "createdAt": "2026-06-25T15:47:26Z"
+      },
+      "summary": [
+        {
+          "title": "Конференция сохранена",
+          "text": "Конференция сохранена в отчётах без записи. Чтобы получить видео, транскрипт и AI-анализ, включите запись отдельной кнопкой во время следующей встречи."
+        }
+      ],
+      "actionItems": [],
+      "transcriptLines": [],
+      "transcript": [],
+      "speakerStats": [],
+      "highlights": [],
+      "chapters": [],
+      "interruptions": 0,
+      "aiQuestions": [
+        "Какие решения приняли на встрече?",
+        "Какие задачи появились после встречи?",
+        "Сделай краткое резюме этой встречи."
+      ],
+      "recordingMode": "room_composite",
+      "roomName": "alem-meeting"
+    },
+    {
+      "report": {
         "id": "uploaded-20260624070403-548164189",
         "title": "meeting-alem-meeting-20260624-064111-video",
         "source": "Upload",
@@ -68,6 +825,28 @@
           "text": "Ну, даже запись. Он был?"
         }
       ],
+      "segments": [
+        {
+          "id": "t1",
+          "speakerId": "asyl-asyl",
+          "speakerName": "asyl asyl",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:27",
+          "text": "Да."
+        },
+        {
+          "id": "t2",
+          "speakerId": "asyl-asyl",
+          "speakerName": "asyl asyl",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "02:12",
+          "text": "Ну, даже запись. Он был?"
+        }
+      ],
       "speakerStats": [
         {
           "name": "Speaker 1",
@@ -129,6 +908,7 @@
       "recordingUrl": "/api/reports/uploaded-20260624070403-548164189/recording/stream",
       "recordingFile": "uploaded-20260624070403-548164189.mp4",
       "recordingType": "video/mp4",
+      "speakerSource": "stt",
       "roomName": "alem-meeting",
       "keywords": [
         "даже",
@@ -230,49 +1010,49 @@
         {
           "id": "t1",
           "time": "00:00",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Everyone, today we'll show you how Read can turn your meetings into actionable, shareable reports automatically. Is it complicated to set up? No, not at all. Just connect your calendar, Google or Outlook, and Read will automatically join your scheduled calls. No need to send a separate invite. So, once my calendar is connected, Read just knows when to join? Exactly."
         },
         {
           "id": "t2",
           "time": "00:24",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "It'll join any meeting you want, and you can control which meetings it attends. It works with Zoom, Teams, and Google Meet. You can also add Read manually to meetings, or use our Chrome extension, as well as our Zoom and Team apps, to automatically detect when you're in a meeting and have Read joined for you. So, is Read listening right now? Yes, and it's here to help. Read will transcribe, summarize, and identify key topics. No manual note-taking needed."
         },
         {
           "id": "t3",
           "time": "00:52",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "How do I know what's being captured? You'll see Reed is actively on your call, and after we wrap, Reed will email you and the participants a meeting report to review. So what does that report actually include? Great question. Let's review a meeting report and see what Reed produced for us. The report gives you a concise summary of what was discussed, a list of action items, who's responsible for what,"
         },
         {
           "id": "t4",
           "time": "01:39",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Can I trust the summary to be accurate? Absolutely. Read uses advanced language models to capture the main points, but you can always edit or add to the report if you want to clarify and expand on something. How soon is the report available?"
         },
         {
           "id": "t5",
           "time": "01:57",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Обычно через несколько минут после конца встречи. Это достаточно быстро поможет вам с вашими фоллоуапами, пока все остается свежим от встречи. Итак, давайте посмотрим на некоторые из функций. Вы можете использовать акционные элементы для навигации на вашу интеграцию, например, Jira, Asana, HubSpot и прочее. Вы можете также использовать Search Copilot, чтобы проверить статус этих акционных элементов или создавать email-драфты. Как я делаю репорт? Просто нажмите Share."
         },
         {
           "id": "t6",
           "time": "02:38",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Продолжение следует..."
         },
         {
           "id": "t7",
           "time": "02:59",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "You can jump directly to these moments, see the context, and even filter your reports by topic across all of your meetings. It makes it simple to track important decisions and follow up on key points. So now that we've gone through a report, let's recap best practices. To get the most out of READ, invite it to your meetings where you want clear follow-up or documentation. Review and customize your reports right after the meeting."
         },
         {
           "id": "t8",
           "time": "03:29",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "and use the search and filter tools to revisit key decisions or action items. What should we do next if we want to try this? Simple. Connect your calendar and invite Read to your next meeting. Review your first report and share it with your team. If you have any questions or want tips, Read Support is here to help you. Well, thanks everyone for your time, and I really hope you enjoy using Read. Bye, guys!"
         }
       ],
@@ -280,65 +1060,146 @@
         {
           "id": "t1",
           "time": "00:00",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Everyone, today we'll show you how Read can turn your meetings into actionable, shareable reports automatically. Is it complicated to set up? No, not at all. Just connect your calendar, Google or Outlook, and Read will automatically join your scheduled calls. No need to send a separate invite. So, once my calendar is connected, Read just knows when to join? Exactly."
         },
         {
           "id": "t2",
           "time": "00:24",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "It'll join any meeting you want, and you can control which meetings it attends. It works with Zoom, Teams, and Google Meet. You can also add Read manually to meetings, or use our Chrome extension, as well as our Zoom and Team apps, to automatically detect when you're in a meeting and have Read joined for you. So, is Read listening right now? Yes, and it's here to help. Read will transcribe, summarize, and identify key topics. No manual note-taking needed."
         },
         {
           "id": "t3",
           "time": "00:52",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "How do I know what's being captured? You'll see Reed is actively on your call, and after we wrap, Reed will email you and the participants a meeting report to review. So what does that report actually include? Great question. Let's review a meeting report and see what Reed produced for us. The report gives you a concise summary of what was discussed, a list of action items, who's responsible for what,"
         },
         {
           "id": "t4",
           "time": "01:39",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Can I trust the summary to be accurate? Absolutely. Read uses advanced language models to capture the main points, but you can always edit or add to the report if you want to clarify and expand on something. How soon is the report available?"
         },
         {
           "id": "t5",
           "time": "01:57",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Обычно через несколько минут после конца встречи. Это достаточно быстро поможет вам с вашими фоллоуапами, пока все остается свежим от встречи. Итак, давайте посмотрим на некоторые из функций. Вы можете использовать акционные элементы для навигации на вашу интеграцию, например, Jira, Asana, HubSpot и прочее. Вы можете также использовать Search Copilot, чтобы проверить статус этих акционных элементов или создавать email-драфты. Как я делаю репорт? Просто нажмите Share."
         },
         {
           "id": "t6",
           "time": "02:38",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Продолжение следует..."
         },
         {
           "id": "t7",
           "time": "02:59",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "You can jump directly to these moments, see the context, and even filter your reports by topic across all of your meetings. It makes it simple to track important decisions and follow up on key points. So now that we've gone through a report, let's recap best practices. To get the most out of READ, invite it to your meetings where you want clear follow-up or documentation. Review and customize your reports right after the meeting."
         },
         {
           "id": "t8",
           "time": "03:29",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
+          "text": "and use the search and filter tools to revisit key decisions or action items. What should we do next if we want to try this? Simple. Connect your calendar and invite Read to your next meeting. Review your first report and share it with your team. If you have any questions or want tips, Read Support is here to help you. Well, thanks everyone for your time, and I really hope you enjoy using Read. Bye, guys!"
+        }
+      ],
+      "segments": [
+        {
+          "id": "t1",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:00",
+          "text": "Everyone, today we'll show you how Read can turn your meetings into actionable, shareable reports automatically. Is it complicated to set up? No, not at all. Just connect your calendar, Google or Outlook, and Read will automatically join your scheduled calls. No need to send a separate invite. So, once my calendar is connected, Read just knows when to join? Exactly."
+        },
+        {
+          "id": "t2",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:24",
+          "text": "It'll join any meeting you want, and you can control which meetings it attends. It works with Zoom, Teams, and Google Meet. You can also add Read manually to meetings, or use our Chrome extension, as well as our Zoom and Team apps, to automatically detect when you're in a meeting and have Read joined for you. So, is Read listening right now? Yes, and it's here to help. Read will transcribe, summarize, and identify key topics. No manual note-taking needed."
+        },
+        {
+          "id": "t3",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:52",
+          "text": "How do I know what's being captured? You'll see Reed is actively on your call, and after we wrap, Reed will email you and the participants a meeting report to review. So what does that report actually include? Great question. Let's review a meeting report and see what Reed produced for us. The report gives you a concise summary of what was discussed, a list of action items, who's responsible for what,"
+        },
+        {
+          "id": "t4",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "01:39",
+          "text": "Can I trust the summary to be accurate? Absolutely. Read uses advanced language models to capture the main points, but you can always edit or add to the report if you want to clarify and expand on something. How soon is the report available?"
+        },
+        {
+          "id": "t5",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "01:57",
+          "text": "Обычно через несколько минут после конца встречи. Это достаточно быстро поможет вам с вашими фоллоуапами, пока все остается свежим от встречи. Итак, давайте посмотрим на некоторые из функций. Вы можете использовать акционные элементы для навигации на вашу интеграцию, например, Jira, Asana, HubSpot и прочее. Вы можете также использовать Search Copilot, чтобы проверить статус этих акционных элементов или создавать email-драфты. Как я делаю репорт? Просто нажмите Share."
+        },
+        {
+          "id": "t6",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "02:38",
+          "text": "Продолжение следует..."
+        },
+        {
+          "id": "t7",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "02:59",
+          "text": "You can jump directly to these moments, see the context, and even filter your reports by topic across all of your meetings. It makes it simple to track important decisions and follow up on key points. So now that we've gone through a report, let's recap best practices. To get the most out of READ, invite it to your meetings where you want clear follow-up or documentation. Review and customize your reports right after the meeting."
+        },
+        {
+          "id": "t8",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "03:29",
           "text": "and use the search and filter tools to revisit key decisions or action items. What should we do next if we want to try this? Simple. Connect your calendar and invite Read to your next meeting. Review your first report and share it with your team. If you have any questions or want tips, Read Support is here to help you. Well, thanks everyone for your time, and I really hope you enjoy using Read. Bye, guys!"
         }
       ],
       "speakerStats": [
         {
-          "name": "Достаточно Быстро",
+          "name": "Speaker 1",
           "role": "Speaker",
           "talkTime": 100,
           "talkTimeText": "100%",
           "talk": 100,
-          "sentiment": "Положительный, демонстрационный тон с акцентом на простоту использования и пользу.",
+          "sentiment": "Информационная встреча",
           "pace": "",
-          "firstSeenTime": "00:00",
-          "score": 91,
-          "mood": 83,
-          "engagement": 100,
+          "score": 0,
+          "mood": 0,
+          "engagement": 0,
           "micMutedPercent": 0,
           "cameraOffPercent": 0
         }
@@ -455,6 +1316,7 @@
       "recordingUrl": "/api/reports/uploaded-20260624065032-760898659/recording/stream",
       "recordingFile": "uploaded-20260624065032-760898659.mp4",
       "recordingType": "video/mp4",
+      "speakerSource": "stt",
       "roomName": "alem-meeting",
       "keywords": [
         "read",
@@ -509,6 +1371,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -553,6 +1416,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -597,6 +1461,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -641,6 +1506,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -685,6 +1551,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -729,6 +1596,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -827,49 +1695,49 @@
         {
           "id": "t1",
           "time": "00:00",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Everyone, today we'll show you how Read can turn your meetings into actionable, shareable reports automatically. Is it complicated to set up? No, not at all. Just connect your calendar, Google or Outlook, and Read will automatically join your scheduled calls. No need to send a separate invite. So, once my calendar is connected, Read just knows when to join? Exactly."
         },
         {
           "id": "t2",
           "time": "00:24",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "It'll join any meeting you want, and you can control which meetings it attends. It works with Zoom, Teams, and Google Meet. You can also add Read manually to meetings, or use our Chrome extension, as well as our Zoom and Team apps, to automatically detect when you're in a meeting and have Read joined for you. So, is Read listening right now? Yes, and it's here to help. Read will transcribe, summarize, and identify key topics. No manual note-taking needed."
         },
         {
           "id": "t3",
           "time": "00:52",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "How do I know what's being captured? You'll see Reed is actively on your call, and after we wrap, Reed will email you and the participants a meeting report to review. So what does that report actually include? Great question. Let's review a meeting report and see what Reed produced for us. The report gives you a concise summary of what was discussed, a list of action items, who's responsible for what,"
         },
         {
           "id": "t4",
           "time": "01:39",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Can I trust the summary to be accurate? Absolutely. Read uses advanced language models to capture the main points, but you can always edit or add to the report if you want to clarify and expand on something. How soon is the report available?"
         },
         {
           "id": "t5",
           "time": "01:57",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Обычно через несколько минут после конца встречи. Это достаточно быстро поможет вам с вашими фоллоуапами, пока все остается свежим от встречи. Итак, давайте посмотрим на некоторые из функций. Вы можете использовать акционные элементы для навигации на вашу интеграцию, например, Jira, Asana, HubSpot и прочее. Вы можете также использовать Search Copilot, чтобы проверить статус этих акционных элементов или создавать email-драфты. Как я делаю репорт? Просто нажмите Share."
         },
         {
           "id": "t6",
           "time": "02:38",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Продолжение следует..."
         },
         {
           "id": "t7",
           "time": "02:59",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "You can jump directly to these moments, see the context, and even filter your reports by topic across all of your meetings. It makes it simple to track important decisions and follow up on key points. So now that we've gone through a report, let's recap best practices. To get the most out of READ, invite it to your meetings where you want clear follow-up or documentation. Review and customize your reports right after the meeting."
         },
         {
           "id": "t8",
           "time": "03:29",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "and use the search and filter tools to revisit key decisions or action items. What should we do next if we want to try this? Simple. Connect your calendar and invite Read to your next meeting. Review your first report and share it with your team. If you have any questions or want tips, Read Support is here to help you. Well, thanks everyone for your time, and I really hope you enjoy using Read. Bye, guys!"
         }
       ],
@@ -877,65 +1745,146 @@
         {
           "id": "t1",
           "time": "00:00",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Everyone, today we'll show you how Read can turn your meetings into actionable, shareable reports automatically. Is it complicated to set up? No, not at all. Just connect your calendar, Google or Outlook, and Read will automatically join your scheduled calls. No need to send a separate invite. So, once my calendar is connected, Read just knows when to join? Exactly."
         },
         {
           "id": "t2",
           "time": "00:24",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "It'll join any meeting you want, and you can control which meetings it attends. It works with Zoom, Teams, and Google Meet. You can also add Read manually to meetings, or use our Chrome extension, as well as our Zoom and Team apps, to automatically detect when you're in a meeting and have Read joined for you. So, is Read listening right now? Yes, and it's here to help. Read will transcribe, summarize, and identify key topics. No manual note-taking needed."
         },
         {
           "id": "t3",
           "time": "00:52",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "How do I know what's being captured? You'll see Reed is actively on your call, and after we wrap, Reed will email you and the participants a meeting report to review. So what does that report actually include? Great question. Let's review a meeting report and see what Reed produced for us. The report gives you a concise summary of what was discussed, a list of action items, who's responsible for what,"
         },
         {
           "id": "t4",
           "time": "01:39",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Can I trust the summary to be accurate? Absolutely. Read uses advanced language models to capture the main points, but you can always edit or add to the report if you want to clarify and expand on something. How soon is the report available?"
         },
         {
           "id": "t5",
           "time": "01:57",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Обычно через несколько минут после конца встречи. Это достаточно быстро поможет вам с вашими фоллоуапами, пока все остается свежим от встречи. Итак, давайте посмотрим на некоторые из функций. Вы можете использовать акционные элементы для навигации на вашу интеграцию, например, Jira, Asana, HubSpot и прочее. Вы можете также использовать Search Copilot, чтобы проверить статус этих акционных элементов или создавать email-драфты. Как я делаю репорт? Просто нажмите Share."
         },
         {
           "id": "t6",
           "time": "02:38",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "Продолжение следует..."
         },
         {
           "id": "t7",
           "time": "02:59",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
           "text": "You can jump directly to these moments, see the context, and even filter your reports by topic across all of your meetings. It makes it simple to track important decisions and follow up on key points. So now that we've gone through a report, let's recap best practices. To get the most out of READ, invite it to your meetings where you want clear follow-up or documentation. Review and customize your reports right after the meeting."
         },
         {
           "id": "t8",
           "time": "03:29",
-          "speaker": "Достаточно Быстро",
+          "speaker": "Speaker 1",
+          "text": "and use the search and filter tools to revisit key decisions or action items. What should we do next if we want to try this? Simple. Connect your calendar and invite Read to your next meeting. Review your first report and share it with your team. If you have any questions or want tips, Read Support is here to help you. Well, thanks everyone for your time, and I really hope you enjoy using Read. Bye, guys!"
+        }
+      ],
+      "segments": [
+        {
+          "id": "t1",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:00",
+          "text": "Everyone, today we'll show you how Read can turn your meetings into actionable, shareable reports automatically. Is it complicated to set up? No, not at all. Just connect your calendar, Google or Outlook, and Read will automatically join your scheduled calls. No need to send a separate invite. So, once my calendar is connected, Read just knows when to join? Exactly."
+        },
+        {
+          "id": "t2",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:24",
+          "text": "It'll join any meeting you want, and you can control which meetings it attends. It works with Zoom, Teams, and Google Meet. You can also add Read manually to meetings, or use our Chrome extension, as well as our Zoom and Team apps, to automatically detect when you're in a meeting and have Read joined for you. So, is Read listening right now? Yes, and it's here to help. Read will transcribe, summarize, and identify key topics. No manual note-taking needed."
+        },
+        {
+          "id": "t3",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:52",
+          "text": "How do I know what's being captured? You'll see Reed is actively on your call, and after we wrap, Reed will email you and the participants a meeting report to review. So what does that report actually include? Great question. Let's review a meeting report and see what Reed produced for us. The report gives you a concise summary of what was discussed, a list of action items, who's responsible for what,"
+        },
+        {
+          "id": "t4",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "01:39",
+          "text": "Can I trust the summary to be accurate? Absolutely. Read uses advanced language models to capture the main points, but you can always edit or add to the report if you want to clarify and expand on something. How soon is the report available?"
+        },
+        {
+          "id": "t5",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "01:57",
+          "text": "Обычно через несколько минут после конца встречи. Это достаточно быстро поможет вам с вашими фоллоуапами, пока все остается свежим от встречи. Итак, давайте посмотрим на некоторые из функций. Вы можете использовать акционные элементы для навигации на вашу интеграцию, например, Jira, Asana, HubSpot и прочее. Вы можете также использовать Search Copilot, чтобы проверить статус этих акционных элементов или создавать email-драфты. Как я делаю репорт? Просто нажмите Share."
+        },
+        {
+          "id": "t6",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "02:38",
+          "text": "Продолжение следует..."
+        },
+        {
+          "id": "t7",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "02:59",
+          "text": "You can jump directly to these moments, see the context, and even filter your reports by topic across all of your meetings. It makes it simple to track important decisions and follow up on key points. So now that we've gone through a report, let's recap best practices. To get the most out of READ, invite it to your meetings where you want clear follow-up or documentation. Review and customize your reports right after the meeting."
+        },
+        {
+          "id": "t8",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "03:29",
           "text": "and use the search and filter tools to revisit key decisions or action items. What should we do next if we want to try this? Simple. Connect your calendar and invite Read to your next meeting. Review your first report and share it with your team. If you have any questions or want tips, Read Support is here to help you. Well, thanks everyone for your time, and I really hope you enjoy using Read. Bye, guys!"
         }
       ],
       "speakerStats": [
         {
-          "name": "Достаточно Быстро",
+          "name": "Speaker 1",
           "role": "Speaker",
           "talkTime": 100,
           "talkTimeText": "100%",
           "talk": 100,
-          "sentiment": "Positive and enthusiastic about the product.",
+          "sentiment": "Информационная встреча",
           "pace": "",
-          "firstSeenTime": "00:00",
-          "score": 91,
-          "mood": 83,
-          "engagement": 100,
+          "score": 0,
+          "mood": 0,
+          "engagement": 0,
           "micMutedPercent": 0,
           "cameraOffPercent": 0
         }
@@ -1030,6 +1979,7 @@
       "recordingUrl": "/api/reports/uploaded-20260623110223-419324379/recording/stream",
       "recordingFile": "uploaded-20260623110223-419324379.mp4",
       "recordingType": "video/mp4",
+      "speakerSource": "stt",
       "roomName": "alem-meeting",
       "keywords": [
         "read",
@@ -1089,7 +2039,7 @@
         {
           "id": "t1",
           "time": "00:08",
-          "speaker": "Madi Orysbek",
+          "speaker": "Speaker 1",
           "text": "Тут походу отзеркально, да? Да пофигу. Надо пойти так важно. Неудобно. Давай сейчас."
         }
       ],
@@ -1097,18 +2047,30 @@
         {
           "id": "t1",
           "time": "00:08",
-          "speaker": "Madi Orysbek",
+          "speaker": "Speaker 1",
+          "text": "Тут походу отзеркально, да? Да пофигу. Надо пойти так важно. Неудобно. Давай сейчас."
+        }
+      ],
+      "segments": [
+        {
+          "id": "t1",
+          "speakerId": "speaker-1",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:08",
           "text": "Тут походу отзеркально, да? Да пофигу. Надо пойти так важно. Неудобно. Давай сейчас."
         }
       ],
       "speakerStats": [
         {
-          "name": "Madi Orysbek",
+          "name": "Speaker 1",
           "role": "Speaker",
           "talkTime": 100,
           "talkTimeText": "100%",
           "talk": 100,
-          "sentiment": "нейтральный",
+          "sentiment": "Информационная встреча",
           "pace": "",
           "score": 0,
           "mood": 0,
@@ -1141,6 +2103,8 @@
       ],
       "recordingUrl": "/api/reports/meeting-alem-meeting-20260623-074119/recording/stream",
       "recordingSourceUrl": "http://minio:9000/alemlive-recordings/alemlive/alem-meeting/20260623-074410.mp4",
+      "recordingMode": "room_composite",
+      "speakerSource": "stt",
       "roomName": "alem-meeting"
     },
     {
@@ -1185,6 +2149,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -1229,6 +2194,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -1273,6 +2239,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -1317,6 +2284,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -1361,6 +2329,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -1405,6 +2374,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     },
     {
@@ -1455,7 +2425,10 @@
         {
           "id": "t1",
           "time": "00:00",
-          "speaker": "era",
+          "speaker": "Speaker 1",
+          "speakerId": "era",
+          "speakerName": "Speaker 1",
+          "source": "stt",
           "text": "Раз, раз, раз. Тест, тест, тест. Запись с лайфхита. Ой, запись конференции, как он работает. Раз, раз, раз. По идее, все."
         }
       ],
@@ -1463,13 +2436,28 @@
         {
           "id": "t1",
           "time": "00:00",
-          "speaker": "era",
+          "speaker": "Speaker 1",
+          "speakerId": "era",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "text": "Раз, раз, раз. Тест, тест, тест. Запись с лайфхита. Ой, запись конференции, как он работает. Раз, раз, раз. По идее, все."
+        }
+      ],
+      "segments": [
+        {
+          "id": "t1",
+          "speakerId": "era",
+          "speakerName": "Speaker 1",
+          "source": "stt",
+          "start": 0,
+          "end": 0,
+          "time": "00:00",
           "text": "Раз, раз, раз. Тест, тест, тест. Запись с лайфхита. Ой, запись конференции, как он работает. Раз, раз, раз. По идее, все."
         }
       ],
       "speakerStats": [
         {
-          "name": "era",
+          "name": "Speaker 1",
           "role": "Speaker",
           "talkTime": 100,
           "talkTimeText": "100%",
@@ -1515,6 +2503,8 @@
         "Кратко перескажи встречу на русском."
       ],
       "recordingUrl": "/api/reports/meeting-123123-20260622-114054/recording/stream",
+      "recordingMode": "room_composite",
+      "speakerSource": "stt",
       "roomName": "123123",
       "keywords": [
         "тест",
@@ -1567,6 +2557,7 @@
         "Какие задачи появились после встречи?",
         "Сделай краткое резюме этой встречи."
       ],
+      "recordingMode": "room_composite",
       "roomName": "alem-meeting"
     }
   ]

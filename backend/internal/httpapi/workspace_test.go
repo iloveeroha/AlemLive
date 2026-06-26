@@ -216,6 +216,47 @@ func TestMobileRoomFlowEndpoints(t *testing.T) {
 	}
 }
 
+func TestReportEventsBroadcastReportChanges(t *testing.T) {
+	storagePath := filepath.Join(t.TempDir(), "reports.json")
+	handler := NewServer(config.Config{TokenTTL: time.Hour, ReportsStoragePath: storagePath})
+	server := httptest.NewServer(handler)
+	defer server.Close()
+
+	eventsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/api/reports/events"
+	conn, _, err := websocket.DefaultDialer.Dial(eventsURL, nil)
+	if err != nil {
+		t.Fatalf("connect report events: %v", err)
+	}
+	defer conn.Close()
+
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var connected roomEventEnvelope
+	if err := conn.ReadJSON(&connected); err != nil {
+		t.Fatalf("read initial report event: %v", err)
+	}
+	if connected.Type != "connected" {
+		t.Fatalf("unexpected initial report event: %#v", connected)
+	}
+
+	body := bytes.NewBufferString(`{"title":"Realtime report","source":"Upload","owner":"Madi"}`)
+	response, err := http.Post(server.URL+"/api/reports/upload", "application/json", body)
+	if err != nil {
+		t.Fatalf("create report request: %v", err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusAccepted {
+		t.Fatalf("expected upload status 202, got %d", response.StatusCode)
+	}
+
+	var event roomEventEnvelope
+	if err := conn.ReadJSON(&event); err != nil {
+		t.Fatalf("read report changed event: %v", err)
+	}
+	if event.Type != "report_changed" || event.Payload["reportId"] == "" {
+		t.Fatalf("unexpected report changed event: %#v", event)
+	}
+}
+
 func TestDevicePreferenceAndMeetingEvent(t *testing.T) {
 	handler := NewServer(config.Config{TokenTTL: time.Hour})
 

@@ -78,21 +78,47 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
     restart: unless-stopped
 
   minio-init:
     image: minio/mc:latest
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER:-alemlive}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-change-me-minio-password}"
       MINIO_BUCKET: "${MINIO_BUCKET:-alemlive-recordings}"
     entrypoint: /bin/sh
-    command: >
-      -c "until mc alias set local http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\"; do sleep 1; done;
-      mc mb -p \"local/$${MINIO_BUCKET}\" || true;
-      mc anonymous set download \"local/$${MINIO_BUCKET}\" || true"
+    command:
+      - -c
+      - |
+        set -eu
+        echo "minio-init: waiting for MinIO"
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          echo "minio-init: MinIO is not ready or credentials are invalid; retrying"
+          sleep 1
+        done
+        echo "minio-init: MinIO ready"
+        if mc ls "local/$${MINIO_BUCKET}" >/dev/null 2>&1; then
+          echo "minio-init: bucket exists: $${MINIO_BUCKET}"
+        else
+          echo "minio-init: creating bucket: $${MINIO_BUCKET}"
+          mc mb -p "local/$${MINIO_BUCKET}"
+          echo "minio-init: bucket created: $${MINIO_BUCKET}"
+        fi
+        if mc anonymous set download "local/$${MINIO_BUCKET}"; then
+          echo "minio-init: anonymous download policy set for $${MINIO_BUCKET}"
+        else
+          echo "minio-init: failed to set anonymous download policy for $${MINIO_BUCKET}" >&2
+          exit 1
+        fi
     restart: "no"
 
   livekit-egress:
@@ -132,8 +158,8 @@ services:
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm"]
     environment:
-      KC_BOOTSTRAP_ADMIN_USERNAME: "admin"
-      KC_BOOTSTRAP_ADMIN_PASSWORD: "admin"
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN_USERNAME:-admin}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-admin}"
       KC_HOSTNAME: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}"
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
@@ -152,12 +178,12 @@ services:
     environment:
       PORT: "8080"
       ALLOWED_ORIGINS: "http://localhost:5173,https://localhost:5174,http://${APP_HOST:-127.0.0.1}:5173,https://${APP_HOST:-127.0.0.1}:5174"
-      KEYCLOAK_ISSUER_URL: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}/realms/alemlive"
-      KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/certs"
-      KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/alemlive/protocol/openid-connect/token"
-      KEYCLOAK_CLIENT_ID: "alemlive"
+      KEYCLOAK_ISSUER_URL: "${KEYCLOAK_PUBLIC_URL:-http://localhost:8080}/realms/${KEYCLOAK_REALM:-alemlive}"
+      KEYCLOAK_JWKS_URL: "http://keycloak:8080/realms/${KEYCLOAK_REALM:-alemlive}/protocol/openid-connect/certs"
+      KEYCLOAK_TOKEN_URL: "http://keycloak:8080/realms/${KEYCLOAK_REALM:-alemlive}/protocol/openid-connect/token"
+      KEYCLOAK_CLIENT_ID: "${KEYCLOAK_CLIENT_ID:-alemlive}"
       LOCAL_AUTH_ENABLED: "true"
-      LOCAL_AUTH_SECRET: "alemlive-local-auth-secret-change-me"
+      LOCAL_AUTH_SECRET: "${LOCAL_AUTH_SECRET:-change-me-local-auth-secret}"
       LIVEKIT_URL: "ws://livekit:7880"
       LIVEKIT_PUBLIC_URL: "${LIVEKIT_PUBLIC_URL:-}"
       LIVEKIT_API_KEY: "${LIVEKIT_API_KEY:-devkey}"
@@ -174,6 +200,11 @@ services:
       LIVEKIT_S3_ACCESS_KEY: "${MINIO_ROOT_USER:-alemlive}"
       LIVEKIT_S3_SECRET: "${MINIO_ROOT_PASSWORD:-change-me-minio-password}"
       LIVEKIT_S3_FORCE_PATH_STYLE: "true"
+      RECORDING_MODE: "${RECORDING_MODE:-room_composite}"
+      RECORDING_FALLBACK_MODE: "${RECORDING_FALLBACK_MODE:-room_composite}"
+      ENABLE_DIARIZATION_FALLBACK: "${ENABLE_DIARIZATION_FALLBACK:-true}"
+      ENABLE_SPEAKER_MANUAL_MAPPING: "${ENABLE_SPEAKER_MANUAL_MAPPING:-true}"
+      TRANSCRIPT_PREFER_PARTICIPANT_NAMES: "${TRANSCRIPT_PREFER_PARTICIPANT_NAMES:-true}"
       DEFAULT_LLM_MODEL: "${DEFAULT_LLM_MODEL:-openai/gpt-oss-120b}"
       DEFAULT_STT_MODEL: "${DEFAULT_STT_MODEL:-openai/whisper-large-v3}"
       DIARIZATION_BASE_URL: "${DIARIZATION_BASE_URL:-http://diarization:8091}"
@@ -221,3 +252,5 @@ volumes:
   minio_data:
   livekit_config:
   keycloak_data:
+    name: alemlive_keycloak_data
+    external: true

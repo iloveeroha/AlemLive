@@ -83,6 +83,25 @@ func (s *Server) normalizeLoadedReport(detail *reportDetailResponse) bool {
 		detail.Transcript = detail.TranscriptLines
 		changed = true
 	}
+	if len(detail.Segments) == 0 {
+		lines := firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)
+		if len(lines) > 0 {
+			detail.Segments = reportTranscriptToSegments(lines, firstNonEmpty(detail.SpeakerSource, speakerSourceSTT), detail.Participants)
+			changed = true
+		}
+	}
+	if detail.RecordingMode == "" {
+		if strings.EqualFold(detail.Report.Source, "LiveKit") {
+			detail.RecordingMode = "room_composite"
+		}
+		if detail.RecordingMode != "" {
+			changed = true
+		}
+	}
+	if detail.SpeakerSource == "" && len(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)) > 0 {
+		detail.SpeakerSource = firstNonEmpty(defaultReportTranscriptSource(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)), speakerSourceSTT)
+		changed = true
+	}
 	if detail.RecordingFile != "" && detail.RecordingURL == "" && detail.Report.ID != "" {
 		detail.RecordingURL = "/api/reports/" + detail.Report.ID + "/recording/stream"
 		changed = true
@@ -199,26 +218,20 @@ func (s *Server) repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
 		return false
 	}
 
-	needsSpeakerRepair := (hasOnlyGenericReportSpeakers(detail.TranscriptLines) && hasOnlyGenericReportSpeakers(detail.Transcript)) ||
-		transcriptSpeakersNeedParticipantRepair(lines, detail.Report.ParticipantNames)
+	needsSpeakerRepair := transcriptSpeakersHaveUnsafeLabels(lines, detail.Report.ParticipantNames)
 	needsFallbackRepair := isFallbackReportAnalysis(*detail)
 	if !needsSpeakerRepair && !needsFallbackRepair {
 		return false
 	}
 
-	lines = normalizeTranscriptSpeakers(lines)
-	lines = applyParticipantSpeakerNames(lines, detail.Report.ParticipantNames)
+	lines = sanitizeTranscriptSpeakerLabels(normalizeTranscriptSpeakers(lines), detail.Report.ParticipantNames)
 	transcriptText := transcriptTextFromLines(lines)
 
 	if needsFallbackRepair {
 		detail.Report.AnalysisStatus = "failed"
 		analysis := fallbackAnalysisFromTranscript(firstNonEmpty(detail.RoomName, detail.Report.Title, detail.Report.ID), transcriptText, lines, detail.Report.OccurredAt)
 		updated := s.reportDetailFromAnalysis(detail.Report, analysis)
-		updated.RecordingURL = detail.RecordingURL
-		updated.RecordingSourceURL = detail.RecordingSourceURL
-		updated.RecordingFile = detail.RecordingFile
-		updated.RecordingType = detail.RecordingType
-		updated.RecordingMirrorCorrection = detail.RecordingMirrorCorrection
+		copyReportArtifacts(&updated, *detail)
 		updated.RoomName = firstNonEmpty(updated.RoomName, detail.RoomName)
 		*detail = updated
 		return true
@@ -227,9 +240,7 @@ func (s *Server) repairLoadedReportAnalysis(detail *reportDetailResponse) bool {
 	repairedTranscript := reportLinesFromTranscript(lines)
 	detail.TranscriptLines = repairedTranscript
 	detail.Transcript = repairedTranscript
-	if len(detail.SpeakerStats) == 0 || hasOnlyGenericSpeakerStats(reportSpeakerStatsToMetrics(detail.SpeakerStats)) {
-		detail.SpeakerStats = speakerStatsFromMetrics(speakerTalkTime(lines))
-	}
+	detail.SpeakerStats = speakerStatsFromMetrics(speakerTalkTime(lines))
 	return true
 }
 
@@ -245,7 +256,21 @@ func firstNonEmptyTranscript(values ...[]reportTranscript) []reportTranscript {
 func reportTranscriptToLines(items []reportTranscript) []transcriptLine {
 	lines := make([]transcriptLine, 0, len(items))
 	for _, item := range items {
-		lines = append(lines, transcriptLine{Time: item.Time, Speaker: item.Speaker, Text: item.Text})
+		lines = append(lines, transcriptLine{
+			ID:              item.ID,
+			Time:            item.Time,
+			Speaker:         item.Speaker,
+			SpeakerID:       item.SpeakerID,
+			SpeakerName:     item.SpeakerName,
+			ParticipantID:   item.ParticipantID,
+			LiveKitIdentity: item.LiveKitIdentity,
+			TrackID:         item.TrackID,
+			Source:          item.Source,
+			Start:           item.Start,
+			End:             item.End,
+			Text:            item.Text,
+			Sentiment:       item.Sentiment,
+		})
 	}
 	return lines
 }
@@ -254,10 +279,19 @@ func reportLinesFromTranscript(lines []transcriptLine) []reportTranscript {
 	items := make([]reportTranscript, 0, len(lines))
 	for i, line := range lines {
 		items = append(items, reportTranscript{
-			ID:      fmt.Sprintf("t%d", i+1),
-			Time:    line.Time,
-			Speaker: line.Speaker,
-			Text:    line.Text,
+			ID:              fmt.Sprintf("t%d", i+1),
+			Time:            line.Time,
+			Speaker:         line.Speaker,
+			SpeakerID:       line.SpeakerID,
+			SpeakerName:     line.SpeakerName,
+			ParticipantID:   line.ParticipantID,
+			LiveKitIdentity: line.LiveKitIdentity,
+			TrackID:         line.TrackID,
+			Source:          line.Source,
+			Start:           line.Start,
+			End:             line.End,
+			Text:            line.Text,
+			Sentiment:       line.Sentiment,
 		})
 	}
 	return items
@@ -329,6 +363,20 @@ func reportSpeakerStatsToMetrics(stats []speakerStat) []metricValue {
 		values = append(values, metricValue{Label: stat.Name, Value: stat.TalkTime, Unit: "%"})
 	}
 	return values
+}
+
+func reportSpeakerStatsNeedParticipantRepair(stats []speakerStat, participants string) bool {
+	names := participantNamesFromText(participants)
+	if len(stats) == 0 || len(names) == 0 {
+		return false
+	}
+	for _, stat := range stats {
+		name := normalizeSpeakerLabel(stat.Name)
+		if isGenericSpeakerName(name) || matchKnownParticipantName(name, names) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 func speakerStatsFromMetrics(metrics []metricValue) []speakerStat {

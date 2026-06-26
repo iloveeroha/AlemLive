@@ -167,7 +167,7 @@ func (s *Server) readRecordingUploadInput(w http.ResponseWriter, r *http.Request
 		FileName:         header.Filename,
 		ContentType:      header.Header.Get("Content-Type"),
 		Data:             data,
-		Language:         strings.TrimSpace(firstNonEmpty(r.FormValue("language"), "ru")),
+		Language:         strings.TrimSpace(r.FormValue("language")),
 		Title:            strings.TrimSpace(r.FormValue("title")),
 		Source:           strings.TrimSpace(r.FormValue("source")),
 		Owner:            strings.TrimSpace(r.FormValue("owner")),
@@ -180,7 +180,7 @@ func (s *Server) readRecordingUploadInput(w http.ResponseWriter, r *http.Request
 func (s *Server) transcribeRecording(ctx context.Context, input recordingUploadInput) (llm.Transcription, error) {
 	return s.stt.Transcribe(ctx, input.FileName, input.ContentType, input.Data, llm.TranscriptionOptions{
 		Model:          s.cfg.STTModel,
-		Language:       firstNonEmpty(input.Language, "ru"),
+		Language:       strings.TrimSpace(input.Language),
 		ResponseFormat: "verbose_json",
 	})
 }
@@ -243,7 +243,7 @@ Schema:
 For each chapter, text is a short paragraph describing what was discussed, and points is 2-4 short bullet points with concrete topics or decisions from that chapter.
 For each actionItem, time is the transcript timestamp (mm:ss) closest to where that task was mentioned.
 For keyQuestions, find 2-5 notable questions actually asked during the meeting, with the timestamp where each was asked and a short answer grounded in what was actually said in the transcript (or the best inferred answer if the transcript does not state it outright). Omit keyQuestions entirely if no real questions were asked.
-Use Russian for user-facing text. Preserve roomName. Do not return the full transcript; backend already has it.`
+Use Russian for user-facing report text such as summary, action items, chapters and highlights. Preserve the transcript language exactly as it was spoken; do not translate transcript lines. Preserve roomName. Do not return the full transcript; backend already has it.`
 
 	contextText := transcriptAnalysisContext(roomName, participants, transcriptText, lines)
 	answer, err := s.ai.Chat(ctx, []llm.Message{
@@ -267,11 +267,13 @@ Use Russian for user-facing text. Preserve roomName. Do not return the full tran
 	if analysis.GeneratedAt == "" {
 		analysis.GeneratedAt = s.clock().UTC().Format(time.RFC3339)
 	}
-	if len(analysis.Transcript) == 0 {
-		analysis.Transcript = lines
+	// The transcript is produced by STT/diarization. Do not trust the LLM to
+	// rewrite it: models may translate speech or turn transcript words into
+	// fake speaker names.
+	analysis.Transcript = sanitizeTranscriptSpeakerLabels(normalizeTranscriptSpeakers(lines), participants)
+	if strings.EqualFold(s.cfg.RecordingMode, "participant_tracks") && s.cfg.TranscriptPreferNames {
+		analysis.Transcript = applyParticipantSpeakerNames(analysis.Transcript, participants)
 	}
-	analysis.Transcript = normalizeTranscriptSpeakers(analysis.Transcript)
-	analysis.Transcript = applyParticipantSpeakerNames(analysis.Transcript, participants)
 	analysis.Transcript = annotateTranscriptSentiment(analysis.Transcript)
 	if len(analysis.Keywords) == 0 {
 		analysis.Keywords = extractKeywords(transcriptText, 8)
@@ -308,7 +310,7 @@ func hasOnlyGenericSpeakerStats(values []metricValue) bool {
 		return true
 	}
 	for _, value := range values {
-		if strings.TrimSpace(value.Label) != "" && !strings.EqualFold(strings.TrimSpace(value.Label), "Speaker") {
+		if strings.TrimSpace(value.Label) != "" && !isGenericSpeakerName(value.Label) {
 			return false
 		}
 	}
@@ -347,8 +349,10 @@ func transcriptLinesFromTranscription(transcription llm.Transcription) []transcr
 			continue
 		}
 		lines = append(lines, transcriptLine{
+			ID:      fmt.Sprintf("seg-%d", i+1),
 			Time:    formatTranscriptTime(segment.Start),
 			Speaker: normalizeSpeakerLabel(segment.Speaker),
+			Source:  speakerSourceSTT,
 			Text:    text,
 			Start:   segment.Start,
 			End:     segment.End,
@@ -366,8 +370,10 @@ func transcriptLinesFromText(text string) []transcriptLine {
 	start := 0.0
 	for i, part := range parts {
 		lines = append(lines, transcriptLine{
+			ID:      fmt.Sprintf("seg-%d", i+1),
 			Time:    formatTranscriptTime(float64(i * 30)),
 			Speaker: "Speaker",
+			Source:  speakerSourceSTT,
 			Text:    part,
 			Start:   start,
 			End:     start + 30,
@@ -450,7 +456,7 @@ func fallbackAnalysisFromTranscript(roomName, transcriptText string, lines []tra
 	if len(lines) == 0 {
 		lines = transcriptLinesFromText(transcriptText)
 	}
-	lines = normalizeTranscriptSpeakers(lines)
+	lines = sanitizeTranscriptSpeakerLabels(normalizeTranscriptSpeakers(lines), "")
 	lines = annotateTranscriptSentiment(lines)
 	wordCount := len(strings.Fields(transcriptText))
 	summary := fallbackSummarySections(transcriptText)

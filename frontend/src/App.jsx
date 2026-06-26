@@ -836,8 +836,10 @@ function roomRecordingLabel(state) {
   switch (state) {
     case 'recording':
       return 'Запись идет'
-    case 'processing':
+    case 'stopping':
       return 'Останавливается'
+    case 'processing':
+      return 'Обрабатывается'
     case 'ready':
       return 'Запись готова'
     case 'error':
@@ -845,6 +847,62 @@ function roomRecordingLabel(state) {
     default:
       return 'Запись'
   }
+}
+
+function pipelineStatusLabel(status) {
+  switch ((status || '').toLowerCase()) {
+    case 'recording':
+    case 'running':
+      return 'идёт'
+    case 'verifying':
+      return 'проверяется'
+    case 'stopping':
+      return 'останавливается'
+    case 'processing':
+    case 'pending':
+      return 'ожидает'
+    case 'completed':
+    case 'ready':
+      return 'готово'
+    case 'not_configured':
+      return 'не настроено'
+    case 'not_started':
+      return 'не запускалось'
+    case 'failed':
+    case 'error':
+      return 'ошибка'
+    default:
+      return status || 'неизвестно'
+  }
+}
+
+function pipelineStageLabel(stage) {
+  switch ((stage || '').toLowerCase()) {
+    case 'recording':
+      return 'Запись'
+    case 'transcription':
+      return 'Транскрипция'
+    case 'diarization':
+      return 'Спикеры'
+    case 'analysis':
+      return 'AI-анализ'
+    default:
+      return stage || 'Этап'
+  }
+}
+
+function pipelineStatusTone(status) {
+  const normalized = (status || '').toLowerCase()
+  if (['completed', 'ready'].includes(normalized)) {
+    return 'ok'
+  }
+  if (['failed', 'error'].includes(normalized)) {
+    return 'error'
+  }
+  if (['recording', 'running', 'processing', 'pending', 'verifying', 'stopping'].includes(normalized)) {
+    return 'active'
+  }
+  return 'idle'
 }
 
 async function fetchCopilotSessions(reportId) {
@@ -1012,6 +1070,35 @@ async function apiRequest(path, options = {}) {
   }
 
   return payload
+}
+
+function webSocketURL(path) {
+  if (typeof window === 'undefined') {
+    return ''
+  }
+  const url = new URL(path, window.location.origin)
+  url.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const token = getCurrentAccessToken()
+  if (token) {
+    url.searchParams.set('token', token)
+  }
+  return url.toString()
+}
+
+function mergeReportRow(currentReports, report) {
+  if (!report?.id) {
+    return currentReports
+  }
+
+  let found = false
+  const nextReports = currentReports.map((item) => {
+    if (item.id !== report.id) {
+      return item
+    }
+    found = true
+    return { ...item, ...report }
+  })
+  return found ? nextReports : [report, ...currentReports]
 }
 
 function saveDownload(blob, filename) {
@@ -1186,26 +1273,32 @@ function getHashRoute(hash) {
     return { view: 'reportDetail', reportId }
   }
 
-  if (normalizedHash === '#meeting') {
-    return { view: 'meeting', reportId: '' }
+  const [, meetingCode] = normalizedHash.match(/^#meeting\/(.+)$/) || []
+  if (meetingCode) {
+    return { view: 'meeting', reportId: '', meetingCode: normalizeRoomName(meetingCode) }
   }
 
-  return { view: 'reports', reportId: '' }
+  if (normalizedHash === '#meeting') {
+    return { view: 'meeting', reportId: '', meetingCode: '' }
+  }
+
+  return { view: 'reports', reportId: '', meetingCode: '' }
 }
 
 function getInitialRoomName() {
   if (typeof window === 'undefined') {
-    return normalizeRoomName(import.meta.env.VITE_LIVEKIT_ROOM ?? 'alem-meeting')
+    return normalizeRoomName(import.meta.env.VITE_LIVEKIT_ROOM ?? '')
   }
 
   const roomFromURL = new URLSearchParams(window.location.search).get('room')
-  return normalizeRoomName(roomFromURL || import.meta.env.VITE_LIVEKIT_ROOM || 'alem-meeting')
+  const route = getHashRoute(window.location.hash)
+  return normalizeRoomName(route.meetingCode || roomFromURL || import.meta.env.VITE_LIVEKIT_ROOM || '')
 }
 
 function getMeetingShareURL(roomName) {
   const normalizedRoomName = normalizeRoomName(roomName)
   if (typeof window === 'undefined') {
-    return `/?room=${encodeURIComponent(normalizedRoomName)}#meeting`
+    return `/#meeting/${encodeURIComponent(normalizedRoomName)}`
   }
 
   const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname)
@@ -1213,10 +1306,15 @@ function getMeetingShareURL(roomName) {
   const protocol = needsHTTPS ? 'https:' : window.location.protocol
   const port = needsHTTPS && window.location.port === '5173' ? '5174' : window.location.port
   const host = port ? `${window.location.hostname}:${port}` : window.location.hostname
-  return `${protocol}//${host}/?room=${encodeURIComponent(normalizedRoomName)}#meeting`
+  return `${protocol}//${host}/#meeting/${encodeURIComponent(normalizedRoomName)}`
 }
 
 function normalizeRoomName(value) {
+  const meetingCode = meetingCodeFromInput(value)
+  if (meetingCode) {
+    return meetingCode
+  }
+
   const normalized = String(value || '')
     .normalize('NFKC')
     .trim()
@@ -1224,7 +1322,66 @@ function normalizeRoomName(value) {
     .replace(/[^\p{L}\p{N}]+/gu, '-')
     .replace(/^-+|-+$/g, '')
 
-  return normalized || 'alem-meeting'
+  return normalized
+}
+
+function meetingCodeFromInput(value) {
+  const raw = String(value || '').trim().toLowerCase()
+  if (!raw) {
+    return ''
+  }
+
+  const candidates = [raw]
+  try {
+    const parsed = new URL(raw)
+    const room = parsed.searchParams.get('room')
+    if (room) {
+      candidates.push(room)
+    }
+    if (parsed.hash) {
+      candidates.push(parsed.hash.replace(/^#/, ''))
+      candidates.push(parsed.hash.replace(/^#meeting\/?/, ''))
+    }
+    const pathPart = parsed.pathname.split('/').filter(Boolean).pop()
+    if (pathPart) {
+      candidates.push(pathPart)
+    }
+  } catch {
+    // Plain meeting code, not a URL.
+  }
+
+  const hashMatch = raw.match(/#meeting\/([^?#]+)/)
+  if (hashMatch?.[1]) {
+    candidates.push(hashMatch[1])
+  }
+
+  for (const candidate of candidates) {
+    const candidateText = String(candidate || '').toLowerCase()
+    const parts = candidateText.trim().split(/[-\s]+/)
+    if (parts.length !== 3 || parts[0].length !== 3 || parts[1].length !== 4 || parts[2].length !== 3) {
+      continue
+    }
+    const compact = parts.join('')
+    if (/^[a-z]{10}$/.test(compact)) {
+      return `${compact.slice(0, 3)}-${compact.slice(3, 7)}-${compact.slice(7)}`
+    }
+  }
+
+  return ''
+}
+
+function generateMeetingCode() {
+  const alphabet = 'abcdefghijklmnopqrstuvwxyz'
+  const bytes = new Uint8Array(10)
+  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes)
+  } else {
+    for (let index = 0; index < bytes.length; index += 1) {
+      bytes[index] = Math.floor(Math.random() * 256)
+    }
+  }
+  const compact = Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join('')
+  return `${compact.slice(0, 3)}-${compact.slice(3, 7)}-${compact.slice(7)}`
 }
 
 function getParticipantRole(participant) {
@@ -1343,10 +1500,10 @@ function CorrectMeetingVideoMirror() {
 
     const apply = () => {
       document.querySelectorAll('.livekit-stage video, .livekit-stage .lk-participant-media-video').forEach((element) => {
-        const isLocalCamera = element.dataset.lkLocalParticipant === 'true' && element.dataset.lkSource === 'camera'
-        element.style.setProperty('transform', isLocalCamera ? 'scaleX(-1)' : 'none', 'important')
+        const isCameraTrack = element.dataset.lkSource === 'camera'
+        element.style.setProperty('transform', isCameraTrack ? 'scaleX(-1)' : 'none', 'important')
         element.style.setProperty('scale', '1', 'important')
-        element.dataset.alemMirrorCorrected = isLocalCamera ? 'true' : 'false'
+        element.dataset.alemMirrorCorrected = isCameraTrack ? 'true' : 'false'
       })
     }
 
@@ -1546,6 +1703,7 @@ function App() {
   const reportUploadInputRef = useRef(null)
   const meetingActiveRef = useRef(false)
   const authSessionRef = useRef(null)
+  const selectedReportIdRef = useRef(selectedReportId)
 
   const sessionClaims = useMemo(() => decodeJWTClaims(authSession?.accessToken || ''), [authSession?.accessToken])
   const currentUserName = (
@@ -1557,7 +1715,7 @@ function App() {
     form.userName ||
     'Guest'
   ).trim()
-  const canStart = currentUserName && form.roomName.trim()
+  const canStart = currentUserName && (entryMode === 'create' || form.roomName.trim())
   const isConnected = Boolean(meeting)
   const isAuthEnabled = Boolean(authConfig.enabled)
   const isAuthenticated = !isAuthEnabled || Boolean(authSession?.accessToken)
@@ -1735,6 +1893,9 @@ function App() {
   const hasProcessingReports = reports.some((report) => ['processing', 'recording'].includes(report.processingState || report.status))
   const currentRoomRecordingState = roomRecordingStatus?.state || roomRecordingStatus?.status || 'idle'
   const isRoomRecording = currentRoomRecordingState === 'recording'
+  const isRoomRecordingStopping = currentRoomRecordingState === 'stopping' || currentRoomRecordingState === 'processing'
+  const isRoomRecordingActive = isRoomRecording || isRoomRecordingStopping
+  const roomRecordingButtonText = isRoomRecordingStopping ? 'Остановка' : isRoomRecording ? 'Остановить' : 'Запись'
   const selectedReportMirrorCorrection = reportMirrorOverrides[selectedReportId] ?? Boolean(selectedReportDetail?.recordingMirrorCorrection)
   const selectedReportRecordingMessage = (() => {
     const state = selectedReport?.processingState || selectedReport?.status || ''
@@ -1758,14 +1919,15 @@ function App() {
       setSelectedReportId(route.reportId)
     }
 
-    const roomFromURL = new URLSearchParams(window.location.search).get('room')
+    const roomFromURL = route.meetingCode || new URLSearchParams(window.location.search).get('room')
     if (roomFromURL) {
       setForm((current) => ({ ...current, roomName: normalizeRoomName(roomFromURL) }))
+      setEntryMode('join')
     }
   }
 
   const meetingMeta = useMemo(() => {
-    const room = meeting?.roomName || form.roomName || 'alem-meeting'
+    const room = meeting?.roomName || form.roomName || ''
     const name = meeting?.userName || currentUserName
 
     return {
@@ -1775,10 +1937,119 @@ function App() {
     }
   }, [currentUserName, form.roomName, meeting, profile])
 
+  function refreshReportDetail(reportId) {
+    if (!reportId) {
+      return Promise.resolve()
+    }
+    return apiRequest(`/api/reports/${reportId}`)
+      .then((payload) => {
+        setReportDetails((current) => ({ ...current, [reportId]: payload }))
+        return payload
+      })
+      .catch(() => null)
+  }
+
+  function applyReportEventPayload(payload = {}) {
+    const report = payload.report
+    const reportId = payload.reportId || report?.id
+
+    if (report?.id) {
+      setReports((current) => mergeReportRow(current, report))
+    }
+
+    if (reportId && selectedReportIdRef.current === reportId) {
+      refreshReportDetail(reportId)
+    }
+
+    const state = report?.processingState || payload.processingState || report?.status || payload.status
+    if (reportId && state === 'ready') {
+      setWorkspaceNotice('Отчёт готов')
+    }
+  }
+
+  function handleRealtimeEvent(event) {
+    if (!event?.type) {
+      return
+    }
+
+    const payload = event.payload || {}
+    if (event.type === 'report_changed' || event.type === 'report_status_changed') {
+      applyReportEventPayload(payload)
+      return
+    }
+
+    if (event.type === 'report_deleted') {
+      const reportId = payload.reportId
+      if (!reportId) {
+        return
+      }
+      setReports((current) => current.filter((report) => report.id !== reportId))
+      setReportDetails((current) => {
+        const next = { ...current }
+        delete next[reportId]
+        return next
+      })
+      if (selectedReportIdRef.current === reportId) {
+        setSelectedReportId('')
+      }
+    }
+  }
+
   useEffect(() => {
     authSessionRef.current = authSession
     setCurrentAccessToken(authSession?.accessToken || '')
   }, [authSession])
+
+  useEffect(() => {
+    selectedReportIdRef.current = selectedReportId
+  }, [selectedReportId])
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated) {
+      return undefined
+    }
+
+    let isMounted = true
+    let socket = null
+    let reconnectTimer = 0
+
+    const connect = async () => {
+      await refreshAuthSession(false).catch(() => null)
+      if (!isMounted) {
+        return
+      }
+
+      const url = webSocketURL('/api/reports/events')
+      if (!url) {
+        return
+      }
+
+      socket = new WebSocket(url)
+      socket.onmessage = (message) => {
+        try {
+          handleRealtimeEvent(JSON.parse(message.data))
+        } catch {
+          // Ignore malformed realtime messages.
+        }
+      }
+      socket.onerror = () => {
+        socket?.close()
+      }
+      socket.onclose = () => {
+        if (isMounted) {
+          reconnectTimer = window.setTimeout(connect, 3000)
+        }
+      }
+    }
+
+    connect()
+
+    return () => {
+      isMounted = false
+      window.clearTimeout(reconnectTimer)
+      socket?.close()
+    }
+  }, [authReady, isAuthenticated])
 
   useEffect(() => {
     meetingActiveRef.current = activeView === 'meeting' && Boolean(meeting)
@@ -2104,24 +2375,75 @@ function App() {
           })
           .catch(() => {})
       }
-    }, 5000)
+    }, 30000)
 
     return () => window.clearInterval(timer)
   }, [authReady, hasProcessingReports, isAuthenticated, selectedReportId])
 
   useEffect(() => {
-    if (!isConnected || !meetingMeta.room) {
+    if (!authReady || !isAuthenticated || !isConnected || !meetingMeta.room) {
       setRoomRecordingStatus({ state: 'idle', configured: false })
       return undefined
     }
 
-    refreshRoomRecordingStatus(meetingMeta.room)
-    const timer = window.setInterval(() => {
-      refreshRoomRecordingStatus(meetingMeta.room)
-    }, 5000)
+    const roomName = meetingMeta.room
+    let isMounted = true
+    let socket = null
+    let reconnectTimer = 0
 
-    return () => window.clearInterval(timer)
-  }, [isConnected, meetingMeta.room])
+    const connect = async () => {
+      await refreshAuthSession(false).catch(() => null)
+      if (!isMounted) {
+        return
+      }
+
+      const url = webSocketURL(`/api/rooms/${encodeURIComponent(roomName)}/events`)
+      if (!url) {
+        return
+      }
+
+      socket = new WebSocket(url)
+      socket.onmessage = (message) => {
+        try {
+          const event = JSON.parse(message.data)
+          const payload = event.payload || {}
+          if (event.type === 'recording_status_changed' || event.type === 'recording_started' || event.type === 'recording_stopped') {
+            setRoomRecordingStatus(payload)
+            if (payload.reportId && !payload.report) {
+              setReportsRefreshKey((current) => current + 1)
+              if (selectedReportIdRef.current === payload.reportId) {
+                refreshReportDetail(payload.reportId)
+              }
+            }
+          }
+          handleRealtimeEvent(event)
+        } catch {
+          // Ignore malformed realtime messages.
+        }
+      }
+      socket.onerror = () => {
+        socket?.close()
+      }
+      socket.onclose = () => {
+        if (isMounted) {
+          reconnectTimer = window.setTimeout(connect, 3000)
+        }
+      }
+    }
+
+    refreshRoomRecordingStatus(roomName)
+    connect()
+    const timer = window.setInterval(() => {
+      refreshRoomRecordingStatus(roomName)
+    }, 30000)
+
+    return () => {
+      isMounted = false
+      window.clearInterval(timer)
+      window.clearTimeout(reconnectTimer)
+      socket?.close()
+    }
+  }, [authReady, isAuthenticated, isConnected, meetingMeta.room])
 
   function updateField(event) {
     const { name, value } = event.target
@@ -2303,9 +2625,19 @@ function App() {
 
     setIsRecordingToggling(true)
     setMeetingNotice('')
+    const action = isRoomRecording ? 'stop' : 'start'
 
     try {
-      const action = isRoomRecording ? 'stop' : 'start'
+      if (action === 'stop') {
+        setRoomRecordingStatus((current) => ({
+          ...current,
+          active: true,
+          state: 'stopping',
+          status: 'stopping',
+          roomName: meetingMeta.room,
+        }))
+        setWorkspaceNotice('Останавливаем запись...')
+      }
       const payload = await apiRequest(`/api/rooms/${encodeURIComponent(meetingMeta.room)}/recording/${action}`, {
         method: 'POST',
       })
@@ -2316,6 +2648,7 @@ function App() {
       }
     } catch (error) {
       setMeetingNotice(error.message || 'Не удалось изменить статус записи')
+      await refreshRoomRecordingStatus(meetingMeta.room)
     } finally {
       setIsRecordingToggling(false)
     }
@@ -2334,7 +2667,7 @@ function App() {
     return payload
   }
 
-  async function startMeeting(mode = entryMode) {
+  async function startMeeting(mode = entryMode, roomNameOverride = '') {
     if (isStarting) {
       return
     }
@@ -2342,11 +2675,12 @@ function App() {
     manualDisconnectRef.current = false
     setMeetingNotice('')
 
-    const nextRoomName = normalizeRoomName(form.roomName)
+    const requestedRoomName = roomNameOverride || (mode === 'create' && !form.roomName.trim() ? generateMeetingCode() : form.roomName)
+    const nextRoomName = normalizeRoomName(requestedRoomName)
     const nextUserName = meetingMeta.name
 
     if (!nextUserName || !nextRoomName) {
-      setJoinError('Введите имя и название комнаты')
+      setJoinError(mode === 'join' ? 'Введите код или ссылку встречи' : 'Не удалось создать код встречи')
       return
     }
 
@@ -2359,13 +2693,13 @@ function App() {
 
       setForm((current) => ({
         ...current,
-        roomName: payload.roomName || nextRoomName,
+        roomName: payload.meetingCode || payload.roomName || nextRoomName,
         userName: payload.userName || nextUserName,
       }))
       setMeeting({
         serverUrl: payload.serverUrl,
         token: payload.token,
-        roomName: payload.roomName || nextRoomName,
+        roomName: payload.meetingCode || payload.roomName || nextRoomName,
         userName: payload.userName || nextUserName,
         entryMode: mode,
         isHost,
@@ -2378,7 +2712,7 @@ function App() {
       }
       setIsConferenceChatOpen(true)
       recordMeetingEvent(mode === 'create' ? 'created' : 'joined', {
-        roomName: payload.roomName || nextRoomName,
+        roomName: payload.meetingCode || payload.roomName || nextRoomName,
         userName: payload.userName || nextUserName,
       })
     } catch (error) {
@@ -2393,22 +2727,13 @@ function App() {
     startMeeting(entryMode)
   }
 
-  async function copyRoomName() {
-    if (!navigator.clipboard) {
-      return
-    }
-
-    await navigator.clipboard.writeText(meetingMeta.room)
-    setWorkspaceNotice('Название комнаты скопировано')
-  }
-
   async function copyRoomLink() {
-    if (!navigator.clipboard) {
+    if (!navigator.clipboard || !meetingMeta.room) {
       return
     }
 
     await navigator.clipboard.writeText(getMeetingShareURL(meetingMeta.room))
-    setWorkspaceNotice('Ссылка на комнату скопирована')
+    setWorkspaceNotice('Ссылка встречи скопирована')
   }
 
   async function openRoomSettings() {
@@ -3181,16 +3506,13 @@ function App() {
             {isConnected ? 'LIVE' : 'READY'}
           </span>
           <div>
-            <h2>{meetingMeta.room}</h2>
-            <p>{isConnected ? 'LiveKit conference запущена' : 'Ожидает подключения'}</p>
+            <h2>{meetingMeta.room || 'Новая встреча'}</h2>
+            <p>{isConnected ? 'LiveKit conference запущена' : 'Создайте код или войдите по ссылке'}</p>
           </div>
         </div>
 
         <div className="meeting-actions">
-          <button className="icon-button" type="button" onClick={copyRoomName} aria-label="Copy room name">
-            <Copy size={18} />
-          </button>
-          <button className="icon-button" type="button" onClick={copyRoomLink} aria-label="Room link">
+          <button className="icon-button" type="button" onClick={copyRoomLink} aria-label="Скопировать ссылку встречи" disabled={!meetingMeta.room}>
             <Link size={18} />
           </button>
           <button className={isRoomSettingsOpen ? 'icon-button active' : 'icon-button'} type="button" onClick={openRoomSettings} aria-label="Meeting settings" aria-pressed={isRoomSettingsOpen}>
@@ -3198,16 +3520,16 @@ function App() {
           </button>
           {isConnected && (
             <button
-              className={isRoomRecording ? 'recording-control active' : 'recording-control'}
+              className={isRoomRecordingActive ? 'recording-control active' : 'recording-control'}
               type="button"
               onClick={toggleRoomRecording}
-              disabled={isRecordingToggling || currentRoomRecordingState === 'processing'}
+              disabled={isRecordingToggling || isRoomRecordingStopping}
               aria-label={isRoomRecording ? 'Остановить запись конференции' : 'Начать запись конференции'}
-              aria-pressed={isRoomRecording}
+              aria-pressed={isRoomRecordingActive}
               title={roomRecordingLabel(currentRoomRecordingState)}
             >
-              {isRecordingToggling ? <Loader2 className="spin-icon" size={18} /> : isRoomRecording ? <Square size={16} fill="currentColor" /> : <Radio size={18} />}
-              <span>{isRoomRecording ? 'Остановить' : 'Запись'}</span>
+              {isRecordingToggling || isRoomRecordingStopping ? <Loader2 className="spin-icon" size={18} /> : isRoomRecording ? <Square size={16} fill="currentColor" /> : <Radio size={18} />}
+              <span>{roomRecordingButtonText}</span>
             </button>
           )}
           {isConnected && (
@@ -3231,7 +3553,7 @@ function App() {
           <div>
             <span className="date-label">AlemLive</span>
             <h1 id="meeting-title">Комната для созвона</h1>
-            <p>Создайте новую комнату одним нажатием или подключитесь по названию уже существующей комнаты.</p>
+            <p>Создайте новую встречу с коротким кодом или подключитесь по коду/ссылке, как в Google Meet.</p>
           </div>
 
           <div className="hero-actions">
@@ -3239,8 +3561,10 @@ function App() {
               className="primary-action"
               type="button"
               onClick={() => {
+                const newCode = generateMeetingCode()
                 selectEntryMode('create')
-                startMeeting('create')
+                setForm((current) => ({ ...current, roomName: newCode }))
+                startMeeting('create', newCode)
               }}
               disabled={isStarting}
             >
@@ -3263,7 +3587,7 @@ function App() {
                 </span>
                 <div>
                   <h2>LiveKit meeting</h2>
-                  <p>{isConnected ? 'Комната активна' : 'URL и token будут получены автоматически'}</p>
+                  <p>{isConnected ? 'Комната активна' : 'Ссылка и token будут получены автоматически'}</p>
                 </div>
               </div>
 
@@ -3288,12 +3612,12 @@ function App() {
                 </div>
 
                 <label>
-                  <span>Название комнаты</span>
+                  <span>Код или ссылка встречи</span>
                   <input
                     name="roomName"
                     value={form.roomName}
                     onChange={updateField}
-                    placeholder="alem-meeting"
+                    placeholder={entryMode === 'create' ? 'оставьте пустым для нового кода' : 'abc-defg-hij или ссылка'}
                     autoComplete="off"
                   />
                 </label>
@@ -3312,7 +3636,7 @@ function App() {
                     ? 'Переподключиться'
                     : entryMode === 'create'
                       ? 'Создать и войти'
-                      : 'Войти по названию'}
+                      : 'Войти по коду'}
                 </button>
               </form>
             </section>
@@ -4274,6 +4598,15 @@ function App() {
 
   function renderReportDetail() {
     const reportParticipantNames = formatReportParticipantNames(selectedReport)
+    const reportPipelineStages = [
+      ['recording', selectedReport?.recordingStatus],
+      ['transcription', selectedReport?.transcriptionStatus],
+      ['diarization', selectedReportDetail?.diarizationStatus],
+      ['analysis', selectedReport?.analysisStatus],
+    ].filter(([, status]) => status)
+    const reportPipelineEvents = (selectedReportDetail?.pipelineEvents || []).slice(-4)
+    const reportPipelineError = selectedReportDetail?.lastError || selectedReportDetail?.recordingError || selectedReportDetail?.transcriptionError || selectedReportDetail?.diarizationError || selectedReportDetail?.analysisError
+    const shouldShowPipelineStatus = reportPipelineStages.length > 0 || reportPipelineEvents.length > 0 || reportPipelineError
 
     return (
       <section className="report-detail-page">
@@ -4341,6 +4674,39 @@ function App() {
         </div>
 
         {reportActionMessage && <div className="report-detail-status">{reportActionMessage}</div>}
+        {shouldShowPipelineStatus && (
+          <section className={reportPipelineError ? 'pipeline-status-card has-error' : 'pipeline-status-card'}>
+            <div className="pipeline-status-row">
+              <div className="pipeline-status-head">
+                <Info size={17} />
+                <strong>Пайплайн</strong>
+              </div>
+              {reportPipelineStages.length > 0 && (
+                <div className="pipeline-status-list">
+                  {reportPipelineStages.map(([label, status]) => (
+                    <span className={`pipeline-status-pill ${pipelineStatusTone(status)}`} key={label}>
+                      {pipelineStageLabel(label)}: {pipelineStatusLabel(status)}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {reportPipelineEvents.length > 0 && (
+                <details className="pipeline-events-details">
+                  <summary>Детали</summary>
+                  <div className="pipeline-events">
+                    {reportPipelineEvents.map((event, index) => (
+                      <span key={`${event.stage}-${event.status}-${event.at || index}`}>
+                        {pipelineStageLabel(event.stage)}: {pipelineStatusLabel(event.status)}
+                        {event.message ? ` · ${event.message}` : ''}
+                      </span>
+                    ))}
+                  </div>
+                </details>
+              )}
+            </div>
+            {reportPipelineError && <p className="pipeline-status-error">{reportPipelineError}</p>}
+          </section>
+        )}
 
         <div
           className="report-detail-layout"

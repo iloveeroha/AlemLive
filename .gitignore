@@ -2,7 +2,10 @@
 .env
 backend/.env
 backend/data/
+backend/.gocache/
+backend/backend/.gocache/
 keycloak-data-backup-*/
+.deploy/
 .tmp/
 
 # Frontend

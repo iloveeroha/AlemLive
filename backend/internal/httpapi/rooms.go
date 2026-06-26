@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -47,16 +49,20 @@ type joinRoomRequest struct {
 }
 
 type roomUser struct {
-	ID   string
-	Name string
+	ID    string
+	Name  string
+	Email string
 }
 
 type roomParticipantState struct {
 	ID              string
 	Name            string
+	Email           string
 	MicEnabled      bool
 	CameraEnabled   bool
 	JoinedAt        time.Time
+	LeftAt          time.Time
+	AudioTrackIDs   []string
 	LastChangedAt   time.Time
 	ControlAction   string
 	ControlInFlight bool
@@ -188,6 +194,7 @@ func (s *Server) createRoom(w http.ResponseWriter, r *http.Request) {
 	conference := s.recordConferenceEvent(snapshot.Name, user.Name, "created", s.clock())
 	if conference.ReportID != "" {
 		snapshot = s.setRoomRecordingState(snapshot.ID, snapshot.RecordingState, conference.ReportID)
+		s.syncReportParticipantsFromSnapshot(conference.ReportID, snapshot)
 	}
 	response := s.roomSessionResponse(r, snapshot, user)
 	response["liveKitRoomReady"] = liveKitRoomReady
@@ -232,6 +239,7 @@ func (s *Server) joinRoom(w http.ResponseWriter, r *http.Request) {
 	conference := s.recordConferenceEvent(snapshot.Name, user.Name, "joined", s.clock())
 	if conference.ReportID != "" {
 		snapshot = s.setRoomRecordingState(snapshot.ID, snapshot.RecordingState, conference.ReportID)
+		s.syncReportParticipantsFromSnapshot(conference.ReportID, snapshot)
 	}
 	response := s.roomSessionResponse(r, snapshot, user)
 	response["liveKitRoomReady"] = liveKitRoomReady
@@ -279,6 +287,9 @@ func (s *Server) leaveRoom(w http.ResponseWriter, r *http.Request, roomID string
 	}
 
 	conference := s.recordConferenceEvent(snapshot.Name, user.Name, "left", s.clock())
+	if conference.ReportID != "" {
+		s.syncReportParticipantsFromSnapshot(conference.ReportID, snapshot, leftParticipant)
+	}
 	response := s.roomSessionResponse(r, snapshot, user)
 	response["status"] = "left"
 	response["roomClosed"] = closed
@@ -453,11 +464,13 @@ func (s *Server) joinRoomState(roomName string, user roomUser, owner bool, micEn
 		participant = &roomParticipantState{
 			ID:       user.ID,
 			Name:     user.Name,
+			Email:    user.Email,
 			JoinedAt: now,
 		}
 		room.Participants[user.ID] = participant
 	}
 	participant.Name = firstNonEmpty(user.Name, participant.Name, user.ID)
+	participant.Email = firstNonEmpty(user.Email, participant.Email)
 	participant.setMicEnabled(micEnabled, now)
 	participant.setCameraEnabled(cameraEnabled, now)
 	participant.LastChangedAt = now
@@ -492,6 +505,7 @@ func (s *Server) leaveRoomState(roomID string, participantID string) (roomStateS
 
 	left := room.Participants[participantID]
 	if left != nil {
+		left.LeftAt = now
 		if room.DeviceStatsArchive == nil {
 			room.DeviceStatsArchive = map[string]mediaPercentages{}
 		}
@@ -659,13 +673,129 @@ func (s *Server) setRoomRecordingState(roomID, state, reportID string) roomState
 	return room.snapshot()
 }
 
+func (s *Server) upsertRoomParticipantFromLiveKit(roomName string, user roomUser, event, audioTrackID string, now time.Time) roomStateSnapshot {
+	roomName = firstNonEmpty(strings.TrimSpace(roomName), "alem-meeting")
+	roomID := roomIDFromName(roomName)
+	event = strings.ToLower(strings.TrimSpace(event))
+	audioTrackID = strings.TrimSpace(audioTrackID)
+
+	s.roomsMu.Lock()
+	defer s.roomsMu.Unlock()
+	s.ensureRoomMapsLocked()
+
+	room := s.rooms[roomID]
+	if room == nil {
+		room = &roomState{
+			ID:             roomID,
+			Name:           roomName,
+			Participants:   map[string]*roomParticipantState{},
+			RecordingState: roomRecordingIdle,
+			CreatedAt:      now,
+		}
+		s.rooms[roomID] = room
+	}
+	room.Name = firstNonEmpty(room.Name, roomName)
+	room.UpdatedAt = now
+
+	participantID := firstNonEmpty(user.ID, user.Name, "livekit-participant")
+	participant := room.Participants[participantID]
+	if participant == nil {
+		participant = &roomParticipantState{
+			ID:       participantID,
+			Name:     firstNonEmpty(user.Name, participantID),
+			Email:    user.Email,
+			JoinedAt: now,
+		}
+		room.Participants[participantID] = participant
+	}
+	participant.Name = firstNonEmpty(user.Name, participant.Name, participant.ID)
+	participant.Email = firstNonEmpty(user.Email, participant.Email)
+	participant.LastChangedAt = now
+	if participant.JoinedAt.IsZero() {
+		participant.JoinedAt = now
+	}
+
+	switch event {
+	case "participant_left":
+		participant.LeftAt = now
+	case "track_published":
+		participant.AudioTrackIDs = mergeStringSet(participant.AudioTrackIDs, []string{audioTrackID})
+	case "track_unpublished":
+		participant.AudioTrackIDs = removeStringValue(participant.AudioTrackIDs, audioTrackID)
+	}
+
+	return room.snapshot()
+}
+
+func (s *Server) roomAudioTrackCount(roomName string) int {
+	roomID := roomIDFromName(roomName)
+	s.roomsMu.Lock()
+	defer s.roomsMu.Unlock()
+	room := s.rooms[roomID]
+	if room == nil {
+		return 0
+	}
+	total := 0
+	for _, participant := range room.Participants {
+		total += len(participant.AudioTrackIDs)
+	}
+	return total
+}
+
+func (s *Server) roomAudioTracks(roomName string) []livekit.ParticipantTrack {
+	roomID := roomIDFromName(roomName)
+	s.roomsMu.Lock()
+	defer s.roomsMu.Unlock()
+	room := s.rooms[roomID]
+	if room == nil {
+		return nil
+	}
+	tracks := []livekit.ParticipantTrack{}
+	for _, participant := range room.Participants {
+		if participant == nil {
+			continue
+		}
+		for _, trackID := range participant.AudioTrackIDs {
+			trackID = strings.TrimSpace(trackID)
+			if trackID == "" {
+				continue
+			}
+			tracks = append(tracks, livekit.ParticipantTrack{
+				ParticipantID:       participant.ID,
+				ParticipantIdentity: participant.ID,
+				ParticipantName:     participant.Name,
+				TrackID:             trackID,
+			})
+		}
+	}
+	return tracks
+}
+
+func removeStringValue(values []string, remove string) []string {
+	remove = strings.TrimSpace(remove)
+	if remove == "" {
+		return values
+	}
+	out := values[:0]
+	for _, value := range values {
+		if strings.TrimSpace(value) == remove {
+			continue
+		}
+		out = append(out, value)
+	}
+	return out
+}
+
 func (s *Server) roomSessionResponse(r *http.Request, snapshot roomStateSnapshot, user roomUser) map[string]any {
 	liveKitURL, liveKitToken := s.roomLiveKitCredentials(r, snapshot, user)
+	meetingCode := canonicalRoomName(snapshot.Name)
 	response := map[string]any{
 		"roomId":         snapshot.ID,
 		"id":             snapshot.ID,
 		"roomName":       snapshot.Name,
 		"name":           snapshot.Name,
+		"meetingCode":    meetingCode,
+		"joinPath":       "/#meeting/" + meetingCode,
 		"ownerId":        snapshot.OwnerID,
 		"isOwner":        snapshot.OwnerID != "" && snapshot.OwnerID == user.ID,
 		"liveKitUrl":     liveKitURL,
@@ -688,15 +818,16 @@ func (s *Server) roomLiveKitCredentials(r *http.Request, snapshot roomStateSnaps
 	if snapshot.OwnerID == user.ID {
 		role = "host"
 	}
-	metadata, err := json.Marshal(map[string]string{"role": role})
+	metadata, err := json.Marshal(roomLiveKitMetadata(snapshot.Name, user, role))
 	if err != nil {
 		return "", ""
 	}
 
-	token, _, err := livekit.GenerateToken(
+	token, _, err := livekit.GenerateTokenWithName(
 		s.cfg.LiveKitAPIKey,
 		s.cfg.LiveKitSecret,
 		user.ID,
+		user.Name,
 		snapshot.Name,
 		string(metadata),
 		s.cfg.TokenTTL,
@@ -720,14 +851,26 @@ func (s *Server) ensureLiveKitRoom(ctx context.Context, roomName string) bool {
 func (s *Server) roomUserFromRequest(r *http.Request, explicitID, explicitName string) roomUser {
 	if user, ok := userFromContext(r.Context()); ok {
 		return roomUser{
-			ID:   firstNonEmpty(explicitID, user.ID, user.Username, user.Email),
-			Name: firstNonEmpty(explicitName, user.Name, user.Username, user.Email, user.ID),
+			ID:    firstNonEmpty(user.ID, user.Username, user.Email, explicitID),
+			Name:  firstNonEmpty(user.Name, user.Username, user.Email, user.ID, explicitName),
+			Email: user.Email,
 		}
 	}
 
 	name := firstNonEmpty(explicitName, r.URL.Query().Get("userName"), "Madi")
 	id := firstNonEmpty(explicitID, r.URL.Query().Get("userId"), "local-user")
 	return roomUser{ID: id, Name: name}
+}
+
+func roomLiveKitMetadata(roomName string, user roomUser, role string) map[string]string {
+	return map[string]string{
+		"role":           role,
+		"room_name":      roomName,
+		"user_id":        user.ID,
+		"display_name":   user.Name,
+		"email":          user.Email,
+		"speaker_source": "livekit_identity",
+	}
 }
 
 func (s *Server) ensureRoomMapsLocked() {
@@ -824,6 +967,9 @@ func (participant *roomParticipantState) payload(currentUser, owner bool) map[st
 		"id":              participant.ID,
 		"participantId":   participant.ID,
 		"name":            participant.Name,
+		"displayName":     participant.Name,
+		"email":           participant.Email,
+		"liveKitIdentity": participant.ID,
 		"isCurrentUser":   currentUser,
 		"isOwner":         owner,
 		"isMicEnabled":    participant.MicEnabled,
@@ -831,7 +977,17 @@ func (participant *roomParticipantState) payload(currentUser, owner bool) map[st
 		"micEnabled":      participant.MicEnabled,
 		"cameraEnabled":   participant.CameraEnabled,
 		"controlAction":   participant.ControlAction,
+		"joinedAt":        formatOptionalTime(participant.JoinedAt),
+		"leftAt":          formatOptionalTime(participant.LeftAt),
+		"audioTrackIds":   append([]string(nil), participant.AudioTrackIDs...),
 	}
+}
+
+func formatOptionalTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 func (participant *roomParticipantState) clone() *roomParticipantState {
@@ -882,5 +1038,71 @@ func normalizeParticipantNameKey(name string) string {
 }
 
 func canonicalRoomName(value string) string {
+	if code := meetingCodeFromInput(value); code != "" {
+		return code
+	}
 	return roomIDFromName(value)
+}
+
+func meetingCodeFromInput(value string) string {
+	candidates := meetingCodeCandidates(value)
+	for _, candidate := range candidates {
+		if code := formatMeetingCode(candidate); code != "" {
+			return code
+		}
+	}
+	return ""
+}
+
+func meetingCodeCandidates(value string) []string {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return nil
+	}
+
+	candidates := []string{raw}
+	if parsed, err := url.Parse(raw); err == nil {
+		if room := parsed.Query().Get("room"); room != "" {
+			candidates = append(candidates, room)
+		}
+		if parsed.Fragment != "" {
+			candidates = append(candidates, parsed.Fragment)
+			candidates = append(candidates, strings.TrimPrefix(parsed.Fragment, "meeting/"))
+		}
+		if parsed.Path != "" {
+			parts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
+			if len(parts) > 0 {
+				candidates = append(candidates, parts[len(parts)-1])
+			}
+		}
+	}
+	if after, ok := strings.CutPrefix(raw, "#meeting/"); ok {
+		candidates = append(candidates, after)
+	}
+	if before, after, ok := strings.Cut(raw, "#meeting/"); ok {
+		_ = before
+		candidates = append(candidates, after)
+	}
+	return candidates
+}
+
+func formatMeetingCode(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	parts := strings.FieldsFunc(value, func(r rune) bool {
+		return r == '-' || unicode.IsSpace(r)
+	})
+	if len(parts) != 3 || len(parts[0]) != 3 || len(parts[1]) != 4 || len(parts[2]) != 3 {
+		return ""
+	}
+	var compact strings.Builder
+	for _, part := range parts {
+		for _, r := range part {
+			if r < 'a' || r > 'z' {
+				return ""
+			}
+			compact.WriteRune(r)
+		}
+	}
+	code := compact.String()
+	return fmt.Sprintf("%s-%s-%s", code[:3], code[3:7], code[7:])
 }

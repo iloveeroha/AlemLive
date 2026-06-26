@@ -69,26 +69,102 @@ type quickDateOption struct {
 }
 
 type reportDetailResponse struct {
-	Report                    reportRow          `json:"report"`
-	Summary                   []summarySection   `json:"summary"`
-	ActionItems               []reportActionItem `json:"actionItems"`
-	KeyQuestions              []keyQuestion      `json:"keyQuestions,omitempty"`
-	TranscriptLines           []reportTranscript `json:"transcriptLines"`
-	Transcript                []reportTranscript `json:"transcript"`
-	SpeakerStats              []speakerStat      `json:"speakerStats"`
-	Highlights                []highlight        `json:"highlights"`
-	Chapters                  []chapter          `json:"chapters"`
-	Trend                     []trendPoint       `json:"trend,omitempty"`
-	Interruptions             int                `json:"interruptions"`
-	AIQuestions               []string           `json:"aiQuestions"`
-	RecordingURL              string             `json:"recordingUrl,omitempty"`
-	RecordingSourceURL        string             `json:"recordingSourceUrl,omitempty"`
-	RecordingFile             string             `json:"recordingFile,omitempty"`
-	RecordingType             string             `json:"recordingType,omitempty"`
-	RecordingMirrorCorrection bool               `json:"recordingMirrorCorrection,omitempty"`
-	RoomName                  string             `json:"roomName,omitempty"`
-	PersonalNotes             map[string]string  `json:"personalNotes,omitempty"`
-	Keywords                  []string           `json:"keywords,omitempty"`
+	Report                    reportRow            `json:"report"`
+	Summary                   []summarySection     `json:"summary"`
+	ActionItems               []reportActionItem   `json:"actionItems"`
+	KeyQuestions              []keyQuestion        `json:"keyQuestions,omitempty"`
+	TranscriptLines           []reportTranscript   `json:"transcriptLines"`
+	Transcript                []reportTranscript   `json:"transcript"`
+	Segments                  []transcriptSegment  `json:"segments,omitempty"`
+	Participants              []meetingParticipant `json:"participants,omitempty"`
+	SpeakerMappings           []speakerMapping     `json:"speakerMappings,omitempty"`
+	SpeakerStats              []speakerStat        `json:"speakerStats"`
+	Highlights                []highlight          `json:"highlights"`
+	Chapters                  []chapter            `json:"chapters"`
+	Trend                     []trendPoint         `json:"trend,omitempty"`
+	Interruptions             int                  `json:"interruptions"`
+	AIQuestions               []string             `json:"aiQuestions"`
+	RecordingURL              string               `json:"recordingUrl,omitempty"`
+	RecordingSourceURL        string               `json:"recordingSourceUrl,omitempty"`
+	RecordingFile             string               `json:"recordingFile,omitempty"`
+	RecordingType             string               `json:"recordingType,omitempty"`
+	RecordingMirrorCorrection bool                 `json:"recordingMirrorCorrection,omitempty"`
+	RecordingMode             string               `json:"recordingMode,omitempty"`
+	RecordingFiles            []recordingFile      `json:"recordingFiles,omitempty"`
+	SpeakerSource             string               `json:"speakerSource,omitempty"`
+	Warnings                  []string             `json:"warnings,omitempty"`
+	EgressID                  string               `json:"egressId,omitempty"`
+	RecordingBucket           string               `json:"recordingBucket,omitempty"`
+	RecordingObjectKey        string               `json:"recordingObjectKey,omitempty"`
+	RecordingStartedAt        string               `json:"recordingStartedAt,omitempty"`
+	RecordingCompletedAt      string               `json:"recordingCompletedAt,omitempty"`
+	RecordingError            string               `json:"recordingError,omitempty"`
+	TranscriptionError        string               `json:"transcriptionError,omitempty"`
+	DiarizationStatus         string               `json:"diarizationStatus,omitempty"`
+	DiarizationError          string               `json:"diarizationError,omitempty"`
+	AnalysisError             string               `json:"analysisError,omitempty"`
+	LastError                 string               `json:"lastError,omitempty"`
+	PipelineEvents            []pipelineEvent      `json:"pipelineEvents,omitempty"`
+	RoomName                  string               `json:"roomName,omitempty"`
+	PersonalNotes             map[string]string    `json:"personalNotes,omitempty"`
+	Keywords                  []string             `json:"keywords,omitempty"`
+}
+
+type meetingParticipant struct {
+	ParticipantID   string   `json:"participantId,omitempty"`
+	LiveKitIdentity string   `json:"liveKitIdentity,omitempty"`
+	DisplayName     string   `json:"displayName,omitempty"`
+	Email           string   `json:"email,omitempty"`
+	JoinedAt        string   `json:"joinedAt,omitempty"`
+	LeftAt          string   `json:"leftAt,omitempty"`
+	AudioTrackIDs   []string `json:"audioTrackIds,omitempty"`
+}
+
+type transcriptSegment struct {
+	ID              string   `json:"id"`
+	SpeakerID       string   `json:"speakerId,omitempty"`
+	SpeakerName     string   `json:"speakerName"`
+	ParticipantID   string   `json:"participantId,omitempty"`
+	LiveKitIdentity string   `json:"liveKitIdentity,omitempty"`
+	TrackID         string   `json:"trackId,omitempty"`
+	Source          string   `json:"source"`
+	Start           float64  `json:"start"`
+	End             float64  `json:"end"`
+	Time            string   `json:"time,omitempty"`
+	Text            string   `json:"text"`
+	Sentiment       string   `json:"sentiment,omitempty"`
+	Words           []string `json:"words,omitempty"`
+}
+
+type speakerMapping struct {
+	SpeakerID       string `json:"speakerId"`
+	SpeakerName     string `json:"speakerName"`
+	ParticipantID   string `json:"participantId,omitempty"`
+	LiveKitIdentity string `json:"liveKitIdentity,omitempty"`
+	Source          string `json:"source"`
+	UpdatedAt       string `json:"updatedAt,omitempty"`
+}
+
+type recordingFile struct {
+	RecordingMode       string  `json:"recordingMode"`
+	Bucket              string  `json:"bucket,omitempty"`
+	ObjectKey           string  `json:"objectKey,omitempty"`
+	PublicURL           string  `json:"publicUrl,omitempty"`
+	ParticipantIdentity string  `json:"participantIdentity,omitempty"`
+	TrackID             string  `json:"trackId,omitempty"`
+	MediaType           string  `json:"mediaType,omitempty"`
+	Status              string  `json:"status,omitempty"`
+	Duration            float64 `json:"duration,omitempty"`
+	Size                int64   `json:"size,omitempty"`
+}
+
+type pipelineEvent struct {
+	Stage     string `json:"stage"`
+	Status    string `json:"status"`
+	Message   string `json:"message,omitempty"`
+	At        string `json:"at"`
+	EgressID  string `json:"egressId,omitempty"`
+	ObjectKey string `json:"objectKey,omitempty"`
 }
 
 type reportActionItem struct {
@@ -104,11 +180,19 @@ type reportActionItem struct {
 }
 
 type reportTranscript struct {
-	ID        string `json:"id"`
-	Time      string `json:"time"`
-	Speaker   string `json:"speaker"`
-	Text      string `json:"text"`
-	Sentiment string `json:"sentiment,omitempty"`
+	ID              string  `json:"id"`
+	Time            string  `json:"time"`
+	Speaker         string  `json:"speaker"`
+	SpeakerID       string  `json:"speakerId,omitempty"`
+	SpeakerName     string  `json:"speakerName,omitempty"`
+	ParticipantID   string  `json:"participantId,omitempty"`
+	LiveKitIdentity string  `json:"liveKitIdentity,omitempty"`
+	TrackID         string  `json:"trackId,omitempty"`
+	Source          string  `json:"source,omitempty"`
+	Start           float64 `json:"start,omitempty"`
+	End             float64 `json:"end,omitempty"`
+	Text            string  `json:"text"`
+	Sentiment       string  `json:"sentiment,omitempty"`
 }
 
 type speakerStat struct {
@@ -318,6 +402,9 @@ func (s *Server) reportRecordingUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	detail := processingReportDetail(report, input.RoomName)
+	detail.Participants = meetingParticipantsFromNames(report.ParticipantNames)
+	detail.RecordingMode = "upload"
+	detail.SpeakerSource = speakerSourceDiarization
 	if recordingFile != "" {
 		detail.RecordingFile = recordingFile
 		detail.RecordingType = recordingType
@@ -461,11 +548,9 @@ func (s *Server) processUploadedRecording(reportID string, input recordingUpload
 	report.AnalysisStatus = analysisStatus
 
 	readyDetail := s.reportDetailFromAnalysis(report, analysis)
-	readyDetail.RecordingURL = detail.RecordingURL
-	readyDetail.RecordingSourceURL = detail.RecordingSourceURL
-	readyDetail.RecordingFile = detail.RecordingFile
-	readyDetail.RecordingType = detail.RecordingType
-	readyDetail.RecordingMirrorCorrection = detail.RecordingMirrorCorrection
+	copyReportArtifacts(&readyDetail, detail)
+	readyDetail.RecordingMode = firstNonEmpty(readyDetail.RecordingMode, "upload")
+	readyDetail.SpeakerSource = defaultSpeakerSource(analysis.Transcript)
 	s.storeReport(readyDetail)
 }
 
@@ -514,6 +599,9 @@ func reportProcessingErrorMessage(err error) string {
 }
 
 func (s *Server) reportDetailFromAnalysis(report reportRow, analysis meetingAnalysis) reportDetailResponse {
+	analysis.Transcript = sanitizeTranscriptSpeakerLabels(normalizeTranscriptSpeakers(analysis.Transcript), report.ParticipantNames)
+	analysis.Insights.TalkTime = speakerTalkTime(analysis.Transcript)
+
 	actionItems := make([]reportActionItem, 0, len(analysis.ActionItems))
 	for i, item := range analysis.ActionItems {
 		id := fmt.Sprintf("action-%d", i+1)
@@ -529,16 +617,8 @@ func (s *Server) reportDetailFromAnalysis(report reportRow, analysis meetingAnal
 		})
 	}
 
-	transcript := make([]reportTranscript, 0, len(analysis.Transcript))
-	for i, line := range analysis.Transcript {
-		transcript = append(transcript, reportTranscript{
-			ID:        fmt.Sprintf("t%d", i+1),
-			Time:      line.Time,
-			Speaker:   line.Speaker,
-			Text:      line.Text,
-			Sentiment: line.Sentiment,
-		})
-	}
+	segments := segmentsFromTranscriptLines(analysis.Transcript, defaultSpeakerSource(analysis.Transcript), nil)
+	transcript := reportTranscriptsFromSegments(segments)
 
 	firstSeenTime := map[string]string{}
 	for _, line := range analysis.Transcript {
@@ -591,6 +671,7 @@ func (s *Server) reportDetailFromAnalysis(report reportRow, analysis meetingAnal
 		KeyQuestions:    analysis.KeyQuestions,
 		TranscriptLines: transcript,
 		Transcript:      transcript,
+		Segments:        segments,
 		SpeakerStats:    speakerStats,
 		Highlights:      analysis.Highlights,
 		Chapters:        analysis.Chapters,
@@ -610,9 +691,9 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 	if detail.Report.ID == "" {
 		return
 	}
+	syncReportTranscriptArtifacts(&detail)
 	normalizeReportPipelineStatuses(&detail.Report, detail.RecordingFile != "" || detail.RecordingURL != "", len(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)) > 0)
 	s.reportsMu.Lock()
-	defer s.reportsMu.Unlock()
 
 	if s.deletedReportIDs == nil {
 		s.deletedReportIDs = map[string]struct{}{}
@@ -635,6 +716,110 @@ func (s *Server) storeReport(detail reportDetailResponse) {
 		s.latestRoomReports[detail.RoomName] = detail.Report.ID
 	}
 	s.saveReportsLocked()
+	s.reportsMu.Unlock()
+
+	s.publishReportChanged(detail)
+}
+
+func syncReportTranscriptArtifacts(detail *reportDetailResponse) {
+	if detail == nil {
+		return
+	}
+	source := firstNonEmpty(detail.SpeakerSource, defaultReportTranscriptSource(firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript)), speakerSourceSTT)
+	if len(detail.Segments) == 0 {
+		if lines := firstNonEmptyTranscript(detail.TranscriptLines, detail.Transcript); len(lines) > 0 {
+			detail.Segments = reportTranscriptToSegments(lines, source, detail.Participants)
+		}
+	}
+	if len(detail.Segments) > 0 {
+		transcript := reportTranscriptsFromSegments(detail.Segments)
+		detail.TranscriptLines = transcript
+		detail.Transcript = transcript
+	}
+	if detail.SpeakerSource == "" && len(detail.Segments) > 0 {
+		detail.SpeakerSource = detail.Segments[0].Source
+	}
+}
+
+func addPipelineEvent(detail *reportDetailResponse, stage, status, message string, at time.Time) {
+	if detail == nil {
+		return
+	}
+	stage = strings.TrimSpace(stage)
+	status = strings.TrimSpace(status)
+	if at.IsZero() {
+		at = time.Now()
+	}
+	event := pipelineEvent{
+		Stage:     stage,
+		Status:    status,
+		Message:   strings.TrimSpace(message),
+		At:        at.UTC().Format(time.RFC3339),
+		EgressID:  detail.EgressID,
+		ObjectKey: detail.RecordingObjectKey,
+	}
+	detail.PipelineEvents = append(detail.PipelineEvents, event)
+	switch stage {
+	case "recording":
+		detail.Report.RecordingStatus = status
+	case "transcription":
+		detail.Report.TranscriptionStatus = status
+	case "diarization":
+		detail.DiarizationStatus = status
+	case "analysis":
+		detail.Report.AnalysisStatus = status
+	}
+	if strings.Contains(strings.ToLower(status), "fail") || strings.Contains(strings.ToLower(status), "error") {
+		detail.LastError = strings.TrimSpace(message)
+	}
+}
+
+func copyReportArtifacts(dst *reportDetailResponse, src reportDetailResponse) {
+	if dst == nil {
+		return
+	}
+	dst.RecordingURL = src.RecordingURL
+	dst.RecordingSourceURL = src.RecordingSourceURL
+	dst.RecordingFile = src.RecordingFile
+	dst.RecordingType = src.RecordingType
+	dst.RecordingMirrorCorrection = src.RecordingMirrorCorrection
+	dst.RecordingMode = src.RecordingMode
+	dst.RecordingFiles = src.RecordingFiles
+	dst.SpeakerSource = src.SpeakerSource
+	dst.Warnings = src.Warnings
+	dst.Participants = src.Participants
+	dst.SpeakerMappings = src.SpeakerMappings
+	dst.EgressID = src.EgressID
+	dst.RecordingBucket = src.RecordingBucket
+	dst.RecordingObjectKey = src.RecordingObjectKey
+	dst.RecordingStartedAt = src.RecordingStartedAt
+	dst.RecordingCompletedAt = src.RecordingCompletedAt
+	dst.RecordingError = src.RecordingError
+	dst.TranscriptionError = src.TranscriptionError
+	dst.DiarizationStatus = src.DiarizationStatus
+	dst.DiarizationError = src.DiarizationError
+	dst.AnalysisError = src.AnalysisError
+	dst.LastError = src.LastError
+	dst.PipelineEvents = src.PipelineEvents
+}
+
+func (s *Server) addReportWarning(reportID, warning string) {
+	reportID = strings.TrimSpace(reportID)
+	warning = strings.TrimSpace(warning)
+	if reportID == "" || warning == "" {
+		return
+	}
+	detail, ok := s.reportDetailForUpdate(reportID)
+	if !ok {
+		return
+	}
+	for _, existing := range detail.Warnings {
+		if existing == warning {
+			return
+		}
+	}
+	detail.Warnings = append(detail.Warnings, warning)
+	s.storeReport(detail)
 }
 
 func (s *Server) allReports() []reportRow {
@@ -674,6 +859,9 @@ func (s *Server) reportDetailByID(id string) (reportDetailResponse, bool) {
 	}
 	if detail, ok := s.generatedReportStore[id]; ok {
 		s.reportsMu.Unlock()
+		if s.repairLoadedReportAnalysis(&detail) {
+			s.storeReport(detail)
+		}
 		return detail, true
 	}
 	s.reportsMu.Unlock()
@@ -771,6 +959,7 @@ func (s *Server) reportByID(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusNotFound, "Report not found")
 				return
 			}
+			s.publishReportDeleted(detail.Report.ID)
 			writeJSON(w, http.StatusOK, map[string]string{
 				"id":      detail.Report.ID,
 				"status":  "deleted",
@@ -1176,11 +1365,7 @@ func (s *Server) retryReportAnalysis(w http.ResponseWriter, r *http.Request, det
 	}
 
 	updated := s.reportDetailFromAnalysis(report, analysis)
-	updated.RecordingURL = detail.RecordingURL
-	updated.RecordingSourceURL = detail.RecordingSourceURL
-	updated.RecordingFile = detail.RecordingFile
-	updated.RecordingType = detail.RecordingType
-	updated.RecordingMirrorCorrection = detail.RecordingMirrorCorrection
+	copyReportArtifacts(&updated, detail)
 	updated.RoomName = firstNonEmpty(detail.RoomName, updated.RoomName)
 	s.storeReport(updated)
 

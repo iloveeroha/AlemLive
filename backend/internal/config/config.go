@@ -20,6 +20,8 @@ const (
 	defaultReportsStorage      = "data/reports.json"
 	defaultRecordingsDir       = "data/recordings"
 	defaultChatHistoryS3Bucket = "alemlive-chat-history"
+	defaultRecordingMode       = "room_composite"
+	defaultRecordingFallback   = "room_composite"
 )
 
 type Config struct {
@@ -41,6 +43,11 @@ type Config struct {
 	LiveKitS3Endpoint          string
 	LiveKitS3Bucket            string
 	LiveKitS3ForcePathStyle    bool
+	RecordingMode              string
+	RecordingFallbackMode      string
+	EnableDiarizationFallback  bool
+	EnableSpeakerManualMapping bool
+	TranscriptPreferNames      bool
 	TokenTTL                   time.Duration
 	AllowedOrigins             []string
 	KeycloakIssuerURL          string
@@ -90,6 +97,11 @@ func Load() Config {
 		LiveKitS3Endpoint:          strings.TrimSpace(os.Getenv("LIVEKIT_S3_ENDPOINT")),
 		LiveKitS3Bucket:            strings.TrimSpace(os.Getenv("LIVEKIT_S3_BUCKET")),
 		LiveKitS3ForcePathStyle:    envBool("LIVEKIT_S3_FORCE_PATH_STYLE", false),
+		RecordingMode:              env("RECORDING_MODE", defaultRecordingMode),
+		RecordingFallbackMode:      env("RECORDING_FALLBACK_MODE", defaultRecordingFallback),
+		EnableDiarizationFallback:  envBool("ENABLE_DIARIZATION_FALLBACK", true),
+		EnableSpeakerManualMapping: envBool("ENABLE_SPEAKER_MANUAL_MAPPING", true),
+		TranscriptPreferNames:      envBool("TRANSCRIPT_PREFER_PARTICIPANT_NAMES", true),
 		TokenTTL:                   time.Duration(ttlMinutes) * time.Minute,
 		AllowedOrigins:             splitCSV(env("ALLOWED_ORIGINS", "http://localhost:5173")),
 		KeycloakIssuerURL:          strings.TrimRight(strings.TrimSpace(os.Getenv("KEYCLOAK_ISSUER_URL")), "/"),

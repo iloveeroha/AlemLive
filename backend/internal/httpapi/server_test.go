@@ -58,6 +58,39 @@ func TestCreateLiveKitToken(t *testing.T) {
 	}
 }
 
+func TestCreateLiveKitTokenAcceptsMeetingLink(t *testing.T) {
+	handler := NewServer(config.Config{
+		LiveKitURL:       "ws://livekit:7880",
+		LiveKitPublicURL: "wss://alem-livekit.example",
+		LiveKitAPIKey:    "key",
+		LiveKitSecret:    "secret",
+		TokenTTL:         time.Hour,
+	})
+
+	body := bytes.NewBufferString(`{"roomName":"https://localhost:5174/#meeting/abc-defg-hij","userName":"Madi"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/livekit/token", body)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload["roomName"] != "abc-defg-hij" || payload["meetingCode"] != "abc-defg-hij" {
+		t.Fatalf("unexpected room code: %#v", payload)
+	}
+	claims := decodeTestJWTClaims(t, payload["token"])
+	video, ok := claims["video"].(map[string]any)
+	if !ok || video["room"] != "abc-defg-hij" {
+		t.Fatalf("unexpected token video room: %#v", claims)
+	}
+}
+
 func decodeTestJWTClaims(t *testing.T, token string) map[string]any {
 	t.Helper()
 	parts := strings.Split(token, ".")
@@ -96,6 +129,45 @@ func TestConfigReturnsPublicLiveKitURL(t *testing.T) {
 	}
 	if payload["livekitUrl"] != "wss://livekit.example" {
 		t.Fatalf("unexpected livekitUrl: %#v", payload)
+	}
+}
+
+func TestRecordingDiagnosticsIsPublicAndRedacted(t *testing.T) {
+	handler := NewServer(config.Config{
+		LiveKitURL:       "ws://livekit:7880",
+		LiveKitPublicURL: "wss://livekit.example/path?token=secret#fragment",
+		LiveKitAPIKey:    "key",
+		LiveKitSecret:    "secret",
+		TokenTTL:         time.Hour,
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/diagnostics/recording", nil)
+	response := httptest.NewRecorder()
+
+	handler.ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", response.Code, response.Body.String())
+	}
+
+	var payload struct {
+		Status string                     `json:"status"`
+		Checks map[string]diagnosticCheck `json:"checks"`
+		Config map[string]any             `json:"config"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if payload.Status != "degraded" {
+		t.Fatalf("expected degraded diagnostics without MinIO config, got %#v", payload)
+	}
+	if payload.Checks["minio_bucket_reached"].Status != "missing" {
+		t.Fatalf("expected missing MinIO bucket check, got %#v", payload.Checks["minio_bucket_reached"])
+	}
+	if got := payload.Config["livekitPublicUrl"]; got != "wss://livekit.example/path" {
+		t.Fatalf("expected redacted public URL, got %#v", got)
+	}
+	if _, ok := payload.Config["livekitSecret"]; ok {
+		t.Fatalf("diagnostics must not expose secrets: %#v", payload.Config)
 	}
 }
 

@@ -78,21 +78,47 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
     restart: unless-stopped
 
   minio-init:
     image: minio/mc:latest
     depends_on:
-      - minio
+      minio:
+        condition: service_healthy
     environment:
       MINIO_ROOT_USER: "${MINIO_ROOT_USER:-alemlive}"
       MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD:-change-me-minio-password}"
       MINIO_BUCKET: "${MINIO_BUCKET:-alemlive-recordings}"
     entrypoint: /bin/sh
-    command: >
-      -c "until mc alias set local http://minio:9000 \"$${MINIO_ROOT_USER}\" \"$${MINIO_ROOT_PASSWORD}\"; do sleep 1; done;
-      mc mb -p \"local/$${MINIO_BUCKET}\" || true;
-      mc anonymous set download \"local/$${MINIO_BUCKET}\" || true"
+    command:
+      - -c
+      - |
+        set -eu
+        echo "minio-init: waiting for MinIO"
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          echo "minio-init: MinIO is not ready or credentials are invalid; retrying"
+          sleep 1
+        done
+        echo "minio-init: MinIO ready"
+        if mc ls "local/$${MINIO_BUCKET}" >/dev/null 2>&1; then
+          echo "minio-init: bucket exists: $${MINIO_BUCKET}"
+        else
+          echo "minio-init: creating bucket: $${MINIO_BUCKET}"
+          mc mb -p "local/$${MINIO_BUCKET}"
+          echo "minio-init: bucket created: $${MINIO_BUCKET}"
+        fi
+        if mc anonymous set download "local/$${MINIO_BUCKET}"; then
+          echo "minio-init: anonymous download policy set for $${MINIO_BUCKET}"
+        else
+          echo "minio-init: failed to set anonymous download policy for $${MINIO_BUCKET}" >&2
+          exit 1
+        fi
     restart: "no"
 
   livekit-egress:

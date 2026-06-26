@@ -48,6 +48,26 @@ func TestEgressRecordingURLsIgnoreMissingFilePath(t *testing.T) {
 	}
 }
 
+func TestTrackRecordingURLsUseInternalDownloadAndPublicPlayback(t *testing.T) {
+	server := &Server{cfg: config.Config{
+		LiveKitS3Endpoint: "http://minio:9000",
+		LiveKitS3Bucket:   "alemlive-recordings",
+		TokenTTL:          time.Hour,
+	}}
+
+	urls := server.trackRecordingDownloadURLs(livekitservice.TrackEgressState{
+		FilePath:  "alemlive/abc/audio/asyl-TR_1.ogg",
+		PublicURL: "http://localhost:9000/alemlive-recordings/alemlive/abc/audio/asyl-TR_1.ogg",
+	})
+
+	if len(urls) != 2 {
+		t.Fatalf("expected internal and public URLs, got %#v", urls)
+	}
+	if urls[0] != "http://minio:9000/alemlive-recordings/alemlive/abc/audio/asyl-TR_1.ogg" {
+		t.Fatalf("unexpected internal URL: %#v", urls)
+	}
+}
+
 func TestProcessEgressRecordingStoresVideoWithoutSTT(t *testing.T) {
 	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
 	server := &Server{
@@ -135,6 +155,52 @@ func TestProcessEgressRecordingKeepsVideoWhenSTTFails(t *testing.T) {
 	}
 	if len(detail.Summary) == 0 || !strings.Contains(detail.Summary[0].Text, "processing failed") {
 		t.Fatalf("expected partial failure summary, got %#v", detail.Summary)
+	}
+}
+
+func TestProcessEgressRecordingMarksMissingFileAsRecordingFailed(t *testing.T) {
+	recordingServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	defer recordingServer.Close()
+
+	now := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	server := &Server{
+		cfg: config.Config{
+			LiveKitS3Endpoint: recordingServer.URL,
+			LiveKitS3Bucket:   "alemlive-recordings",
+			STTModel:          "openai/whisper-large-v3",
+			STTTimeout:        time.Second,
+			LLMTimeout:        time.Second,
+		},
+		stt:                  llm.New("http://stt.invalid", "test-key", "openai/whisper-large-v3", time.Second),
+		clock:                func() time.Time { return now },
+		generatedReportStore: map[string]reportDetailResponse{},
+		deletedReportIDs:     map[string]struct{}{},
+		latestRoomReports:    map[string]string{},
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+
+	server.processEgressRecording(ctx, livekitservice.EgressState{
+		RoomName: "alem-meeting",
+		EgressID: "egress-id",
+		FilePath: "alemlive/alem-meeting/20260616-120000.mp4",
+	}, nil)
+
+	detail, ok := server.reportDetailByID("egress-egress-id")
+	if !ok {
+		t.Fatal("expected egress report to be stored")
+	}
+	if detail.Report.RecordingStatus != "failed" {
+		t.Fatalf("expected recording failed, got %#v", detail.Report)
+	}
+	if detail.Report.TranscriptionStatus != "not_started" || detail.Report.AnalysisStatus != "not_started" {
+		t.Fatalf("expected downstream stages not to start, got %#v", detail.Report)
+	}
+	if detail.LastError == "" || detail.RecordingError == "" {
+		t.Fatalf("expected recording error to be saved, got %#v", detail)
 	}
 }
 

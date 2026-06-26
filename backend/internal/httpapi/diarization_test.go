@@ -42,7 +42,7 @@ func TestApplyDiarizationSegmentsKeepsFallbackWithoutMatch(t *testing.T) {
 	}
 }
 
-func TestApplyDiarizationSegmentsMapsKnownParticipants(t *testing.T) {
+func TestApplyDiarizationSegmentsDoesNotGuessKnownParticipants(t *testing.T) {
 	lines := []transcriptLine{
 		{Time: "00:00", Speaker: "Speaker", Text: "Welcome everyone", Start: 0, End: 2},
 		{Time: "00:02", Speaker: "Speaker", Text: "Hi, I'm Kelcey and I'm on the CS team", Start: 2, End: 4},
@@ -54,15 +54,15 @@ func TestApplyDiarizationSegmentsMapsKnownParticipants(t *testing.T) {
 
 	got := applyDiarizationSegments(lines, segments, "Alison Barker, Kelcey Hawthorne, +1 more")
 
-	if got[0].Speaker != "Alison Barker" {
+	if got[0].Speaker != "Speaker 1" {
 		t.Fatalf("first speaker = %q", got[0].Speaker)
 	}
-	if got[1].Speaker != "Kelcey Hawthorne" {
-		t.Fatalf("self-introduced speaker = %q", got[1].Speaker)
+	if got[1].Speaker != "Speaker 2" {
+		t.Fatalf("second speaker = %q", got[1].Speaker)
 	}
 }
 
-func TestApplyDiarizationSegmentsUsesSelfIntroducedNameWithoutParticipantList(t *testing.T) {
+func TestApplyDiarizationSegmentsUsesNeutralLabelWithoutParticipantTrack(t *testing.T) {
 	lines := []transcriptLine{
 		{Time: "00:00", Speaker: "Speaker", Text: "Hi, I'm Zoe and I manage the product team", Start: 0, End: 2},
 	}
@@ -72,24 +72,49 @@ func TestApplyDiarizationSegmentsUsesSelfIntroducedNameWithoutParticipantList(t 
 
 	got := applyDiarizationSegments(lines, segments)
 
-	if got[0].Speaker != "Zoe" {
+	if got[0].Speaker != "Speaker 1" {
 		t.Fatalf("speaker = %q", got[0].Speaker)
 	}
 }
 
-func TestApplyParticipantSpeakerNamesReplacesUnknownLabelsWithParticipants(t *testing.T) {
+func TestSanitizeTranscriptSpeakerLabelsReplacesUnknownLabelsWithNeutralSpeakers(t *testing.T) {
 	lines := []transcriptLine{
 		{Time: "01:25", Speaker: "Аленмитинг Три", Text: "Нет, в основном нет.", Start: 85, End: 91},
 		{Time: "02:22", Speaker: "Speaker 1", Text: "Тест номер.", Start: 142, End: 149},
 	}
 
-	got := applyParticipantSpeakerNames(lines, "Мади Орысбек, Айдана Сейт, Елиас, +1 больше")
+	got := sanitizeTranscriptSpeakerLabels(lines, "Мади Орысбек, Айдана Сейт, Елиас, +1 больше")
 
-	if got[0].Speaker != "Мади Орысбек" {
+	if got[0].Speaker != "Speaker 2" {
 		t.Fatalf("unknown speaker label = %q", got[0].Speaker)
 	}
-	if got[1].Speaker != "Айдана Сейт" {
+	if got[1].Speaker != "Speaker 1" {
 		t.Fatalf("generic speaker label = %q", got[1].Speaker)
+	}
+}
+
+func TestApplyParticipantSpeakerNamesDoesNotUseRandomWordsAsNames(t *testing.T) {
+	lines := []transcriptLine{
+		{Time: "00:33", Speaker: "Соглашусь", Text: "друзья, я соглашусь с выводом", Start: 33, End: 57},
+	}
+
+	got := sanitizeTranscriptSpeakerLabels(lines, "Madi Orysbek, asyl asyl")
+
+	if got[0].Speaker != "Speaker 1" {
+		t.Fatalf("random word speaker label = %q", got[0].Speaker)
+	}
+}
+
+func TestApplyParticipantSpeakerNamesKeepsGenericSpeakerWithoutTrackMapping(t *testing.T) {
+	lines := []transcriptLine{
+		{Time: "00:07", Speaker: "Speaker 2", Text: "Today we will discuss the project", Start: 7, End: 20},
+		{Time: "01:03", Speaker: "Speaker 2", Text: "I agree with him", Start: 63, End: 70},
+	}
+
+	got := applyParticipantSpeakerNames(lines, "Madi Orysbek, asyl asyl")
+
+	if got[0].Speaker != "Speaker 2" || got[1].Speaker != "Speaker 2" {
+		t.Fatalf("generic speaker labels should stay neutral: %#v", got)
 	}
 }
 

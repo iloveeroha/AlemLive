@@ -275,7 +275,7 @@ button {
 .meeting-grid-connected .livekit-stage .lk-grid-layout-wrapper,
 .meeting-grid-connected .livekit-stage .lk-focus-layout-wrapper {
   min-height: 0;
-  padding: 18px clamp(10px, 9vw, 150px) 78px;
+  padding: 18px clamp(8px, 3vw, 48px) 78px;
   background: #101010;
 }
 
@@ -2917,6 +2917,140 @@ body.meeting-maximized-active {
   margin: 14px auto 0;
 }
 
+.pipeline-status-card {
+  width: min(970px, calc(100% - 64px));
+  margin: 10px auto 8px;
+  padding: 10px 14px;
+  border: 1px solid #dfe8f6;
+  border-radius: 12px;
+  background: #fbfdff;
+  color: #263650;
+}
+
+.pipeline-status-card.has-error {
+  border-color: #ffd4d7;
+  background: #fff8f8;
+}
+
+.pipeline-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pipeline-status-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #18233a;
+  white-space: nowrap;
+}
+
+.pipeline-status-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pipeline-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #eef3fb;
+  color: #60708b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pipeline-status-pill.ok {
+  background: #e7fbf4;
+  color: #00866b;
+}
+
+.pipeline-status-pill.active {
+  background: #eaf3ff;
+  color: #2279ed;
+}
+
+.pipeline-status-pill.error {
+  background: #ffecef;
+  color: #c12c3b;
+}
+
+.pipeline-status-error {
+  margin: 8px 0 0;
+  color: #b42331;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
+.pipeline-events-details {
+  position: relative;
+  margin-left: auto;
+}
+
+.pipeline-events-details summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 3px 10px;
+  border: 1px solid #d9e3f2;
+  border-radius: 999px;
+  color: #40516d;
+  background: #ffffff;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  list-style: none;
+}
+
+.pipeline-events-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.pipeline-events {
+  display: grid;
+  gap: 6px;
+  color: #5d6d88;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.pipeline-events-details[open] .pipeline-events {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  width: min(540px, 78vw);
+  padding: 10px 12px;
+  border: 1px solid #dfe8f6;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 18px 40px rgba(25, 43, 73, 0.16);
+}
+
+@media (max-width: 720px) {
+  .pipeline-status-card {
+    width: calc(100% - 28px);
+  }
+
+  .pipeline-events-details {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .pipeline-events-details[open] .pipeline-events {
+    position: static;
+    width: 100%;
+    margin-top: 8px;
+    box-shadow: none;
+  }
+}
+
 .reports-table-head,
 .report-row {
   display: grid;
@@ -4699,12 +4833,6 @@ body.meeting-maximized-active {
   display: none !important;
 }
 
-.meeting-grid.meeting-grid-connected .livekit-stage .lk-participant-media-video:not([data-lk-local-participant='true']),
-.meeting-grid.meeting-grid-connected .livekit-stage video:not([data-lk-local-participant='true']) {
-  transform: none !important;
-  scale: 1 !important;
-}
-
 .meeting-grid.meeting-grid-connected.meeting-chat-collapsed {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -4745,7 +4873,7 @@ body.meeting-maximized-active {
 .meeting-livekit-layout {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 28vw, 500px);
   grid-template-rows: minmax(0, 1fr);
   gap: 8px;
   width: 100%;
@@ -4774,7 +4902,7 @@ body.meeting-maximized-active {
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   width: 100%;
-  max-width: 420px;
+  max-width: 500px;
   overflow: hidden;
 }
 
@@ -4806,18 +4934,17 @@ body.meeting-maximized-active {
   }
 }
 
-/* Some camera drivers already provide a mirrored local feed. Correct only the
-   local camera preview; remote camera tiles stay untransformed. */
-[data-lk-facing-mode='user'] .lk-participant-media-video[data-lk-local-participant='true'][data-lk-source='camera'],
-[data-lk-facing-mode='user'] video[data-lk-local-participant='true'][data-lk-source='camera'],
-.lk-participant-media-video[data-lk-local-participant='true'][data-lk-source='camera'],
-video[data-lk-local-participant='true'][data-lk-source='camera'] {
+/* Some browsers/drivers expose user cameras as mirrored frames. Apply the same
+   correction to local and remote camera tiles so every participant sees the
+   same non-mirrored view. Screen share tracks stay untransformed. */
+.livekit-stage .lk-participant-media-video[data-lk-source='camera'],
+.livekit-stage video[data-lk-source='camera'] {
   transform: scaleX(-1) !important;
   scale: 1 !important;
 }
 
-.livekit-stage video:not([data-lk-local-participant='true']),
-.livekit-stage .lk-participant-media-video:not([data-lk-local-participant='true']) {
+.livekit-stage video:not([data-lk-source='camera']),
+.livekit-stage .lk-participant-media-video:not([data-lk-source='camera']) {
   transform: none !important;
   scale: 1 !important;
 }
